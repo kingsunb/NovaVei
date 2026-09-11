@@ -65,7 +65,10 @@ describe("<SettingsPage /> RetentionField 同步", () => {
     render(<SettingsPage />, { wrapper: Wrapper });
     await userEvent.click(screen.getByRole("button", { name: "错误日志保留" }));
     await waitFor(() => {
-      const input = screen.getByLabelText("错误保留天数") as HTMLInputElement;
+      // happy-dom 的 getByLabelText 无法排除 <label> 内按钮文本，
+      // 改用 text → closest label → querySelector 定位 input
+      const labelSpan = screen.getByText("错误保留天数");
+      const input = labelSpan.closest("label")!.querySelector("input") as HTMLInputElement;
       expect(input.value).toBe("5");
     });
   });
