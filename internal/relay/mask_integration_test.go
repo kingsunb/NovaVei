@@ -1,8 +1,11 @@
 package relay
 
 import (
+	"bytes"
 	"testing"
 
+	"github.com/kingsunb/NovaVeil/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/op"
 	"github.com/kingsunb/NovaVeil/internal/relay/mask"
 	"github.com/looplj/axonhub/llm"
 )
@@ -186,4 +189,69 @@ func indexOf(s, sub string) int {
 
 func extractPlaceholder(s string) string {
 	return mask.PlaceholderRe.FindString(s)
+}
+
+// TestApplyRequestMaskContract 验证 applyRequestMask 的映射表返回契约:
+//   - 无敏感信息命中 → nil 映射(不误标"已脱敏");
+//   - 命中敏感信息   → 非 nil 映射 + 还原往返恢复原文;
+//   - 分组开关关闭   → nil 映射(零开销短路)。
+//
+// 复用 failover 集成测试的 setupFailoverTest(integrationOnce) 初始化共享 DB,
+// 不另开临时数据库: 避免替换全局 DB 后关闭导致后续集成测试 "database is closed",
+// 也避免 SQLite mmap 地址空间泄漏触发 SQLITE_CANTOPEN。
+func TestApplyRequestMaskContract(t *testing.T) {
+	setupFailoverTest(t)
+	if err := op.InitCache(); err != nil {
+		t.Fatalf("InitCache: %v", err)
+	}
+	if err := op.MaskConfigSet(model.MaskConfig{
+		Enabled:           true,
+		BuiltinRuleSwitch: map[string]bool{},
+		CustomTerms:       []model.MaskConfigTerm{{Value: "机密项目", Category: "项目代号"}},
+	}); err != nil {
+		t.Fatalf("MaskConfigSet: %v", err)
+	}
+
+	t.Run("no match returns nil mapping", func(t *testing.T) {
+		body := []byte(`{"model":"gpt-4","messages":[{"role":"user","content":"今天天气真好"}]}`)
+		masked, mapping, err := applyRequestMask(body, "sess-no-match", true)
+		if err != nil {
+			t.Fatalf("applyRequestMask: %v", err)
+		}
+		if mapping != nil {
+			t.Errorf("无敏感信息命中时映射表应为 nil, 避免 Masked 误标; got non-nil mapping, masked=%s", masked)
+		}
+		if !bytes.Equal(masked, body) {
+			t.Errorf("无命中时请求体应原样返回, got: %s", masked)
+		}
+	})
+
+	t.Run("hit returns non-nil mapping", func(t *testing.T) {
+		body := []byte(`{"model":"gpt-4","messages":[{"role":"user","content":"请检查机密项目的进度"}]}`)
+		masked, mapping, err := applyRequestMask(body, "sess-hit", true)
+		if err != nil {
+			t.Fatalf("applyRequestMask: %v", err)
+		}
+		if mapping == nil {
+			t.Fatalf("命中敏感信息时映射表应非 nil, masked=%s", masked)
+		}
+		if bytes.Equal(masked, body) {
+			t.Errorf("命中时请求体应被替换, 不应与原文相同")
+		}
+		restored := restoreNonStream(masked, mapping)
+		if !bytes.Equal(restored, body) {
+			t.Errorf("还原后应恢复原文, got: %s", restored)
+		}
+	})
+
+	t.Run("group switch off returns nil mapping", func(t *testing.T) {
+		body := []byte(`{"content":"请检查机密项目的进度"}`)
+		_, mapping, err := applyRequestMask(body, "sess-group-off", false)
+		if err != nil {
+			t.Fatalf("applyRequestMask: %v", err)
+		}
+		if mapping != nil {
+			t.Errorf("分组开关关闭时映射表应为 nil")
+		}
+	})
 }

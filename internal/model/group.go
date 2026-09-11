@@ -27,6 +27,8 @@ type GroupRelayConfig struct {
 	SessionStickySeconds           int     `json:"session_sticky_seconds" binding:"omitempty,min=1"`            // 会话粘合时长秒数,粘合成员每次业务成功后滑动续期。
 	CooldownBackoffMultiplier      float64 `json:"cooldown_backoff_multiplier" binding:"omitempty,min=1"`       // 半开探测失败后的冷却时间倍数,冷却等级每升一级乘一次,最小为 1 表示不退避。
 	CooldownMaxSeconds             int     `json:"cooldown_max_seconds" binding:"omitempty,min=1"`              // 成员冷却时间上限秒数,退避后不超过该值。
+	AllCooldownRetryBaseSeconds    int     `json:"all_cooldown_retry_base_seconds" binding:"omitempty,min=0"`   // 全部成员冷却中时自动清除冷却并依次重试的基础间隔秒数,每轮线性递增直至上限;0 表示不自动清除。
+	AllCooldownRetryMaxSeconds     int     `json:"all_cooldown_retry_max_seconds" binding:"omitempty,min=1"`    // 全冷却自动重试的间隔上限秒数。
 	BackgroundProbeEnabled         bool    `json:"background_probe_enabled"`                                    // 是否启用后台定时探测,对处于 OPEN 状态的成员周期性发起半开测试。
 	BackgroundProbeIntervalSeconds int     `json:"background_probe_interval_seconds" binding:"omitempty,min=1"` // 后台定时探测的执行间隔秒数。
 	EmergencyItemID                int     `json:"emergency_item_id" binding:"omitempty,min=0"`                 // 紧急兜底成员 ID:全部常规成员不可用时的最后放行目标,须指向同分组已有成员,0 表示关闭。
@@ -54,6 +56,8 @@ func DefaultGroupRelayConfig() GroupRelayConfig {
 		SessionStickySeconds:           300,
 		CooldownBackoffMultiplier:      2,
 		CooldownMaxSeconds:             1800,
+		AllCooldownRetryBaseSeconds:    3,
+		AllCooldownRetryMaxSeconds:     60,
 		BackgroundProbeEnabled:         false,
 		BackgroundProbeIntervalSeconds: 60,
 		EmergencyItemID:                0,
@@ -116,6 +120,13 @@ func NormalizeGroupRelayConfig(config *GroupRelayConfig) {
 	}
 	if config.CooldownMaxSeconds < 1 {
 		config.CooldownMaxSeconds = defaults.CooldownMaxSeconds
+	}
+	// 全冷却自动重试: 0 是合法的"关闭"取值, 只把负值钳回默认; 上限同理只钳非法值。
+	if config.AllCooldownRetryBaseSeconds < 0 {
+		config.AllCooldownRetryBaseSeconds = defaults.AllCooldownRetryBaseSeconds
+	}
+	if config.AllCooldownRetryMaxSeconds < 1 {
+		config.AllCooldownRetryMaxSeconds = defaults.AllCooldownRetryMaxSeconds
 	}
 	if config.BackgroundProbeIntervalSeconds < 1 {
 		config.BackgroundProbeIntervalSeconds = defaults.BackgroundProbeIntervalSeconds

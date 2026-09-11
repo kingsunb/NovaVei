@@ -38,7 +38,11 @@ export const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "glass-overlay fixed z-50",
+        // fullscreen 覆盖整个视口, 背后是仍在 SSE 驱动下频繁重渲染的 LiveTable;
+        // 若沿用 glass-overlay 的 backdrop-filter: blur(40px), 每条 SSE 消息都
+        // 触发一次全屏 40px 模糊重合成, 导致详情页卡死。fullscreen 改用不透明
+        // 背景, 消除 backdrop-filter 这一 GPU 瓶颈。
+        variant === "fullscreen" ? "fixed z-50 bg-card" : "glass-overlay fixed z-50",
         "data-[state=open]:animate-in data-[state=closed]:animate-out duration-200",
         variant === "dialog" &&
           "left-1/2 top-1/2 max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-card data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",

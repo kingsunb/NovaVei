@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { Channel } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input, Textarea } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
@@ -29,6 +29,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn, NAME_RULE, validateField } from "@/lib/utils";
+import { ViewToggle } from "@/components/ui/view-toggle";
+import { useViewMode } from "@/lib/use-view-mode";
 
 type Editing = Channel | "new" | null;
 type Sort = "custom" | "name" | "status";
@@ -42,6 +44,7 @@ export default function CustomModelsPage() {
   // 默认按自定义排序（sort 值升序、同值按名称兜底）；
   // 排序值允许重复、零值与负值，相同数值按渠道名称字母序排列。
   const [sort, setSort] = useState<Sort>("custom");
+  const [viewMode, setViewMode] = useViewMode("nv-custom-view", "list");
   // 排序值行内编辑草稿: 仅在用户正在输入时持有该行的文本值, 提交或失焦后清除。
   const [sortDraft, setSortDraft] = useState<Record<number, string>>({});
 
@@ -159,6 +162,7 @@ export default function CustomModelsPage() {
           自定义模型命中后不做上游请求，直接以配置的固定文案回复；可加入分组参与选路。
         </p>
         <div className="flex items-center gap-2">
+          <ViewToggle value={viewMode} onChange={setViewMode} />
           <label className="relative">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" />
             <Input
@@ -206,7 +210,7 @@ export default function CustomModelsPage() {
             </p>
           </div>
         </Card>
-      ) : (
+      ) : viewMode === "list" ? (
         <Card>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -323,6 +327,109 @@ export default function CustomModelsPage() {
             </table>
           </div>
         </Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {rows.map((c) => {
+            const modelName = c.models[0]?.name ?? "—";
+            const testing = testingId === c.id;
+            return (
+              <Card key={c.id}>
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-ink">{c.name}</span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Switch
+                        checked={c.enabled}
+                        onCheckedChange={(v) =>
+                          enableMut.mutate({ id: c.id, enabled: v })
+                        }
+                      />
+                      {c.enabled ? (
+                        <Pill tone="success">启用</Pill>
+                      ) : (
+                        <Pill tone="neutral">停用</Pill>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="shrink-0 text-ink-muted">模型名</span>
+                    <span className="mono min-w-0 flex-1 truncate text-ink" title={modelName}>
+                      {modelName}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="shrink-0 text-ink-muted">固定回复</span>
+                    <span
+                      className="min-w-0 flex-1 truncate text-ink"
+                      title={c.fixed_reply}
+                    >
+                      {c.fixed_reply || (
+                        <span className="text-destructive">未配置</span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="shrink-0 text-ink-muted">优先级</span>
+                    <input
+                      type="number"
+                      step="1"
+                      className="no-spin h-7 w-20 rounded-control border border-border bg-card px-2 text-right text-sm text-ink"
+                      value={sortDraft[c.id] ?? String(c.sort ?? 0)}
+                      disabled={sortMut.isPending && sortMut.variables?.id === c.id}
+                      onChange={(e) =>
+                        setSortDraft((d) => ({ ...d, [c.id]: e.target.value }))
+                      }
+                      onBlur={(e) => commitSort(c, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          (e.target as HTMLInputElement).blur();
+                        }
+                      }}
+                      aria-label={`优先级 ${c.name}`}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 pt-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1 px-2 text-xs"
+                      disabled={testing || !c.enabled || !c.models[0]}
+                      loading={testing}
+                      aria-label={`测试自定义模型 ${c.name}`}
+                      onClick={() => {
+                        setTestingId(c.id);
+                        testMut.mutate({ id: c.id, model: c.models[0]?.name });
+                      }}
+                    >
+                      测试
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      aria-label={`编辑自定义模型 ${c.name}`}
+                      onClick={() => setEditing(c)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" aria-hidden />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                      aria-label={`删除自定义模型 ${c.name}`}
+                      onClick={() => setPendingDelete(c)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       )}
 
       <CustomModelEditor

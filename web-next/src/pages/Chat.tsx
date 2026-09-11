@@ -40,6 +40,8 @@ interface TargetSelection {
   /** kind=group 时用 */
   groupName?: string;
   /** kind=channel 时用 */
+  channelId?: number;
+  /** kind=channel 时用 */
   channelModelId?: number;
 }
 
@@ -309,9 +311,10 @@ export default function ChatPage() {
         setTarget({ kind: "group", label: name, groupName: name });
       } else if (value.startsWith("channel:")) {
         const parts = value.split(":");
+        const channelId = Number(parts[1]);
         const channelModelId = Number(parts[2]);
         const label = channelOptions.find((o) => o.channelModelId === channelModelId)?.label ?? "";
-        setTarget({ kind: "channel", label, channelModelId });
+        setTarget({ kind: "channel", label, channelId, channelModelId });
       }
     },
     [channelOptions],
@@ -409,7 +412,7 @@ export default function ChatPage() {
   const targetValue = target
     ? target.kind === "group"
       ? `group:${target.groupName}`
-      : `channel:0:${target.channelModelId}`
+      : `channel:${target.channelId}:${target.channelModelId}`
     : "";
 
   const noTargets =
@@ -545,7 +548,7 @@ export default function ChatPage() {
                   ? "请先选择或创建密钥…"
                   : "输入消息, ⌘/Ctrl+Enter 发送…"
             }
-            disabled={!canSend && !input}
+            disabled={!hasTarget || !keySecret || streaming || preparingTarget}
             className={cn(
               "min-h-0 flex-1 resize-none rounded-control border border-border bg-card px-3 py-2 text-sm",
               "placeholder:text-ink-subtle focus:outline-none focus:ring-1 focus:ring-primary/30",

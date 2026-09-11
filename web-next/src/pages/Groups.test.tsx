@@ -191,7 +191,10 @@ describe("buildMemberDiff 行为（间接通过 add/remove 后保存）", () => 
     await user.click(screen.getByRole("button", { name: /编辑/ }));
     await waitFor(() => screen.getByRole("dialog"));
 
-    // 左栏选择器：点击模型直接加入成员（全屏布局无需切 Tab）
+    // 左栏选择器：渠道默认折叠，先展开 openai-prod 再点击模型加入成员
+    await user.click(
+      screen.getByRole("button", { name: "渠道 openai-prod" }),
+    );
     await user.click(
       screen.getByRole("button", { name: "添加 openai-prod gpt-4o-mini" }),
     );

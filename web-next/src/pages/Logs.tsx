@@ -92,7 +92,13 @@ export default function LogsPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("live");
   const [live, setLive] = useState<RequestState[]>([]);
-  const [tracing, setTracing] = useState<RequestState | null>(null);
+  // 只存追踪 ID, 实际请求状态从 live 数组派生: SSE 每次更新 live 时 tracing 自动
+  // 拿到最新快照, 详情弹窗的状态/时间线/响应区随之实时刷新, 不会停留在点击瞬间的旧快照。
+  const [tracingId, setTracingId] = useState<number | null>(null);
+  const tracing = useMemo(
+    () => (tracingId !== null ? live.find((r) => r.id === tracingId) ?? null : null),
+    [live, tracingId],
+  );
   const [errClass, setErrClass] = useState("");
   const [confirmClearErrors, setConfirmClearErrors] = useState(false);
   const [sseStatus, setSseStatus] = useState<SSEStatus>("connecting");
@@ -291,7 +297,7 @@ export default function LogsPage() {
       </div>
 
       {tab === "live" ? (
-        <LiveTable rows={live} onPick={setTracing} />
+        <LiveTable rows={live} onPick={(r) => setTracingId(r.id)} />
       ) : (
         <Card>
           <div className="flex items-center justify-between border-b border-border px-4 py-2.5 text-xs text-ink-muted">
@@ -341,7 +347,7 @@ export default function LogsPage() {
       )}
 
       {/* 追踪 Sheet */}
-      <TraceSheet req={tracing} onClose={() => setTracing(null)} />
+      <TraceSheet req={tracing} onClose={() => setTracingId(null)} />
 
       <Dialog
         open={confirmClearErrors}
@@ -384,7 +390,7 @@ export default function LogsPage() {
  */
 const ROW_HEIGHT = 44;
 const COLS =
-  "120px 90px minmax(280px,1fr) 90px 140px 160px 90px";
+  "120px 90px minmax(280px,1fr) 90px 80px 140px 160px 90px";
 
 function useElapsedTick(active: boolean) {
   const [now, setNow] = useState(() => Date.now());
@@ -438,6 +444,7 @@ function LiveTable({
         <div role="columnheader" className="font-medium">状态</div>
         <div role="columnheader" className="font-medium">模型 → 渠道 → 目标</div>
         <div role="columnheader" className="font-medium">中继</div>
+        <div role="columnheader" className="font-medium">审计</div>
         <div role="columnheader" className="font-medium">客户端</div>
         <div role="columnheader" className="text-right font-medium">Tokens（入/出/缓存）</div>
         <div role="columnheader" className="text-right font-medium">耗时</div>
@@ -504,8 +511,10 @@ function LiveTable({
                     >
                       {r.relay_mode === "passthrough" ? "透传" : "转换"}
                     </Pill>
+                  </div>
+                  <div role="gridcell">
                     {r.masked && (
-                      <Pill tone="info" className="ml-1">
+                      <Pill tone="info">
                         脱敏
                       </Pill>
                     )}
@@ -652,6 +661,11 @@ function TraceSheet({
   const [responseLoading, setResponseLoading] = useState(false);
   const attempts = req?.attempts ?? [];
 
+  // 进行中请求的耗时每秒重渲染（与 ElapsedCell 同款定时器），否则详情底部
+  // 「进行中 · 1m22s」会冻结在首次渲染的值，秒数不随时间更新。
+  const detailRunning = req?.status === "running" || req?.status === "committed";
+  const detailNow = useElapsedTick(detailRunning);
+
   // 切换请求时清空上次缓存的请求体/响应体。
   useEffect(() => {
     setBody("");
@@ -777,14 +791,14 @@ function TraceSheet({
             >
               {req.relay_mode === "passthrough" ? "协议透传" : "协议转换"}
             </Pill>
+            <Pill tone={req.proxy_addr ? "info" : "neutral"} dot={false}>
+              {req.proxy_addr ? `出口代理 ${req.proxy_addr}` : "直连（未走代理）"}
+            </Pill>
             {req.masked && (
               <Pill tone="info" dot={false}>
                 已脱敏
               </Pill>
             )}
-            <Pill tone={req.proxy_addr ? "info" : "neutral"} dot={false}>
-              {req.proxy_addr ? `出口代理 ${req.proxy_addr}` : "直连（未走代理）"}
-            </Pill>
             <span>· 客户端 {req.client_ip}</span>
             <span>
               · 密钥{" "}
@@ -928,7 +942,7 @@ function TraceSheet({
           </div>
           <div className="flex items-center gap-1.5">
             <Cpu className="size-3.5 text-blue-500" />
-            <span>{formatElapsedWithFirst(req)}</span>
+            <span>{formatElapsedWithFirst(req, detailNow)}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <ArrowDownToLine className="size-3.5 text-emerald-500" />
@@ -1085,10 +1099,13 @@ function RouteTab({
           <div className="flex items-center gap-2">
             <span className="text-ink-muted min-w-[80px]">中继方式</span>
             <Pill tone="neutral">{req.relay_mode === "passthrough" ? "透传" : "转换"}</Pill>
-            {req.masked && (
-              <Pill tone="info">已脱敏</Pill>
-            )}
           </div>
+          {req.masked && (
+            <div className="flex items-center gap-2">
+              <span className="text-ink-muted min-w-[80px]">审计</span>
+              <Pill tone="info">已脱敏</Pill>
+            </div>
+          )}
         </div>
       </div>
     );

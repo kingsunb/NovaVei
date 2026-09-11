@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  *  - JSON 自动 2 空格缩进；SSE 逐事件块排版（data: 后 JSON 负载缩进）；其余原样
  *  - 顶部栏标注格式（JSON / SSE / Text）与字节大小（< 1 KB 或 X.X KB）
  *  - 一键复制原始内容（格式化前），复制后 2s 内显示「已复制」
- *  - 内容超过折叠高度（≈240px）时默认折叠，显示「展开/收起」
+ *  - 默认全展开（最高 60vh，超出滚动），无折叠/收起按钮
  *
  * 纯手写，不引入外部依赖；样式与既有 <pre> 一致。
  */
@@ -20,24 +20,13 @@ export function FormattedBody({
   loading?: boolean;
   className?: string;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [overflow, setOverflow] = useState(false);
-  const preRef = useRef<HTMLPreElement>(null);
 
   const { format, formatted } = useMemo(() => detectAndFormat(content), [content]);
   const bytes = useMemo(
     () => (content ? new TextEncoder().encode(content).byteLength : 0),
     [content],
   );
-
-  // 折叠阈值与既有 max-h-60（15rem ≈ 240px）对齐；scrollHeight 不受 max-height 裁剪影响，
-  // 因此只依赖格式化文本即可判定是否需要展开按钮。
-  useLayoutEffect(() => {
-    const el = preRef.current;
-    if (!el) return;
-    setOverflow(el.scrollHeight > 240);
-  }, [formatted]);
 
   async function handleCopy() {
     try {
@@ -89,24 +78,9 @@ export function FormattedBody({
           {copied ? "已复制" : "复制"}
         </button>
       </div>
-      <pre
-        ref={preRef}
-        className={cn(
-          "mono p-3 text-xs leading-relaxed",
-          expanded ? "max-h-[60vh] overflow-auto" : "max-h-60 overflow-hidden",
-        )}
-      >
+      <pre className="mono max-h-[60vh] overflow-auto p-3 text-xs leading-relaxed">
         {formatted}
       </pre>
-      {overflow && (
-        <button
-          type="button"
-          onClick={() => setExpanded((e) => !e)}
-          className="w-full border-t border-border/60 py-1 text-center text-[11px] text-ink-muted transition-colors hover:bg-surface-subtle/60 hover:text-ink"
-        >
-          {expanded ? "收起" : "展开"}
-        </button>
-      )}
     </div>
   );
 }

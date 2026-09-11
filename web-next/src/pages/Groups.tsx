@@ -56,6 +56,8 @@ import { Pill } from "@/components/ui/pill";
 import { Switch } from "@/components/ui/switch";
 import { cn, NAME_RULE, validateField } from "@/lib/utils";
 import { PROVIDER_LABELS } from "./channels/constants";
+import { ViewToggle } from "@/components/ui/view-toggle";
+import { useViewMode } from "@/lib/use-view-mode";
 
 /**
  * 分组模式标签 —— manual / failover 在 db/API 仍是英文短码（兼容旧数据），
@@ -98,6 +100,7 @@ export default function GroupsPage() {
   const [pendingDelete, setPendingDelete] = useState<Group | null>(null);
   // 列表排序方式本地记忆；custom 的具体顺序来自后端 display_order
   const [sort, setSort] = useState<GroupSort>(loadGroupSort);
+  const [viewMode, setViewMode] = useViewMode("nv-group-view", "grid");
   // 路由运行时流：冷却/亲和倒计时、半开探测与紧急兜底状态
   const runtime = useGroupRuntime();
 
@@ -240,6 +243,7 @@ export default function GroupsPage() {
         </label>
 
         <div className="ml-auto flex items-center gap-2">
+          <ViewToggle value={viewMode} onChange={setViewMode} />
           <label className="relative">
             <Search
               className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted"
@@ -275,7 +279,7 @@ export default function GroupsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className={cn("grid grid-cols-1 gap-3", viewMode === "grid" && "md:grid-cols-2 xl:grid-cols-3")}>
           {rows.map((g, idx) => {
             const routeState = runtime.get(g.id);
             const sortedItems = g.items
@@ -1088,6 +1092,38 @@ function GroupEditor({
                 />
               </Field>
               <Field
+                label="全冷却重试间隔（秒）"
+                hint="所有成员冷却中时自动清除冷却并依次重试的基础间隔，每轮递增；0 表示不自动清除"
+              >
+                <Input
+                  type="number"
+                  min={0}
+                  value={relayConfig.all_cooldown_retry_base_seconds}
+                  onChange={(e) =>
+                    updateRelay(
+                      "all_cooldown_retry_base_seconds",
+                      Math.max(0, Number(e.target.value) || 0),
+                    )
+                  }
+                />
+              </Field>
+              <Field
+                label="全冷却重试上限（秒）"
+                hint="全冷却自动重试的间隔上限"
+              >
+                <Input
+                  type="number"
+                  min={1}
+                  value={relayConfig.all_cooldown_retry_max_seconds}
+                  onChange={(e) =>
+                    updateRelay(
+                      "all_cooldown_retry_max_seconds",
+                      Math.max(1, Number(e.target.value) || 1),
+                    )
+                  }
+                />
+              </Field>
+              <Field
                 label="故障切换亲和时间（秒）"
                 hint="备用成员首次请求成功后继续使用该成员的时间"
               >
@@ -1248,6 +1284,9 @@ function ChannelModelPicker({
   }) => void;
 }) {
   const [search, setSearch] = useState("");
+  // 渠道默认折叠，点击展开才显示其下模型（对齐 NovaVeil_api 的 Accordion 行为）。
+  // 多个渠道可同时展开；搜索时自动展开命中渠道，避免折叠态下看不到匹配模型。
+  const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1258,6 +1297,21 @@ function ChannelModelPicker({
         c.models.some((m) => m.name.toLowerCase().includes(q)),
     );
   }, [channels, search]);
+
+  const hasSearch = search.trim().length > 0;
+  // 搜索态下强制展开所有命中渠道；非搜索态用用户手动展开集合。
+  const expandedIds = hasSearch
+    ? new Set(filtered.map((c) => c.id))
+    : expanded;
+
+  function toggleChannel(id: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -1289,13 +1343,32 @@ function ChannelModelPicker({
             {search ? "没有匹配的渠道或模型" : "还没有可用渠道"}
           </p>
         ) : (
-          filtered.map((channel) => (
+          filtered.map((channel) => {
+            const isOpen = expandedIds.has(channel.id);
+            const addedInChannel = channel.models.filter((m) =>
+              addedModelIds.has(m.id),
+            ).length;
+            const available = channel.models.length - addedInChannel;
+            return (
             <div
               key={channel.id}
               className="overflow-hidden rounded-md border border-border"
             >
-              {/* 渠道头 */}
-              <div className="flex items-center gap-1.5 bg-surface-subtle/30 px-2.5 py-1.5">
+              {/* 渠道头：点击展开/折叠模型（默认折叠，对齐 NovaVeil_api） */}
+              <button
+                type="button"
+                onClick={() => toggleChannel(channel.id)}
+                aria-expanded={isOpen}
+                aria-label={`渠道 ${channel.name}`}
+                className="flex w-full items-center gap-1.5 bg-surface-subtle/30 px-2.5 py-1.5 text-left transition-colors hover:bg-surface-subtle/50"
+              >
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 shrink-0 text-ink-muted transition-transform duration-200",
+                    isOpen && "rotate-180",
+                  )}
+                  aria-hidden
+                />
                 <span
                   className={cn(
                     "flex-1 truncate text-sm font-medium",
@@ -1305,6 +1378,9 @@ function ChannelModelPicker({
                   {channel.name}
                 </span>
                 <Pill tone="neutral" className="text-[10px]">
+                  {available}/{channel.models.length}
+                </Pill>
+                <Pill tone="neutral" className="text-[10px]">
                   {PROVIDER_LABELS[channel.type] ?? channel.type}
                 </Pill>
                 {!channel.enabled && (
@@ -1312,59 +1388,62 @@ function ChannelModelPicker({
                     已停用
                   </Pill>
                 )}
-              </div>
-              {/* 模型行：点击添加 */}
-              <div className="border-t border-border/60">
-                {channel.models.length === 0 ? (
-                  <p className="px-2.5 py-1.5 text-[11px] text-ink-subtle">
-                    无模型
-                  </p>
-                ) : (
-                  channel.models.map((m) => {
-                    const added = addedModelIds.has(m.id);
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        disabled={added}
-                        onClick={() =>
-                          onAdd({
-                            channel_model_id: m.id,
-                            ref_group_name: "",
-                            channel_model: m,
-                          })
-                        }
-                        className={cn(
-                          "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm transition-colors",
-                          added
-                            ? "cursor-not-allowed opacity-60"
-                            : "hover:bg-primary/[0.06] active:bg-primary/[0.1]",
-                        )}
-                        aria-label={
-                          added
-                            ? `${channel.name} ${m.name} 已添加`
-                            : `添加 ${channel.name} ${m.name}`
-                        }
-                      >
-                        {added ? (
-                          <Check
-                            className="h-3.5 w-3.5 shrink-0 text-emerald-500"
-                            aria-hidden
-                          />
-                        ) : (
-                          <Plus
-                            className="h-3.5 w-3.5 shrink-0 text-ink-muted"
-                            aria-hidden
-                          />
-                        )}
-                        <span className="mono flex-1 truncate">{m.name}</span>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
+              </button>
+              {/* 模型行：展开后点击添加 */}
+              {isOpen && (
+                <div className="border-t border-border/60">
+                  {channel.models.length === 0 ? (
+                    <p className="px-2.5 py-1.5 text-[11px] text-ink-subtle">
+                      无模型
+                    </p>
+                  ) : (
+                    channel.models.map((m) => {
+                      const added = addedModelIds.has(m.id);
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          disabled={added}
+                          onClick={() =>
+                            onAdd({
+                              channel_model_id: m.id,
+                              ref_group_name: "",
+                              channel_model: m,
+                            })
+                          }
+                          className={cn(
+                            "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm transition-colors",
+                            added
+                              ? "cursor-not-allowed opacity-60"
+                              : "hover:bg-primary/[0.06] active:bg-primary/[0.1]",
+                          )}
+                          aria-label={
+                            added
+                              ? `${channel.name} ${m.name} 已添加`
+                              : `添加 ${channel.name} ${m.name}`
+                          }
+                        >
+                          {added ? (
+                            <Check
+                              className="h-3.5 w-3.5 shrink-0 text-emerald-500"
+                              aria-hidden
+                            />
+                          ) : (
+                            <Plus
+                              className="h-3.5 w-3.5 shrink-0 text-ink-muted"
+                              aria-hidden
+                            />
+                          )}
+                          <span className="mono flex-1 truncate">{m.name}</span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
-          ))
+            );
+          })
         )}
 
         {/* 引用其他分组 */}

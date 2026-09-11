@@ -170,7 +170,7 @@ describe("<LogsPage /> 虚拟化结构", () => {
     // 表头具备 columnheader 语义（审计 4.18）
     expect(
       grid.querySelectorAll('[role="row"][aria-rowindex="1"] > [role="columnheader"]'),
-    ).toHaveLength(7);
+    ).toHaveLength(8);
   });
 
   it("SSE 推送 N 条后 grid aria-rowcount 同步（表头 + N 数据行）", async () => {

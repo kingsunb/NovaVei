@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bytes"
 	"strings"
 
 	"github.com/kingsunb/NovaVeil/internal/op"
@@ -19,6 +20,8 @@ var maskSessionStore = maskEngine.SessionStore()
 
 // applyRequestMask 对请求体执行脱敏, 返回脱敏后字节与映射表。
 // 全局开关或分组开关任一关闭时直接原样返回, 映射表为 nil, 零开销(文档 01 §二、04 §1.4)。
+// 开关均开但未命中任何敏感信息时同样返回 nil 映射: 占位符未插入, 响应不会含占位符,
+// 还原为 no-op, 调用方据此跳过脱敏标记, 避免对无敏感内容的请求误标"已脱敏"。
 // 脱敏异常时返回 error, 调用方须走 fail-closed 拒绝请求, 绝不放行明文(文档 05 §八)。
 func applyRequestMask(body []byte, sessionKey string, groupMaskEnabled bool) ([]byte, *mask.Mapping, error) {
 	cfg, err := op.MaskConfigGet()
@@ -38,6 +41,11 @@ func applyRequestMask(body []byte, sessionKey string, groupMaskEnabled bool) ([]
 	masked, mapping, err := maskEngine.ApplyBytes(body, sessionKey, cfg.BuiltinRuleSwitch, terms)
 	if err != nil {
 		return nil, nil, err
+	}
+	// 未命中任何敏感信息: 请求体未变, 占位符未插入, 响应不会含占位符, 还原为 no-op。
+	// 返回 nil 映射使调用方跳过脱敏标记与还原器, 日志不对此请求展示"已脱敏"。
+	if bytes.Equal(masked, body) {
+		return masked, nil, nil
 	}
 	return masked, mapping, nil
 }

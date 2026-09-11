@@ -212,6 +212,8 @@ export interface GroupRelayConfig {
   session_sticky_seconds: number;
   cooldown_backoff_multiplier: number;
   cooldown_max_seconds: number;
+  all_cooldown_retry_base_seconds: number;
+  all_cooldown_retry_max_seconds: number;
   background_probe_enabled: boolean;
   background_probe_interval_seconds: number;
   emergency_item_id: number;
@@ -240,6 +242,8 @@ export const DEFAULT_GROUP_RELAY_CONFIG: GroupRelayConfig = {
   session_sticky_seconds: 300,
   cooldown_backoff_multiplier: 2,
   cooldown_max_seconds: 1800,
+  all_cooldown_retry_base_seconds: 3,
+  all_cooldown_retry_max_seconds: 60,
   background_probe_enabled: false,
   background_probe_interval_seconds: 60,
   emergency_item_id: 0,

@@ -688,6 +688,35 @@ func cooldownMillis(config model.GroupRelayConfig, level int) int64 {
 	return int64(seconds * float64(time.Second/time.Millisecond))
 }
 
+// allMembersInCooldown 报告分组是否至少有一个非禁用成员, 且所有非禁用成员当前都处于未过期的冷却中。
+// 用于 failover 循环在 pickGroupItem 返回空值时区分"全部冷却"与"根本没有成员"两种情况:
+// 前者可自动清除冷却后立即重试, 后者只能等待人工补齐成员或冷却到期。
+// 手动模式不使用冷却语义, 一律返回 false。
+func allMembersInCooldown(group model.Group) bool {
+	if group.Mode == model.GroupModeManual || len(group.Items) == 0 {
+		return false
+	}
+	routeMu.Lock()
+	defer routeMu.Unlock()
+	route := routes[group.ID]
+	if route == nil {
+		return false
+	}
+	now := time.Now().UnixMilli()
+	hasCandidate := false
+	for _, item := range group.Items {
+		if channelDisabledForRouting(item) {
+			continue
+		}
+		hasCandidate = true
+		deadline, ok := route.Cooldowns[item.ID]
+		if !ok || deadline <= now {
+			return false // 发现一个未冷却的可用成员
+		}
+	}
+	return hasCandidate
+}
+
 // ResetGroupCooldown 清空指定分组下所有成员的冷却与相关运行时抑制状态, 并通过 SSE 立即推送更新。
 // 不影响路由粘合(AffinityUntil / CurrentItemID / affinityArmed)与紧急兜底计数, 也不取消正在进行的半开探测:
 // HalfOpens 保留以便在飞探测自然走完; 业务请求路径上的冷却判断会立即看到清空效果。

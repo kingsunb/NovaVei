@@ -29,6 +29,8 @@ import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
 import { Switch } from "@/components/ui/switch";
 import { cn, downloadText, formatNumber } from "@/lib/utils";
+import { ViewToggle } from "@/components/ui/view-toggle";
+import { useViewMode } from "@/lib/use-view-mode";
 import {
   Dialog,
 
@@ -53,6 +55,7 @@ export default function ChannelsPage() {
   // 默认按自定义排序（sort 值升序、同值按名称兜底），与渠道编辑器里的排序值联动；
   // 排序值允许重复、零值与负值，相同数值按渠道名称字母序排列。
   const [sort, setSort] = useState<Sort>("custom");
+  const [viewMode, setViewMode] = useViewMode("nv-channel-view", "grid");
   const [editing, setEditing] = useState<Channel | "new" | null>(null);
   const [testingId, setTestingId] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Channel | null>(null);
@@ -302,6 +305,7 @@ export default function ChannelsPage() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          <ViewToggle value={viewMode} onChange={setViewMode} />
           <label className="relative">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" />
             <Input
@@ -367,7 +371,7 @@ export default function ChannelsPage() {
           </div>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className={cn("grid grid-cols-1 gap-3", viewMode === "grid" && "md:grid-cols-2 xl:grid-cols-3")}>
           {rows.map((c) => (
             <article
               key={c.id}

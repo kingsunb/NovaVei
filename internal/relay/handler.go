@@ -132,6 +132,7 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 		relayConfig := model.DefaultGroupRelayConfig() // 最近一次成功读取的分组 Relay 配置, 分组暂不可得时以默认值兜底。
 		earlyEofRetried := make(map[int]bool)          // 已享受过提前 EOF 免费重试的成员 ID: 每个成员每请求仅免记账重试一次。
 		sanitizeRetried := make(map[int]bool)          // 已享受过 400 清洗重试的成员 ID: 每个成员每请求仅一次。
+		allCooldownClears := 0                         // 全冷却自动清除并重试的累计次数, 用于线性退避间隔计算。
 		var hops []refHop                              // 当轮引用链: 提升到循环外供 panic 兜底读取当轮占用, 每轮选路成功后重新赋值。
 		var failedIdx int                              // 引用链解析失败跳下标(仅当轮有效), 与 hops 一起提升以便用普通赋值接收。
 
@@ -205,6 +206,22 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 				item = pickGroupItem(group, exclude, format)
 			}
 			if item.ID == 0 {
+				// 全冷却自动清除: 分组配置了 AllCooldownRetryBaseSeconds 且所有非禁用成员都在冷却中时,
+				// 清除全部冷却让 failover 依次重试每个成员, 而非空转到冷却自然到期。
+				// 退避间隔线性递增(base, 2*base, 3*base, …), 上限 AllCooldownRetryMaxSeconds,
+				// 防止上游持续故障时过于激进地清除重试。
+				if base := group.RelayConfig.AllCooldownRetryBaseSeconds; base > 0 && allMembersInCooldown(group) {
+					allCooldownClears++
+					ResetGroupCooldown(group.ID)
+					interval := base * allCooldownClears
+					if max := group.RelayConfig.AllCooldownRetryMaxSeconds; max > 0 && interval > max {
+						interval = max
+					}
+					if !request.wait(ctx, interval) {
+						return
+					}
+					continue
+				}
 				// 本请求已无可选成员: 先清除引用跳过标记再等待, 让等待结束后的重扫
 				// 能重新评估此前被结构性跳过的引用, 目标分组恢复后即可自动回流。
 				exclude = 0

@@ -54,7 +54,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           onOpenNavigation={() => setMobileNavOpen(true)}
         />
         <main className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-7">
-          <div className="mx-auto w-full max-w-[1440px]">{children}</div>
+          <div className="mx-auto h-full w-full max-w-[1440px]">{children}</div>
         </main>
       </div>
       <CommandPalette open={cmdkOpen} onClose={() => setCmdkOpen(false)} />
