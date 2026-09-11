@@ -21,6 +21,6 @@ const (
 // 机器可读的错误标记响应头: 特殊错误的判定走头而非 message 文案,
 // 文案今后可自由调整而不静默破坏前端契约(强制改密引导曾按原文案精确匹配)。
 const (
-	ErrMarkerHeader                 = "X-NovaVei-Error"
+	ErrMarkerHeader                 = "X-NovaVeil-Error"
 	ErrMarkerPasswordChangeRequired = "password_change_required"
 )

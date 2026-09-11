@@ -23,7 +23,7 @@ export function Topbar({ onOpenNavigation }: TopbarProps) {
   const { resolved, toggle } = useTheme();
   const { username, logout } = useAuth();
   const { pathname } = useLocation();
-  const title = TITLES[pathname] ?? "NovaVei";
+  const title = TITLES[pathname] ?? "NovaVeil";
 
   return (
     <header className="glass-topbar sticky top-0 z-20 flex h-14 items-center gap-2 px-3 sm:gap-3 sm:px-6">

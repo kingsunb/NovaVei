@@ -13,7 +13,7 @@ command -v trivy >/dev/null 2>&1 || {
     exit 1
 }
 
-expected_manifest=$'amd64\tlinux/amd64\tnovavei-linux-amd64.tar\tnovavei-candidate:amd64\n386\tlinux/386\tnovavei-linux-386.tar\tnovavei-candidate:386\narm64\tlinux/arm64\tnovavei-linux-arm64.tar\tnovavei-candidate:arm64\narm-v7\tlinux/arm/v7\tnovavei-linux-arm-v7.tar\tnovavei-candidate:arm-v7'
+expected_manifest=$'amd64\tlinux/amd64\tnovaveil-linux-amd64.tar\tnovaveil-candidate:amd64\n386\tlinux/386\tnovaveil-linux-386.tar\tnovaveil-candidate:386\narm64\tlinux/arm64\tnovaveil-linux-arm64.tar\tnovaveil-candidate:arm64\narm-v7\tlinux/arm/v7\tnovaveil-linux-arm-v7.tar\tnovaveil-candidate:arm-v7'
 actual_manifest="$(cat "$IMAGE_DIR/IMAGES.tsv")"
 [[ "$actual_manifest" == "$expected_manifest" ]] || {
     echo "unexpected image archive manifest" >&2
@@ -77,19 +77,19 @@ while IFS=$'\t' read -r slug platform archive local_ref; do
 
     [[ "$(docker image inspect "$local_ref" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" == "$revision" ]]
     [[ "$(docker image inspect "$local_ref" --format '{{index .Config.Labels "org.opencontainers.image.version"}}')" == "$version" ]]
-    [[ "$(docker image inspect "$local_ref" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')" == "https://github.com/kingsunb/NovaVei" ]]
+    [[ "$(docker image inspect "$local_ref" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')" == "https://github.com/kingsunb/NovaVeil" ]]
     image_id="$(docker image inspect "$local_ref" --format '{{.Id}}')"
     printf '%s\t%s\t%s\t%s\t%s\n' "$slug" "$platform" "$archive" "$local_ref" "$image_id" >>"$IMAGE_DIR/IMAGE_IDS.tsv"
 
-    scripts/smoke-test-image.sh "$local_ref" "novavei-${slug}-smoke" "$platform"
+    scripts/smoke-test-image.sh "$local_ref" "novaveil-${slug}-smoke" "$platform"
 done <"$IMAGE_DIR/IMAGES.tsv"
 
 (
     cd "$IMAGE_DIR"
     sha256sum \
         SOURCE_SHA IMAGE_VERSION IMAGES.tsv IMAGE_IDS.tsv ARCHIVES.sha256 \
-        novavei-linux-amd64.tar novavei-linux-386.tar \
-        novavei-linux-arm64.tar novavei-linux-arm-v7.tar \
+        novaveil-linux-amd64.tar novaveil-linux-386.tar \
+        novaveil-linux-arm64.tar novaveil-linux-arm-v7.tar \
         sbom-amd64.cdx.json sbom-386.cdx.json \
         sbom-arm64.cdx.json sbom-arm-v7.cdx.json \
         >PUBLISH.sha256

@@ -10,12 +10,12 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/gin-gonic/gin"
-	"github.com/kingsunb/NovaVei/internal/conf"
-	_ "github.com/kingsunb/NovaVei/internal/server/handlers"
-	"github.com/kingsunb/NovaVei/internal/server/middleware"
-	"github.com/kingsunb/NovaVei/internal/server/resp"
-	"github.com/kingsunb/NovaVei/internal/server/router"
-	"github.com/kingsunb/NovaVei/static"
+	"github.com/kingsunb/NovaVeil/internal/conf"
+	_ "github.com/kingsunb/NovaVeil/internal/server/handlers"
+	"github.com/kingsunb/NovaVeil/internal/server/middleware"
+	"github.com/kingsunb/NovaVeil/internal/server/resp"
+	"github.com/kingsunb/NovaVeil/internal/server/router"
+	"github.com/kingsunb/NovaVeil/static"
 )
 
 var (

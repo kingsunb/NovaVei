@@ -27,7 +27,6 @@ import {
 } from "./useGroupRuntime";
 import {
   Dialog,
-  DialogBody,
   DialogClose,
   DialogContent,
   DialogDescription,
@@ -719,9 +718,8 @@ function TraceSheet({
 
   return (
     <Dialog open={!!req} onOpenChange={(o) => !o && onClose()}>
-      {/* sheet 变体已内建 flex-col；Body flex-1 overflow-y-auto 生效 */}
-      <DialogContent variant="sheet">
-        <DialogHeader>
+      <DialogContent variant="fullscreen">
+        <DialogHeader className="pr-12">
           <DialogTitle>
             追踪 #{req.id} · {req.model} → {req.target_channel} → {req.target_model}
           </DialogTitle>
@@ -733,7 +731,7 @@ function TraceSheet({
         </DialogHeader>
 
         {/* 关键诊断信息：状态/耗时/用量/出口/协议链路一眼可读 */}
-        <div className="flex flex-wrap items-center gap-1.5 px-4 pt-1 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-4 py-2 text-xs">
           <Pill tone={STATE_TONE[req.status] ?? "neutral"}>
             {STATE_LABEL[req.status] ?? req.status}
           </Pill>
@@ -760,51 +758,60 @@ function TraceSheet({
           </Pill>
         </div>
 
-        <div className="flex items-center gap-1 overflow-x-auto border-b border-border bg-card/30 px-4">
-          {[
-            { k: "timeline", label: `时间线 (${attempts.length})` },
-            { k: "route", label: "分组路由" },
-            { k: "body", label: "请求体" },
-            { k: "response", label: "响应体" },
-          ].map((t) => (
-            <button
-              key={t.k}
-              onClick={() => setTab(t.k as typeof tab)}
-              className={cn(
-                "border-b-2 px-3 py-2 text-sm transition-colors",
-                tab === t.k
-                  ? "border-primary font-medium text-primary-text"
-                  : "border-transparent text-ink-muted hover:text-ink",
+        {/* 全屏双栏：左 = 分区导航，右 = 分区内容 */}
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          {/* ---------- 左栏：垂直分区导航 ---------- */}
+          <aside className="flex shrink-0 flex-col border-b border-border md:h-auto md:w-[180px] md:border-b-0 md:border-r">
+            <nav className="flex gap-1 overflow-x-auto p-2 md:flex-col md:overflow-y-auto">
+              {[
+                { k: "timeline", label: `时间线 (${attempts.length})` },
+                { k: "route", label: "分组路由" },
+                { k: "body", label: "请求体" },
+                { k: "response", label: "响应体" },
+              ].map((t) => (
+                <button
+                  key={t.k}
+                  onClick={() => setTab(t.k as typeof tab)}
+                  className={cn(
+                    "shrink-0 rounded-control px-3 py-2 text-left text-sm transition-colors md:w-full",
+                    tab === t.k
+                      ? "bg-primary/10 font-medium text-primary-text"
+                      : "text-ink-muted hover:bg-surface-subtle/50 hover:text-ink",
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </nav>
+          </aside>
+
+          {/* ---------- 右栏：分区内容 ---------- */}
+          <section className="flex min-h-0 flex-1 flex-col">
+            <div className="flex-1 space-y-3 overflow-y-auto p-4">
+              {tab === "timeline" && (
+                <ol className="space-y-2">
+                  {attempts.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-ink-muted">
+                      暂无尝试记录
+                    </p>
+                  ) : (
+                    attempts.map((a) => <AttemptLine key={a.seq} a={a} />)
+                  )}
+                </ol>
               )}
-            >
-              {t.label}
-            </button>
-          ))}
+
+              {tab === "body" && (
+                <FormattedBody content={loading ? "" : body} loading={loading} />
+              )}
+
+              {tab === "response" && (
+                <FormattedBody content={loading ? "" : response} loading={loading} />
+              )}
+
+              {tab === "route" && req && <RouteTab req={req} attempts={attempts} />}
+            </div>
+          </section>
         </div>
-
-        <DialogBody className="space-y-3">
-          {tab === "timeline" && (
-            <ol className="space-y-2">
-              {attempts.length === 0 ? (
-                <p className="py-6 text-center text-sm text-ink-muted">
-                  暂无尝试记录
-                </p>
-              ) : (
-                attempts.map((a) => <AttemptLine key={a.seq} a={a} />)
-              )}
-            </ol>
-          )}
-
-          {tab === "body" && (
-            <FormattedBody content={loading ? "" : body} loading={loading} />
-          )}
-
-          {tab === "response" && (
-            <FormattedBody content={loading ? "" : response} loading={loading} />
-          )}
-
-          {tab === "route" && req && <RouteTab req={req} attempts={attempts} />}
-        </DialogBody>
 
         <DialogFooter>
           {req && (req.status === "running" || req.status === "committed") && (

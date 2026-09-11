@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // stickyTestItem 构造一个分组成员。

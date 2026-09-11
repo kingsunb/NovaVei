@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // assertProxyLabel 校验展示文案的契约: 保留主机端口、不回显密码段。

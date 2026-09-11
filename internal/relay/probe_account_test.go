@@ -3,8 +3,8 @@ package relay
 import (
 	"testing"
 
-	"github.com/kingsunb/NovaVei/internal/helper"
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/helper"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // TestEffectiveProbeChannelResolvesAccountAndIgnoresRemark 验证 {account} 占位符被替换为

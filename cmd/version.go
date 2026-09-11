@@ -1,4 +1,4 @@
-// version.go implements the NovaVei `version` subcommand.
+// version.go implements the NovaVeil `version` subcommand.
 package cmd
 
 import (
@@ -6,7 +6,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/kingsunb/NovaVei/internal/conf"
+	"github.com/kingsunb/NovaVeil/internal/conf"
 
 	"github.com/spf13/cobra"
 )

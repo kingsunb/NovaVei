@@ -9,11 +9,11 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/gin-contrib/sse"
 	"github.com/gin-gonic/gin"
-	"github.com/kingsunb/NovaVei/internal/op"
-	"github.com/kingsunb/NovaVei/internal/relay"
-	"github.com/kingsunb/NovaVei/internal/server/middleware"
-	"github.com/kingsunb/NovaVei/internal/server/resp"
-	"github.com/kingsunb/NovaVei/internal/server/router"
+	"github.com/kingsunb/NovaVeil/internal/op"
+	"github.com/kingsunb/NovaVeil/internal/relay"
+	"github.com/kingsunb/NovaVeil/internal/server/middleware"
+	"github.com/kingsunb/NovaVeil/internal/server/resp"
+	"github.com/kingsunb/NovaVeil/internal/server/router"
 )
 
 // defaultFailureLimit 失败摘要查询接口未指定 limit 时的默认返回条数。

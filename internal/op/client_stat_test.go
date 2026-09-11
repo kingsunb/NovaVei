@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/db"
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/db"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // resetClientStatForTest 清空内存缓存与数据库表, 保证用例隔离。

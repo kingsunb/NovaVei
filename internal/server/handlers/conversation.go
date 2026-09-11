@@ -5,10 +5,10 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/gin-gonic/gin"
-	"github.com/kingsunb/NovaVei/internal/op"
-	"github.com/kingsunb/NovaVei/internal/server/middleware"
-	"github.com/kingsunb/NovaVei/internal/server/resp"
-	"github.com/kingsunb/NovaVei/internal/server/router"
+	"github.com/kingsunb/NovaVeil/internal/op"
+	"github.com/kingsunb/NovaVeil/internal/server/middleware"
+	"github.com/kingsunb/NovaVeil/internal/server/resp"
+	"github.com/kingsunb/NovaVeil/internal/server/router"
 )
 
 func init() {

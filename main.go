@@ -1,6 +1,6 @@
 package main
 
-import "github.com/kingsunb/NovaVei/cmd"
+import "github.com/kingsunb/NovaVeil/cmd"
 
 // Version v0.12.0
 

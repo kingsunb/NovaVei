@@ -1,15 +1,15 @@
-# NovaVei 全面代码审计报告
+# NovaVeil 全面代码审计报告
 
 **审计日期**: 2026-09-10
-**审计仓库**: kingsunb/NovaVei
+**审计仓库**: kingsunb/NovaVeil
 **项目版本**: v0.12.0
-**审计团队**: NovaVei 代码审计团队（4 名专业成员并行审计）
+**审计团队**: NovaVeil 代码审计团队（4 名专业成员并行审计）
 
 ---
 
 ## 1. 项目概览
 
-NovaVei 是一个 LLM API 中转/聚合服务，基于 bestruirui/octopus 和 looplj/axonhub 构建。
+NovaVeil 是一个 LLM API 中转/聚合服务，基于 bestruirui/octopus 和 looplj/axonhub 构建。
 
 **技术栈**:
 - 后端: Go 1.26 + Gin + GORM（支持 SQLite/MySQL/PostgreSQL）
@@ -100,7 +100,7 @@ NovaVei 是一个 LLM API 中转/聚合服务，基于 bestruirui/octopus 和 lo
 #### H-8: web-router 服务完全缺乏安全加固
 - **来源**: 部署审计 | **文件**: docker-compose.yml:127-141
 - **问题**: 无 user、无 read_only、无 cap_drop、无 security_opt、无资源限制。以 root 运行。
-- **修复建议**: 向后端 novavei 服务的安全加固看齐。
+- **修复建议**: 向后端 novaveil 服务的安全加固看齐。
 
 #### H-9: web-router 使用可变镜像标签
 - **来源**: 部署审计 | **文件**: docker-compose.yml:128
@@ -165,7 +165,7 @@ NovaVei 是一个 LLM API 中转/聚合服务，基于 bestruirui/octopus 和 lo
 | D-M8 | build.yaml:219 | 发布 :latest 可变标签 | 停止发布或重命名为 :dev-latest |
 | D-M9 | conf/config.go:66 | data 目录权限 0755 过宽 | 改为 0700 |
 | D-M10 | conf/config.go:69 | config.json 写入未设安全权限 | 写入后 chmod 0600 |
-| D-M11 | docker-compose.local.yml:58 | 默认数据目录在 /tmp | 改为 ./novavei-data |
+| D-M11 | docker-compose.local.yml:58 | 默认数据目录在 /tmp | 改为 ./novaveil-data |
 | D-M12 | web-next/nginx.conf:67 | /__flags/ 端点 CORS 设置为 * | 限制为已知前端域名 |
 | D-M13 | SECURE_DEPLOYMENT.md:114-115 | 发布产物缺少签名验证 | 集成 Sigstore/cosign |
 
@@ -250,7 +250,7 @@ NovaVei 是一个 LLM API 中转/聚合服务，基于 bestruirui/octopus 和 lo
 
 ### 5.1 整体评价
 
-NovaVei 项目整体代码质量**较高**，体现了专业的工程实践和安全意识。项目在核心安全机制（JWT、CORS、错误日志脱敏、登录限速）和后端容器加固方面表现出色，前端 TypeScript 类型安全和可访问性实践也值得肯定。
+NovaVeil 项目整体代码质量**较高**，体现了专业的工程实践和安全意识。项目在核心安全机制（JWT、CORS、错误日志脱敏、登录限速）和后端容器加固方面表现出色，前端 TypeScript 类型安全和可访问性实践也值得肯定。
 
 **主要亮点**:
 1. **安全基础扎实**: JWT 算法钉死、bcrypt 密码存储、错误日志全面脱敏、CORS 严格配置、无 SQL/命令注入风险、无硬编码密钥
@@ -288,10 +288,10 @@ NovaVei 项目整体代码质量**较高**，体现了专业的工程实践和�
 
 ### 5.3 总结
 
-NovaVei 是一个工程质量较高的 LLM API 中转服务。76 项审计发现中，仅 1 项严重、11 项高，且严重问题修复简单（替换 unsafe.String），高危问题多为信息泄露和容器加固不足，不涉及核心架构缺陷。项目在安全意识、并发安全、错误处理、DevOps 实践方面表现专业，建议按优先级逐步修复，优先处理 P0 级别的 3 项问题。
+NovaVeil 是一个工程质量较高的 LLM API 中转服务。76 项审计发现中，仅 1 项严重、11 项高，且严重问题修复简单（替换 unsafe.String），高危问题多为信息泄露和容器加固不足，不涉及核心架构缺陷。项目在安全意识、并发安全、错误处理、DevOps 实践方面表现专业，建议按优先级逐步修复，优先处理 P0 级别的 3 项问题。
 
 ---
 
 *报告生成时间: 2026-09-10 16:30*  
-*审计团队: NovaVei 代码审计团队*  
+*审计团队: NovaVeil 代码审计团队*  
 *报告路径: docs/audits/AUDIT_REPORT_FULL.md*

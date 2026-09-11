@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // waitFor 轮询等待条件成立, 超时则判定失败。

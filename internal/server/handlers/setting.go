@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kingsunb/NovaVei/internal/model"
-	"github.com/kingsunb/NovaVei/internal/op"
-	"github.com/kingsunb/NovaVei/internal/relay"
-	"github.com/kingsunb/NovaVei/internal/server/middleware"
-	"github.com/kingsunb/NovaVei/internal/server/resp"
-	"github.com/kingsunb/NovaVei/internal/server/router"
-	"github.com/kingsunb/NovaVei/internal/task"
+	"github.com/kingsunb/NovaVeil/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/op"
+	"github.com/kingsunb/NovaVeil/internal/relay"
+	"github.com/kingsunb/NovaVeil/internal/server/middleware"
+	"github.com/kingsunb/NovaVeil/internal/server/resp"
+	"github.com/kingsunb/NovaVeil/internal/server/router"
+	"github.com/kingsunb/NovaVeil/internal/task"
 )
 
 func init() {
@@ -123,7 +123,7 @@ func exportDB(c *gin.Context) {
 	}
 
 	c.Header("Content-Type", "application/json")
-	c.Header("Content-Disposition", "attachment; filename=\"novavei-export-"+time.Now().Format("20060102150405")+".json\"")
+	c.Header("Content-Disposition", "attachment; filename=\"novaveil-export-"+time.Now().Format("20060102150405")+".json\"")
 	c.JSON(http.StatusOK, dump)
 }
 

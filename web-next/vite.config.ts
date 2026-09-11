@@ -17,13 +17,13 @@ import { gzipSync } from "node:zlib";
  */
 const buildOutDir = path.resolve(__dirname, "../static/out");
 
-// novaveiGzipPrecompressPlugin 为每个文本类构建产物额外产出同名 .gz。
+// novaveilGzipPrecompressPlugin 为每个文本类构建产物额外产出同名 .gz。
 // 后端中间件优先直发 .gz(API 不变, 仅在第一次请求时省 CPU); 未预压缩(如本地
 // 目录模式或新增 ext)回退到后端动态压缩, 行为与改造前等价。
-function novaveiGzipPrecompressPlugin(): PluginOption {
+function novaveilGzipPrecompressPlugin(): PluginOption {
   const compressible = /\.(?:js|css|svg|html|json|map|txt|webmanifest)$/;
   return {
-    name: "novavei-gzip-precompress",
+    name: "novaveil-gzip-precompress",
     apply: "build",
     closeBundle() {
       const walk = (relative = ""): string[] =>
@@ -48,7 +48,7 @@ function novaveiGzipPrecompressPlugin(): PluginOption {
 }
 
 export default defineConfig({
-  plugins: [tailwindcss(), react(), novaveiGzipPrecompressPlugin()],
+  plugins: [tailwindcss(), react(), novaveilGzipPrecompressPlugin()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Field } from "@/components/ui/field";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Trash2, X, ShieldAlert } from "lucide-react";
+import { Plus, Trash2, X, ShieldAlert, ChevronDown } from "lucide-react";
 
 import { api, APIError, parseHeaderTemplates } from "@/lib/api";
 import { useTheme } from "@/components/layout/ThemeProvider";
@@ -89,7 +89,7 @@ const SECTIONS: { id: Section; label: string }[] = [
 export default function SettingsPage() {
   const [active, setActive] = useState<Section>("appearance");
   return (
-    <div className="grid grid-cols-1 gap-5 md:grid-cols-[180px,1fr]">
+    <div className="grid grid-cols-1 gap-5 md:grid-cols-[180px_1fr]">
       <aside className="space-y-0.5 md:border-r md:border-border/40 md:pr-3">
         {SECTIONS.map((s) => (
           <button
@@ -1120,6 +1120,16 @@ function TesterSection() {
   const [results, setResults] = useState<GroupTestResult[] | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  function toggleRow(i: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }
 
   // 自定义测试消息：存到 settings.kv，缺省时回退 DEFAULT_TEST_MESSAGE。
   const { data: msgSetting } = useQuery({
@@ -1180,7 +1190,7 @@ function TesterSection() {
         <TestMessageField value={msgSetting?.value} />
 
         {error && (
-          <p className="rounded-md bg-danger/10 p-2.5 text-xs text-danger">
+          <p className="rounded-md bg-danger/10 p-2.5 text-xs break-words text-danger">
             {error}
           </p>
         )}
@@ -1205,37 +1215,84 @@ function TesterSection() {
                 </tr>
               </thead>
               <tbody>
-                {results.map((r, i) => (
-                  <tr
-                    key={`${r.channel_name}-${r.model}-${i}`}
-                    className="border-b border-border/40 last:border-b-0"
-                  >
-                    <td className="px-3 py-1.5 text-ink">{r.channel_name}</td>
-                    <td className="mono px-3 py-1.5 text-ink">{r.model}</td>
-                    <td className="px-3 py-1.5">
-                      {r.status === "ok" ? (
-                        <Pill tone="success">通过</Pill>
-                      ) : (
-                        <Pill tone="danger">失败</Pill>
+                {results.map((r, i) => {
+                  const hasDetail =
+                    (r.status === "ok" && !!r.content) || !!r.error;
+                  const isOpen = expanded.has(i);
+                  return (
+                    <Fragment key={`${r.channel_name}-${r.model}-${i}`}>
+                      <tr
+                        className={cn(
+                          "border-b border-border/40 last:border-b-0",
+                          hasDetail &&
+                            "cursor-pointer hover:bg-surface-subtle/50",
+                        )}
+                        onClick={hasDetail ? () => toggleRow(i) : undefined}
+                      >
+                        <td className="px-3 py-1.5 text-ink">
+                          <div className="flex items-center gap-1.5">
+                            {hasDetail && (
+                              <ChevronDown
+                                className={cn(
+                                  "h-3.5 w-3.5 shrink-0 text-ink-muted transition-transform",
+                                  isOpen && "rotate-180",
+                                )}
+                              />
+                            )}
+                            {r.channel_name}
+                          </div>
+                        </td>
+                        <td className="mono px-3 py-1.5 text-ink">
+                          {r.model}
+                        </td>
+                        <td className="px-3 py-1.5">
+                          {r.status === "ok" ? (
+                            <Pill tone="success">通过</Pill>
+                          ) : (
+                            <Pill tone="danger">失败</Pill>
+                          )}
+                        </td>
+                        <td className="num px-3 py-1.5 text-right text-ink-muted">
+                          {r.latency_ms > 0 ? `${r.latency_ms} ms` : "—"}
+                        </td>
+                        <td className="max-w-[200px] truncate px-3 py-1.5 text-xs text-ink-muted">
+                          {r.status === "ok" && r.content ? r.content : ""}
+                        </td>
+                        <td className="truncate px-3 py-1.5 text-xs text-ink-muted">
+                          {r.error ?? ""}
+                        </td>
+                      </tr>
+                      {isOpen && hasDetail && (
+                        <tr className="border-b border-border/40 last:border-b-0">
+                          <td colSpan={6} className="bg-surface-subtle/30 px-3 py-2.5">
+                            <div className="space-y-2">
+                              {r.status === "ok" && r.content && (
+                                <div>
+                                  <p className="mb-1 text-xs font-medium text-ink-muted">
+                                    返回内容
+                                  </p>
+                                  <pre className="max-h-48 overflow-auto rounded-md bg-card/60 p-2.5 text-xs whitespace-pre-wrap break-words text-ink">
+                                    {r.content}
+                                  </pre>
+                                </div>
+                              )}
+                              {r.error && (
+                                <div>
+                                  <p className="mb-1 text-xs font-medium text-danger">
+                                    错误详情
+                                  </p>
+                                  <pre className="max-h-48 overflow-auto rounded-md bg-danger/8 p-2.5 text-xs whitespace-pre-wrap break-words text-danger">
+                                    {r.error}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                    <td className="num px-3 py-1.5 text-right text-ink-muted">
-                      {r.latency_ms > 0 ? `${r.latency_ms} ms` : "—"}
-                    </td>
-                    <td
-                      className="max-w-[200px] truncate px-3 py-1.5 text-xs text-ink-muted"
-                      title={r.status === "ok" && r.content ? r.content : undefined}
-                    >
-                      {r.status === "ok" && r.content ? r.content : ""}
-                    </td>
-                    <td
-                      className="truncate px-3 py-1.5 text-xs text-ink-muted"
-                      title={r.error}
-                    >
-                      {r.error ?? ""}
-                    </td>
-                  </tr>
-                ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1329,7 +1386,7 @@ function BackupSection() {
     mutationFn: () => api.exportSettings(),
     onSuccess: ({ data, filename }) => {
       // 优先用服务端 Content-Disposition 建议的文件名，失败回退本地命名。
-      downloadJson(filename ?? `novavei-backup-${Date.now()}.json`, data);
+      downloadJson(filename ?? `novaveil-backup-${Date.now()}.json`, data);
       toast.success("已导出");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -1508,7 +1565,7 @@ function AboutSection() {
       <Card>
         <CardHeader>
           <div>
-            <CardTitle>NovaVei 控制台</CardTitle>
+            <CardTitle>NovaVeil 控制台</CardTitle>
           </div>
         </CardHeader>
         <CardContent className="space-y-1.5 text-sm text-ink-muted">

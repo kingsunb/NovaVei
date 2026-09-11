@@ -38,11 +38,11 @@ func buildZip(t *testing.T, entries map[string]string) []byte {
 func TestVerifyReleaseChecksum(t *testing.T) {
 	archive := []byte("release-archive")
 	sum := sha256.Sum256(archive)
-	manifest := []byte(hex.EncodeToString(sum[:]) + "  novavei-linux-amd64.zip\n")
-	if err := verifyReleaseChecksum("novavei-linux-amd64.zip", archive, manifest); err != nil {
+	manifest := []byte(hex.EncodeToString(sum[:]) + "  novaveil-linux-amd64.zip\n")
+	if err := verifyReleaseChecksum("novaveil-linux-amd64.zip", archive, manifest); err != nil {
 		t.Fatalf("valid checksum rejected: %v", err)
 	}
-	if err := verifyReleaseChecksum("novavei-linux-amd64.zip", []byte("tampered"), manifest); err == nil {
+	if err := verifyReleaseChecksum("novaveil-linux-amd64.zip", []byte("tampered"), manifest); err == nil {
 		t.Fatal("tampered archive must be rejected")
 	}
 	if err := verifyReleaseChecksum("missing.zip", archive, manifest); err == nil {
@@ -116,7 +116,7 @@ func TestCopyLimitedReadsLimitPlusOne(t *testing.T) {
 func TestUnzipExtractsValidArchive(t *testing.T) {
 	dest := t.TempDir()
 	data := buildZip(t, map[string]string{
-		"novavei":         "binary",
+		"novaveil":         "binary",
 		"nested/readme":    "docs",
 		"nested/config.js": "cfg",
 	})
@@ -126,7 +126,7 @@ func TestUnzipExtractsValidArchive(t *testing.T) {
 		t.Fatalf("unzipWithLimits valid archive: %v", err)
 	}
 
-	assertFileContent(t, filepath.Join(dest, "novavei"), "binary")
+	assertFileContent(t, filepath.Join(dest, "novaveil"), "binary")
 	assertFileContent(t, filepath.Join(dest, "nested", "readme"), "docs")
 	assertFileContent(t, filepath.Join(dest, "nested", "config.js"), "cfg")
 }

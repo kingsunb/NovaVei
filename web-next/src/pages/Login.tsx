@@ -7,7 +7,7 @@ import { useAuth } from "@/store/auth";
 import { APIError } from "@/lib/api";
 
 /**
- * 登录页 —— NovaVei 科幻控制台入口
+ * 登录页 —— NovaVeil 科幻控制台入口
  *  - 低强度网格与信号色边框
  *  - 品牌标识保持清晰，避免装饰性光球干扰表单
  */
@@ -67,7 +67,7 @@ export default function LoginPage() {
           </div>
           <div className="text-center">
             <h1 className="text-xl font-semibold tracking-tight text-ink">
-              NovaVei
+              NovaVeil
             </h1>
             <p className="mt-0.5 text-[13px] text-ink-muted">LLM API 网关控制台</p>
           </div>

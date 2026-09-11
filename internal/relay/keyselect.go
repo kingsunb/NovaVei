@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/helper"
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/helper"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // keyRef 定位一个渠道 Key 的冷却记录; 渠道 ID 与 Key ID 组成进程内唯一引用。

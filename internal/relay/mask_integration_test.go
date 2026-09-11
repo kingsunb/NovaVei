@@ -3,7 +3,7 @@ package relay
 import (
 	"testing"
 
-	"github.com/kingsunb/NovaVei/internal/relay/mask"
+	"github.com/kingsunb/NovaVeil/internal/relay/mask"
 	"github.com/looplj/axonhub/llm"
 )
 

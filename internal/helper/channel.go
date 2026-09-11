@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/log"
-	"github.com/kingsunb/NovaVei/internal/client"
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/client"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // ChannelHttpClient 根据渠道代理配置创建 HTTP 客户端, 并以 Debug 日志标注每次出站

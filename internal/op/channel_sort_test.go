@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/db"
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/db"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // TestChannelSortAllowsDuplicateZeroNegative 验证渠道排序值允许重复、零值与负值，

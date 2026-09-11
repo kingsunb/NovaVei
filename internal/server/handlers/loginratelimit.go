@@ -10,9 +10,9 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/gin-gonic/gin"
-	"github.com/kingsunb/NovaVei/internal/db"
-	"github.com/kingsunb/NovaVei/internal/model"
-	"github.com/kingsunb/NovaVei/internal/server/resp"
+	"github.com/kingsunb/NovaVeil/internal/db"
+	"github.com/kingsunb/NovaVeil/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/server/resp"
 	"gorm.io/gorm"
 )
 

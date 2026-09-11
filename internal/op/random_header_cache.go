@@ -3,7 +3,7 @@ package op
 import (
 	"sync"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // channelRandomHeaderCache 按渠道索引的随机头名解析缓存(已解析产物 map[int][]string)。

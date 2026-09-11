@@ -1,38 +1,38 @@
 # 正式部署 compose (生产模板): 固定镜像坐标, 不使用 :latest/:dev 这类可变标签。
-# 升级策略: 修改 NOVAVEI_IMAGE 指向新的版本 tag 或 digest 后再 `docker compose up -d`。
+# 升级策略: 修改 NOVAVEIL_IMAGE 指向新的版本 tag 或 digest 后再 `docker compose up -d`。
 #
-# 推荐部署方式: 单容器 novavei（Go 内嵌前端，无需额外 nginx / web-next）。
+# 推荐部署方式: 单容器 novaveil（Go 内嵌前端，无需额外 nginx / web-next）。
 #   `docker compose pull && docker compose up -d` 即可，控制台由后端直接提供。
 # 可选: 独立前端灰度部署 `docker compose --profile web-next up -d`（需额外构建
-#   NOVAVEI_WEB_NEXT_IMAGE 镜像，见 web-next/Dockerfile）。
+#   NOVAVEIL_WEB_NEXT_IMAGE 镜像，见 web-next/Dockerfile）。
 #
 # 用法:
 #   1) 选定要部署的镜像 (例如 pin 到 digest):
-#        export NOVAVEI_IMAGE='ghcr.io/kingsunb/novavei-api:0.12.0@sha256:<digest>'
+#        export NOVAVEIL_IMAGE='ghcr.io/kingsunb/novaveil-api:0.12.0@sha256:<digest>'
 #      若只 pin 版本号则省略 @sha256 部分, 但请记下残余风险: 同名 tag 可被重新发布。
 #   2) 创建外部数据卷并预配权限:
-#        sudo install -d -o 10001 -g 10001 -m 0700 /var/lib/novavei
+#        sudo install -d -o 10001 -g 10001 -m 0700 /var/lib/novaveil
 #        docker volume create --driver local \
-#          --opt type=none --opt o=bind --opt device=/var/lib/novavei novavei-data
+#          --opt type=none --opt o=bind --opt device=/var/lib/novaveil novaveil-data
 #   3) docker compose pull && docker compose up -d
 #
 # 暴露面: 默认仅绑定宿主回环地址 127.0.0.1:8888，供本机 TLS 反向代理访问。
-# 如确需从其它主机直连，显式修改 NOVAVEI_BIND_ADDRESS，并配套防火墙与 HTTPS；
+# 如确需从其它主机直连，显式修改 NOVAVEIL_BIND_ADDRESS，并配套防火墙与 HTTPS；
 # 直接公网暴露会让登录凭据、渠道 Key 与 API 流量走明文 HTTP。
 # 推荐的 HTTPS 终止方式见 docs/SECURE_DEPLOYMENT.md。
 
 x-image: &image
-  image: ${NOVAVEI_IMAGE:?NOVAVEI_IMAGE is required (e.g. ghcr.io/kingsunb/novavei-api:0.12.0@sha256:<digest>)}
+  image: ${NOVAVEIL_IMAGE:?NOVAVEIL_IMAGE is required (e.g. ghcr.io/kingsunb/novaveil-api:0.12.0@sha256:<digest>)}
 
 # 独立前端镜像（可选）：仅在 --profile web-next 时使用。
-# 默认部署方式是 Go 内嵌前端（novavei 服务已包含控制台），无需此镜像。
+# 默认部署方式是 Go 内嵌前端（novaveil 服务已包含控制台），无需此镜像。
 x-web-next-image: &web-next-image
-  image: ${NOVAVEI_WEB_NEXT_IMAGE:?NOVAVEI_WEB_NEXT_IMAGE is required for the web-next profile (e.g. ghcr.io/kingsunb/novavei-web-next:0.12.0@sha256:<digest>)}
+  image: ${NOVAVEIL_WEB_NEXT_IMAGE:?NOVAVEIL_WEB_NEXT_IMAGE is required for the web-next profile (e.g. ghcr.io/kingsunb/novaveil-web-next:0.12.0@sha256:<digest>)}
 
 services:
-  novavei:
+  novaveil:
     <<: *image
-    container_name: novavei
+    container_name: novaveil
     restart: unless-stopped
     # Shutdown hooks execute sequentially (HTTP drain, tasks, conversations, stats, logs, DB).
     # Allow their bounded worst case to complete before Docker sends SIGKILL.
@@ -66,18 +66,18 @@ services:
 
     environment:
       TZ: Asia/Shanghai
-      NOVAVEI_SERVER_HOST: 0.0.0.0
-      NOVAVEI_SERVER_PORT: "8080"
-      NOVAVEI_LOG_LEVEL: info
-      NOVAVEI_DISABLE_SELF_UPDATE: "true"
+      NOVAVEIL_SERVER_HOST: 0.0.0.0
+      NOVAVEIL_SERVER_PORT: "8080"
+      NOVAVEIL_LOG_LEVEL: info
+      NOVAVEIL_DISABLE_SELF_UPDATE: "true"
       # 反代终止 TLS 时启用 Secure Cookie (其他场景保持 false 以免登录被锁)。
-      # NOVAVEI_SECURITY_COOKIE_SECURE: "true"
+      # NOVAVEIL_SECURITY_COOKIE_SECURE: "true"
 
     ports:
-      - "${NOVAVEI_BIND_ADDRESS:-127.0.0.1}:8888:8080"
+      - "${NOVAVEIL_BIND_ADDRESS:-127.0.0.1}:8888:8080"
 
     volumes:
-      - novavei-data:/app/data
+      - novaveil-data:/app/data
 
     # 使用镜像内 BusyBox wget 探测前端入口; 不需要额外安装 curl。
     healthcheck:
@@ -88,12 +88,12 @@ services:
       start_period: 20s
 
   # ---- web-next（新版控制台，可选独立前端部署）----
-  # 默认部署无需此服务：novavei 镜像已内嵌前端（Go embed static/out）。
+  # 默认部署无需此服务：novaveil 镜像已内嵌前端（Go embed static/out）。
   # 仅在需要独立前端灰度 / A-B 路由时用 `docker compose --profile web-next up`。
   # 由 web-next/Dockerfile 构建（nginx + web dist）；通过 web-router 统一对外暴露 8889。
   web-next:
     <<: *web-next-image
-    container_name: novavei-web-next
+    container_name: novaveil-web-next
     restart: unless-stopped
     stop_grace_period: 30s
     # 端口由 web-router 统一对外暴露；这里仅声明给运维可见
@@ -102,7 +102,7 @@ services:
     environment:
       TZ: Asia/Shanghai
       # 后端 API upstream（nginx 模板渲染）
-      NOVAVEI_UPSTREAM: novavei:8080
+      NOVAVEIL_UPSTREAM: novaveil:8080
     # read-only rootfs + 非 root 友好（nginx master root, worker nginx）
     # /etc/nginx/conf.d 需可写：官办 entrypoint 把模板渲染结果写到此处。
     read_only: true
@@ -116,7 +116,7 @@ services:
     cap_drop:
       - ALL
     depends_on:
-      novavei:
+      novaveil:
         condition: service_healthy
     profiles: ["web-next"]
 
@@ -124,21 +124,21 @@ services:
   # router.nginx.conf 使用固定 compose 服务名 upstream，无需环境变量渲染。
   web-router:
     image: nginx:1.27-alpine
-    container_name: novavei-web-router
+    container_name: novaveil-web-router
     restart: unless-stopped
     volumes:
       - ./web-next/router.nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       # 对外 8889（旧 8888 不动，避免破坏既有部署）
-      - "${NOVAVEI_BIND_ADDRESS:-127.0.0.1}:8889:80"
+      - "${NOVAVEIL_BIND_ADDRESS:-127.0.0.1}:8889:80"
     depends_on:
-      novavei:
+      novaveil:
         condition: service_healthy
       web-next:
         condition: service_started
     profiles: ["web-next"]
 
 volumes:
-  novavei-data:
-    name: novavei-data
+  novaveil-data:
+    name: novaveil-data
     external: true

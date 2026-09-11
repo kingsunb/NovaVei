@@ -48,7 +48,7 @@ func BenchmarkConverted_RequestJSONRoundTrip(b *testing.B) {
 		}
 		// 模拟 transformer 把客户端 messages 改成渠道原生格式(添加字段、改名等)。
 		v["max_tokens"] = 2048
-		v["user"] = "novavei-bench"
+		v["user"] = "novaveil-bench"
 		buf, err := json.Marshal(v)
 		if err != nil {
 			b.Fatal(err)

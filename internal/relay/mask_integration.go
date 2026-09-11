@@ -3,8 +3,8 @@ package relay
 import (
 	"strings"
 
-	"github.com/kingsunb/NovaVei/internal/op"
-	"github.com/kingsunb/NovaVei/internal/relay/mask"
+	"github.com/kingsunb/NovaVeil/internal/op"
+	"github.com/kingsunb/NovaVeil/internal/relay/mask"
 	"github.com/looplj/axonhub/llm"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"

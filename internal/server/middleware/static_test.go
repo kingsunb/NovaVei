@@ -181,7 +181,7 @@ func gzipBytes(t *testing.T, src []byte) []byte {
 	return buf.Bytes()
 }
 
-// ---- 以下回归移植自 NovaVei 0cc3478（无路由链下的预压缩直发契约）----
+// ---- 以下回归移植自 NovaVeil 0cc3478（无路由链下的预压缩直发契约）----
 
 // TestStaticNoRoutePrecompressedServes200WithEncoding 回归: 生产拓扑里静态路径
 // 全部落入 gin 的 NoRoute 链, gin 的 serveError 会先把 writermem.status 预置成
@@ -265,5 +265,63 @@ func TestStaticNoRouteMissAndShell(t *testing.T) {
 	}
 	if got := w.Header().Get("Content-Encoding"); got != "" {
 		t.Fatalf("无扩展名首页不应被压缩, 实际 %q", got)
+	}
+}
+
+// TestStaticSkipsAPIPaths 确保 /api 和 /v1 前缀的请求不被静态中间件拦截，
+// 而是交由后端路由处理。回归 /v1/models 被 SPA fallback 吞掉返回 404 的问题。
+func TestStaticSkipsAPIPaths(t *testing.T) {
+	fs2, _ := fakeFileSystem(t)
+	r := gin.New()
+	r.Use(StaticEmbed("", fs2))
+
+	for _, prefix := range []string{"/api/v1/user/status", "/v1/models", "/v1/chat/completions"} {
+		called := false
+		// 为每种路径注册一个后端路由，验证中间件确实放行。
+		switch prefix {
+		case "/api/v1/user/status":
+			r.GET(prefix, func(c *gin.Context) { called = true; c.JSON(http.StatusOK, gin.H{"ok": true}) })
+		case "/v1/models":
+			r.GET(prefix, func(c *gin.Context) { called = true; c.JSON(http.StatusOK, gin.H{"data": []any{}}) })
+		case "/v1/chat/completions":
+			r.POST(prefix, func(c *gin.Context) { called = true; c.JSON(http.StatusOK, gin.H{"ok": true}) })
+		}
+
+		w := httptest.NewRecorder()
+		method := http.MethodGet
+		if strings.HasSuffix(prefix, "/completions") {
+			method = http.MethodPost
+		}
+		r.ServeHTTP(w, httptest.NewRequest(method, prefix, nil))
+
+		if !called {
+			t.Errorf("%s: 后端路由未被调用，静态中间件可能拦截了请求", prefix)
+		}
+		if w.Code != http.StatusOK {
+			t.Errorf("%s: 期望 200，实际 %d（body: %s）", prefix, w.Code, w.Body.String())
+		}
+		// 确保返回的是 JSON 而非 index.html
+		if !strings.Contains(w.Body.String(), "{") {
+			t.Errorf("%s: 响应体不是 JSON，可能被 SPA fallback 吞掉", prefix)
+		}
+	}
+}
+
+// TestStaticSPAFallbackForFrontendRoutes 确保前端路由（/channels /dashboard 等）
+// 直接访问时返回 index.html（SPA fallback），而非 404。
+func TestStaticSPAFallbackForFrontendRoutes(t *testing.T) {
+	fs2, _ := fakeFileSystem(t)
+	r := gin.New()
+	r.Use(StaticEmbed("", fs2))
+
+	for _, route := range []string{"/channels", "/dashboard", "/settings", "/groups", "/logs"} {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, route, nil))
+		if w.Code != http.StatusOK {
+			t.Errorf("%s: 前端路由应返回 200 (index.html), 实际 %d", route, w.Code)
+		}
+		if !bytes.Contains(w.Body.Bytes(), []byte("doctype")) {
+			t.Errorf("%s: 响应体应包含 index.html 内容, 实际 %q", route, w.Body.String())
+		}
 	}
 }

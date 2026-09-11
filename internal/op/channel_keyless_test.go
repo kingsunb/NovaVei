@@ -6,7 +6,7 @@ package op
 import (
 	"testing"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // TestNormalizeChannelKeysDropsEmptyRows 验证空明文条目被静默丢弃:

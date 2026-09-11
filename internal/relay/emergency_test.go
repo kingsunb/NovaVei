@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // emergencyConfig 返回启用紧急兜底的 Relay 配置, emergencyID 为紧急成员 ID, 0 表示关闭。

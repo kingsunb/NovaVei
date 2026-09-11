@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kingsunb/NovaVei/internal/model"
-	"github.com/kingsunb/NovaVei/internal/op"
+	"github.com/kingsunb/NovaVeil/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/op"
 )
 
 func originTestEngine() *gin.Engine {

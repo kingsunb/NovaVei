@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // accountPlaceholder 渠道专属代理模板中的账号占位符, 使用某把 Key 时替换为该 Key 的生成别名。

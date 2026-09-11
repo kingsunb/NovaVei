@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/helper"
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/helper"
+	"github.com/kingsunb/NovaVeil/internal/model"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )

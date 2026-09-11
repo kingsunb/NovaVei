@@ -4,9 +4,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/model"
-	"github.com/kingsunb/NovaVei/internal/op"
-	"github.com/kingsunb/NovaVei/internal/relay"
+	"github.com/kingsunb/NovaVeil/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/op"
+	"github.com/kingsunb/NovaVeil/internal/relay"
 )
 
 // backgroundProbeCheckPeriod 后台探测的固定检查节拍: 任务框架按单一间隔注册定时任务, 而各分组的

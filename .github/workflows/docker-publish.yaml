@@ -25,7 +25,7 @@ concurrency:
 
 env:
   # GHCR 要求镜像名全小写
-  IMAGE: ghcr.io/kingsunb/novavei
+  IMAGE: ghcr.io/kingsunb/novaveil
 
 jobs:
   build-and-publish:
@@ -102,7 +102,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.image_tags }}
           labels: |
-            org.opencontainers.image.title=NovaVei
+            org.opencontainers.image.title=NovaVeil
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.meta.outputs.version }}

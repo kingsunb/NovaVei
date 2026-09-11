@@ -1,4 +1,4 @@
-module github.com/kingsunb/NovaVei
+module github.com/kingsunb/NovaVeil
 
 go 1.26.7
 

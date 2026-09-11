@@ -3,9 +3,9 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/kingsunb/NovaVei/internal/relay"
-	"github.com/kingsunb/NovaVei/internal/server/middleware"
-	"github.com/kingsunb/NovaVei/internal/server/router"
+	"github.com/kingsunb/NovaVeil/internal/relay"
+	"github.com/kingsunb/NovaVeil/internal/server/middleware"
+	"github.com/kingsunb/NovaVeil/internal/server/router"
 	"github.com/looplj/axonhub/llm"
 )
 

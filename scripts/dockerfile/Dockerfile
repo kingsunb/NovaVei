@@ -8,7 +8,7 @@ ARG APP_GID=10001
 ARG TARGETPLATFORM
 
 ENV TZ=Asia/Shanghai \
-    APP_NAME=novavei \
+    APP_NAME=novaveil \
     NO_COLOR=1
 
 # 仅安装运行时必须的工具:
@@ -17,8 +17,8 @@ ENV TZ=Asia/Shanghai \
 # BusyBox 自带 wget, HEALTHCHECK 不额外安装 curl。
 RUN apk add --no-cache ca-certificates tzdata \
  && rm -rf /var/cache/apk/* \
- && addgroup -g "${APP_GID}" -S novavei \
- && adduser -u "${APP_UID}" -S -D -H -h /app -s /sbin/nologin -G novavei novavei \
+ && addgroup -g "${APP_GID}" -S novaveil \
+ && adduser -u "${APP_UID}" -S -D -H -h /app -s /sbin/nologin -G novaveil novaveil \
  && mkdir -p /app/data \
  && chown "${APP_UID}:${APP_GID}" /app/data \
  && chmod 0700 /app/data

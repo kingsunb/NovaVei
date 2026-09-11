@@ -19,7 +19,7 @@ export function ForceChangePassword() {
             N
           </div>
           <h1 className="text-base font-semibold tracking-tight text-ink">
-            NovaVei
+            NovaVeil
           </h1>
         </div>
         <h2 className="text-sm font-medium text-ink">设置新密码</h2>

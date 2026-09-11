@@ -28,8 +28,8 @@ DialogOverlay.displayName = "DialogOverlay";
 export const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
-    /** "dialog" 居中（默认），"sheet" 右侧滑出 */
-    variant?: "dialog" | "sheet";
+    /** "dialog" 居中（默认），"sheet" 右侧滑出，"fullscreen" 全屏覆盖 */
+    variant?: "dialog" | "sheet" | "fullscreen";
     size?: "sm" | "md" | "lg";
   }
 >(({ className, children, variant = "dialog", size = "md", ...props }, ref) => (
@@ -44,6 +44,8 @@ export const DialogContent = React.forwardRef<
           "left-1/2 top-1/2 max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-card data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         variant === "sheet" &&
           "right-0 top-0 flex h-full w-full max-w-xl flex-col rounded-l-card data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-xl",
+        variant === "fullscreen" &&
+          "inset-0 flex h-full w-full flex-col rounded-none data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
         size === "sm" && variant === "dialog" && "max-w-sm",
         size === "lg" && variant === "dialog" && "max-w-2xl",
         className,

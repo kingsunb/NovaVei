@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/kingsunb/NovaVei/internal/conf"
-	"github.com/kingsunb/NovaVei/internal/op"
-	"github.com/kingsunb/NovaVei/internal/testutil"
+	"github.com/kingsunb/NovaVeil/internal/conf"
+	"github.com/kingsunb/NovaVeil/internal/op"
+	"github.com/kingsunb/NovaVeil/internal/testutil"
 )
 
 func TestMain(m *testing.M) {

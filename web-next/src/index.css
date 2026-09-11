@@ -75,7 +75,7 @@
 }
 
 /* =========================================================================
-   设计令牌 —— NovaVei 科幻控制台
+   设计令牌 —— NovaVeil 科幻控制台
    - 亮色主题：冷雾白 + 青蓝信号色
    - 暗色主题：石墨黑 + 低亮度网格与终端青
    - 材质：细边框、内发光、有限 blur；装饰不能盖过数据
@@ -405,4 +405,15 @@
       background: hsl(var(--card));
     }
   }
+}
+
+/* 隐藏行内 number 输入框的浏览器原生旋钮按钮, 避免窄列里旋钮挤占可点区域。 */
+input[type="number"].no-spin::-webkit-inner-spin-button,
+input[type="number"].no-spin::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"].no-spin {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }

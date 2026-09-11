@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/kingsunb/NovaVei/internal/conf"
+	"github.com/kingsunb/NovaVeil/internal/conf"
 )
 
 // SecurityHeaders 为全部响应补上基础浏览器安全响应头:

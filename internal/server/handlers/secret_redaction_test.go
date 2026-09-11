@@ -3,7 +3,7 @@ package handlers
 import (
 	"testing"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 func TestAPIKeySummaryRedactsSecret(t *testing.T) {

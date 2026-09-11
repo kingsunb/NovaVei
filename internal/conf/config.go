@@ -16,7 +16,7 @@ type Server struct {
 	// 为空时不信任任何代理头: ClientIP 不采信可伪造的 X-Forwarded-For,
 	// 登录限速等按 IP 的防护不可被伪造头绕过(直连部署安全默认)。
 	// 反代部署需显式配置, 仅来自这些地址的 XFF 才被采信, TLS 反代后 ClientIP 仍为真实客户端 IP。
-	// 也可通过环境变量 NOVAVEI_SERVER_TRUSTED_PROXIES 设置(逗号分隔)。
+	// 也可通过环境变量 NOVAVEIL_SERVER_TRUSTED_PROXIES 设置(逗号分隔)。
 	TrustedProxies []string `mapstructure:"trusted_proxies"`
 }
 
@@ -84,7 +84,7 @@ func Load(path string) error {
 }
 
 // applyEnvOverrides 处理 viper 无法自动从环境变量解析为切片的配置项。
-// NOVAVEI_SERVER_TRUSTED_PROXIES 以逗号分隔时覆盖配置文件中的 trusted_proxies。
+// NOVAVEIL_SERVER_TRUSTED_PROXIES 以逗号分隔时覆盖配置文件中的 trusted_proxies。
 func applyEnvOverrides() {
 	envKey := strings.ToUpper(APP_NAME) + "_SERVER_TRUSTED_PROXIES"
 	if raw := os.Getenv(envKey); raw != "" {

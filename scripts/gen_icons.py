@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""重新生成 NovaVei 图标集: 4角星芒 + 双弧线, 与 logo.svg 同源同色。
+"""重新生成 NovaVeil 图标集: 4角星芒 + 双弧线, 与 logo.svg 同源同色。
 纯标准库实现(多边形扫描填充 + 超采样抗锯齿 + 手写 PNG 编码)。"""
 import struct, zlib, math
 

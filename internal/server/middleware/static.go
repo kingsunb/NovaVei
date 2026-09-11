@@ -55,7 +55,8 @@ func static(urlPrefix string, fileSystem http.FileSystem) gin.HandlerFunc {
 		fileserver = http.StripPrefix(urlPrefix, fileserver)
 	}
 	return func(c *gin.Context) {
-		if strings.HasPrefix(c.Request.URL.Path, "/api") {
+		// API 路径（管理端 /api 与中转 /v1）交由后端路由处理，不做静态/SPA fallback。
+		if strings.HasPrefix(c.Request.URL.Path, "/api") || strings.HasPrefix(c.Request.URL.Path, "/v1") {
 			c.Next()
 			return
 		}
@@ -92,16 +93,20 @@ func static(urlPrefix string, fileSystem http.FileSystem) gin.HandlerFunc {
 		// SPA fallback: 文件不存在且非 API 路径，回退到 index.html，
 		// 让前端路由器接管（如 /dashboard /channels 等前端路由）。
 		// 排除有文件扩展名的路径（如 .js .css .png），那些是真正的资源 404。
+		// 用 http.ServeContent 直接输出，不用 fileserver.ServeHTTP —
+		// 后者会把 /index.html 301 重定向到 ./，导致浏览器 URL 从 /channels 跳到 /，
+		// React Router 丢失原始路由。
 		if path.Ext(c.Request.URL.Path) == "" {
-			indexFile, indexErr := fileSystem.Open("index.html")
+			indexFile, indexErr := fileSystem.Open("/index.html")
 			if indexErr == nil {
-				_ = indexFile.Close()
-				c.Header("Cache-Control", "no-cache")
-				// 重写请求路径为 index.html 让 fileserver 服务它
-				c.Request.URL.Path = "index.html"
-				fileserver.ServeHTTP(c.Writer, c.Request)
-				c.Abort()
-				return
+				defer indexFile.Close()
+				stat, statErr := indexFile.Stat()
+				if statErr == nil {
+					c.Header("Cache-Control", "no-cache")
+					http.ServeContent(c.Writer, c.Request, "index.html", stat.ModTime(), indexFile)
+					c.Abort()
+					return
+				}
 			}
 		}
 	}

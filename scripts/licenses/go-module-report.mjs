@@ -100,7 +100,7 @@ function inferUrl(path, version) {
 const rows = [];
 const failures = [];
 for (const [path, mod] of modules) {
-  if (path === 'github.com/kingsunb/NovaVei') continue;
+  if (path === 'github.com/kingsunb/NovaVeil') continue;
   const { type, file } = inferLicense(mod.Dir || '');
   const url = inferUrl(path, mod.Version);
   if (!file || type === 'Unknown') {

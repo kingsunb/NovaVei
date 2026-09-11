@@ -1,6 +1,6 @@
-# NovaVei 后端代码质量审计报告
+# NovaVeil 后端代码质量审计报告
 
-**审计范围**: `/tmp/NovaVei/internal/` Go 后端代码
+**审计范围**: `/tmp/NovaVeil/internal/` Go 后端代码
 **审计方法**: grep/glob/read_file 系统性搜索 + 核心文件逐行审查
 **核心审查文件**: relay/handler.go(1086行), route.go(869行), state.go(1025行), upstream.go(592行), keyselect.go(241行), channellimit.go(206行), sticky.go(142行), prober.go(118行), recovery.go(54行), client/http.go, db/db.go, conf/config.go, op/channel.go, op/cache.go, task/task.go, server/server.go, utils/cache/cache.go
 

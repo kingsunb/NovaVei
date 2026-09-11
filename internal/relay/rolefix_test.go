@@ -13,7 +13,7 @@ import (
 	"github.com/looplj/axonhub/llm"
 	"github.com/tidwall/gjson"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // TestNormalizeDeveloperRoles 验证 developer 角色归一化: 首条→system, 中途→user。

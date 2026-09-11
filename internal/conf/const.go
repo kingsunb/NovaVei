@@ -1,6 +1,6 @@
 package conf
 
 const (
-	APP_NAME = "NovaVei"
+	APP_NAME = "NovaVeil"
 	APP_DESC = "all ai service in one place"
 )

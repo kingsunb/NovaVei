@@ -465,7 +465,7 @@ describe("http 错误分支", () => {
                 status: 403,
                 headers: {
                   "content-type": "application/json",
-                  "x-novavei-error": "password_change_required",
+                  "x-novaveil-error": "password_change_required",
                 },
               },
             ),

@@ -1,4 +1,4 @@
-// router.go implements NovaVei's declarative route registry: route groups are
+// router.go implements NovaVeil's declarative route registry: route groups are
 // declared at init time and registered onto a Gin engine via RegisterAll.
 package router
 

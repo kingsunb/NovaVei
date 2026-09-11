@@ -12,4 +12,4 @@ if [ ! -d /app/data ] || [ ! -w /app/data ]; then
 fi
 
 cd /app
-exec "/app/${APP_NAME:-novavei}" "$@"
+exec "/app/${APP_NAME:-novaveil}" "$@"

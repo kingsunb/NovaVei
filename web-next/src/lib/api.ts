@@ -134,13 +134,13 @@ const forbiddenGuideExemptPaths = new Set<string>([
 ]);
 
 /**
- * 强制改密的判定: 后端 403 会携带机器可读标记头（X-NovaVei-Error:
+ * 强制改密的判定: 后端 403 会携带机器可读标记头（X-NovaVeil-Error:
  * password_change_required，见 resp.ErrorMustChangePassword），文案今后可自由
  * 调整；message 精确匹配仅作为对旧后端（dev 模式新前端对旧构建）的兜底。
  */
 function isPasswordChangeRequired(res: Response, message: string): boolean {
   return (
-    res.headers.get("x-novavei-error") === "password_change_required" ||
+    res.headers.get("x-novaveil-error") === "password_change_required" ||
     message === "Password change required before performing this operation"
   );
 }
@@ -318,7 +318,7 @@ async function rawDownloadJson<T>(
 
 /**
  * ApiErrorKind 区分网络失败、HTTP 状态码与成功响应解析失败。
- * 借鉴自 NovaVei/web：让 ErrorBoundary / 重连逻辑能精准判断是 chunk 丢失
+ * 借鉴自 NovaVeil/web：让 ErrorBoundary / 重连逻辑能精准判断是 chunk 丢失
  * 还是真的 4xx/5xx，从而决定清缓存刷新 vs 单纯重试。
  */
 export type ApiErrorKind = "network" | "http" | "non-json" | "parse";

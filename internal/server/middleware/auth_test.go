@@ -11,14 +11,14 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kingsunb/NovaVei/internal/conf"
-	"github.com/kingsunb/NovaVei/internal/db"
-	"github.com/kingsunb/NovaVei/internal/keylimit"
-	"github.com/kingsunb/NovaVei/internal/model"
-	"github.com/kingsunb/NovaVei/internal/op"
-	"github.com/kingsunb/NovaVei/internal/server/auth"
-	"github.com/kingsunb/NovaVei/internal/server/resp"
-	"github.com/kingsunb/NovaVei/internal/testutil"
+	"github.com/kingsunb/NovaVeil/internal/conf"
+	"github.com/kingsunb/NovaVeil/internal/db"
+	"github.com/kingsunb/NovaVeil/internal/keylimit"
+	"github.com/kingsunb/NovaVeil/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/op"
+	"github.com/kingsunb/NovaVeil/internal/server/auth"
+	"github.com/kingsunb/NovaVeil/internal/server/resp"
+	"github.com/kingsunb/NovaVeil/internal/testutil"
 )
 
 func TestMain(m *testing.M) {
@@ -363,5 +363,49 @@ func TestAPIKeyAuthUnlimitedPassesRepeatedly(t *testing.T) {
 		if w := doKeyRequest(r, keyValue); w.Code != http.StatusOK {
 			t.Fatalf("unlimited request -> %d, want 200", w.Code)
 		}
+	}
+}
+
+// TestAPIKeyAuthOpenAIErrorFormat 验证 /v1/ 路由鉴权失败时返回 OpenAI 兼容错误格式,
+// 而非管理端 {code,message} 格式。回归 /v1/models 无 key 时返回非标准错误的问题。
+func TestAPIKeyAuthOpenAIErrorFormat(t *testing.T) {
+	keylimit.Reset()
+	t.Cleanup(keylimit.Reset)
+	r := newAPIKeyTestEngine(func(c *gin.Context) { c.String(http.StatusOK, "ok") })
+
+	// 1) 无令牌
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("no key -> %d, want 401", w.Code)
+	}
+	body := w.Body.String()
+	for _, want := range []string{`"error"`, `"type":"novaveil_error"`, `"message"`, "request id"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("no-key error body missing %q, got: %s", want, body)
+		}
+	}
+	// 不应包含管理端格式字段 "code":401
+	if strings.Contains(body, `"code":401`) {
+		t.Fatalf("no-key error should not use management format {code,message}, got: %s", body)
+	}
+
+	// 2) 无效令牌
+	w = doKeyRequest(r, "sk-invalid-key-that-does-not-exist")
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid key -> %d, want 401", w.Code)
+	}
+	body = w.Body.String()
+	if !strings.Contains(body, `"type":"novaveil_error"`) {
+		t.Fatalf("invalid key error should be OpenAI format, got: %s", body)
+	}
+	if !strings.Contains(body, "无效的令牌") {
+		t.Fatalf("invalid key error should say 无效的令牌, got: %s", body)
+	}
+
+	// 3) X-Request-Id 头应存在
+	if rid := w.Header().Get("X-Request-Id"); rid == "" {
+		t.Fatal("X-Request-Id header should be set for relay errors")
 	}
 }

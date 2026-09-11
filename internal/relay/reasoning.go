@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 	"github.com/looplj/axonhub/llm"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"

@@ -5,5 +5,5 @@ var (
 	Commit    = "unknown"
 	BuildTime = "unknown"
 	Author    = "Kingsun"
-	Repo      = "https://github.com/kingsunb/NovaVei"
+	Repo      = "https://github.com/kingsunb/NovaVeil"
 )

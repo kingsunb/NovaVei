@@ -1,6 +1,6 @@
 # 独立环境部署
 
-本文档说明在不依赖 Docker 的前提下，从源码构建并运行 NovaVei。
+本文档说明在不依赖 Docker 的前提下，从源码构建并运行 NovaVeil。
 日常用法是「拉 GitHub 上游 → 本地生产构建 → 8080 冒烟」，不是本机前后端热更新。
 容器化部署见 [安全部署](SECURE_DEPLOYMENT.md)。
 
@@ -49,7 +49,7 @@ $(go env GOMODCACHE)/golang.org/toolchain@v0.0.1-go<版本>.<GOOS>-<GOARCH>/bin/
 
 ```bash
 # 联网机器：在项目目录触发一次自动下载
-cd NovaVei && go version
+cd NovaVeil && go version
 # 把整个 GOMODCACHE 目录（含 toolchain）拷贝到目标机器，并设置
 export GOMODCACHE=/path/to/copied/modcache
 export GOTOOLCHAIN=auto
@@ -83,9 +83,9 @@ bash scripts/build.sh --local             # 前端 + 当前架构二进制，跳
 bash scripts/run-local.sh                 # 停旧进程、启动 8080、GET / 必须 200
 ```
 
-`--local` 仍会 `pnpm install --frozen-lockfile`、`pnpm run build`、`go build`，但跳过第三方许可证报告和 zip（这两步依赖干净的 pnpm store 索引和系统 `zip`，日常验证不需要）。产物是 `build/bin/novavei-linux-amd64`，前端已嵌入。只改后端时加 `--skip-frontend`。
+`--local` 仍会 `pnpm install --frozen-lockfile`、`pnpm run build`、`go build`，但跳过第三方许可证报告和 zip（这两步依赖干净的 pnpm store 索引和系统 `zip`，日常验证不需要）。产物是 `build/bin/novaveil-linux-amd64`，前端已嵌入。只改后端时加 `--skip-frontend`。
 
-`run-local.sh` 保留 `data/`（配置、SQLite、初始密码），日志写 `logs/novavei.log`。改端口：`NOVAVEI_SERVER_PORT=9000 bash scripts/run-local.sh`。浏览器打开 `http://127.0.0.1:8080`。
+`run-local.sh` 保留 `data/`（配置、SQLite、初始密码），日志写 `logs/novaveil.log`。改端口：`NOVAVEIL_SERVER_PORT=9000 bash scripts/run-local.sh`。浏览器打开 `http://127.0.0.1:8080`。
 
 完整发布构建（许可证 + zip + 多架构）仍用 `scripts/build.sh`（不加 `--local`）。
 
@@ -94,7 +94,7 @@ bash scripts/run-local.sh                 # 停旧进程、启动 8080、GET / �
 前端构建产物会被嵌入 Go 二进制，**必须先构建前端**。
 
 ```bash
-cd NovaVei
+cd NovaVeil
 
 # 1) 前端：产物写入 static/out/，供 Go embed 抓取
 cd web-next
@@ -103,7 +103,7 @@ pnpm run build                     # tsc -b && vite build
 cd ..
 
 # 2) 后端：嵌入 static/out 后编译单文件二进制
-go build -o novavei main.go       # 产出 ./novavei（约 60MB，含前端）
+go build -o novaveil main.go       # 产出 ./novaveil（约 60MB，含前端）
 ```
 
 > `web-next/vite.config.ts` 中 `build.outDir` 指向 `../static/out`，
@@ -133,9 +133,9 @@ scripts/build.sh --targets linux/arm64 --skip-frontend --skip-licenses --no-arch
 ```bash
 VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo dev)
 COMMIT=$(git rev-parse --short HEAD)
-go build -trimpath -o novavei \
-  -ldflags="-X 'github.com/kingsunb/NovaVei/internal/conf.Version=${VERSION}' \
-            -X 'github.com/kingsunb/NovaVei/internal/conf.Commit=${COMMIT}' \
+go build -trimpath -o novaveil \
+  -ldflags="-X 'github.com/kingsunb/NovaVeil/internal/conf.Version=${VERSION}' \
+            -X 'github.com/kingsunb/NovaVeil/internal/conf.Commit=${COMMIT}' \
             -s -w" main.go
 ```
 
@@ -144,7 +144,7 @@ go build -trimpath -o novavei \
 ### 4.1 直接启动
 
 ```bash
-./novavei start
+./novaveil start
 # 或不编译二进制，直接源码运行（开发常用）
 go run main.go start
 ```
@@ -176,7 +176,7 @@ go run main.go start
 
 ## 五、配置
 
-配置文件 `data/config.json`，所有项均可被 `NOVAVEI_` 前缀环境变量覆盖。完整项见
+配置文件 `data/config.json`，所有项均可被 `NOVAVEIL_` 前缀环境变量覆盖。完整项见
 [README](../README_zh.md#-配置文件)。独立部署常用：
 
 ```json
@@ -189,10 +189,10 @@ go run main.go start
 
 | 场景 | 做法 |
 |------|------|
-| 改端口 | `NOVAVEI_SERVER_PORT=9000 ./novavei start` |
-| 用 MySQL | `"database": {"type":"mysql","path":"user:pwd@tcp(host:3306)/novavei"}` |
-| 用 PostgreSQL | `"database": {"type":"postgres","path":"postgresql://user:pwd@host:5432/novavei?sslmode=disable"}` |
-| 反代后启用安全 Cookie | `NOVAVEI_SECURITY_COOKIE_SECURE=true` |
+| 改端口 | `NOVAVEIL_SERVER_PORT=9000 ./novaveil start` |
+| 用 MySQL | `"database": {"type":"mysql","path":"user:pwd@tcp(host:3306)/novaveil"}` |
+| 用 PostgreSQL | `"database": {"type":"postgres","path":"postgresql://user:pwd@host:5432/novaveil?sslmode=disable"}` |
+| 反代后启用安全 Cookie | `NOVAVEIL_SECURITY_COOKIE_SECURE=true` |
 
 > MySQL / PostgreSQL 需先手动建库，程序自动建表。SQLite 无需任何前置操作。
 
@@ -203,7 +203,7 @@ go run main.go start
 
 ```bash
 # 手动升级（与 3.1 日常循环相同，data/ 保持不变）
-cd NovaVei
+cd NovaVeil
 git fetch origin && git merge --ff-only origin/main
 bash scripts/build.sh --local
 bash scripts/run-local.sh
@@ -218,8 +218,8 @@ pnpm 11.23.0）实测通过的项目：
 
 - [x] `pnpm install --frozen-lockfile` —— 依赖与 lockfile 一致
 - [x] `pnpm run build` —— 前端产物写入 `static/out/`，含 `.gz` 预压缩
-- [x] `go build -o novavei main.go` —— 产出 60MB 单文件二进制
-- [x] `./novavei start` —— 监听 8080，SQLite 自动建库建表
+- [x] `go build -o novaveil main.go` —— 产出 60MB 单文件二进制
+- [x] `./novaveil start` —— 监听 8080，SQLite 自动建库建表
 - [x] `GET /` —— 返回前端控制台 HTML（HTTP 200）
 - [x] `POST /api/v1/user/login` —— 初始密码登录成功（HTTP 200，`must_change_password: true`）
 
@@ -229,7 +229,7 @@ pnpm 11.23.0）实测通过的项目：
 |------|-------------------|---------------------------------------------|
 | 运行时依赖 | 需自备 Go + Node + pnpm | 仅需 Docker |
 | 隔离 | 依赖系统用户与文件权限 | 固定 UID/GID 10001、只读 rootfs、cap_drop ALL |
-| 升级 | 重新构建替换二进制 | 更换 `NOVAVEI_IMAGE` 镜像引用 |
+| 升级 | 重新构建替换二进制 | 更换 `NOVAVEIL_IMAGE` 镜像引用 |
 | HTTPS | 自行在反代终止 TLS | 同左，Compose 默认绑 127.0.0.1:8888 |
 | 适用 | 开发、内网、无容器运行时 | 生产、多副本、需强隔离 |
 

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kingsunb/NovaVei/internal/db"
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/db"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // TestDBExportAllCredentialAudit 复核备份导出的凭据暴露面:

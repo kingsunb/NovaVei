@@ -1,4 +1,4 @@
-// logger.go provides the NovaVei HTTP request logger middleware.
+// logger.go provides the NovaVeil HTTP request logger middleware.
 package middleware
 
 import "github.com/gin-gonic/gin"

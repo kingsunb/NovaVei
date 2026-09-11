@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // errChannelModelUnavailable 表示成员无法定位到渠道模型(引用成员或模型刚被删除), 不能发起合成探测。

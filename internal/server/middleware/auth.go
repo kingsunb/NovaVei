@@ -2,15 +2,16 @@ package middleware
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kingsunb/NovaVei/internal/conf"
-	"github.com/kingsunb/NovaVei/internal/keylimit"
-	"github.com/kingsunb/NovaVei/internal/op"
-	"github.com/kingsunb/NovaVei/internal/server/auth"
-	"github.com/kingsunb/NovaVei/internal/server/resp"
+	"github.com/kingsunb/NovaVeil/internal/conf"
+	"github.com/kingsunb/NovaVeil/internal/keylimit"
+	"github.com/kingsunb/NovaVeil/internal/op"
+	"github.com/kingsunb/NovaVeil/internal/server/auth"
+	"github.com/kingsunb/NovaVeil/internal/server/resp"
 )
 
 const (
@@ -76,24 +77,20 @@ func APIKeyAuth() gin.HandlerFunc {
 		}
 
 		if apiKey == "" {
-			resp.Error(c, http.StatusUnauthorized, resp.ErrUnauthorized)
-			c.Abort()
+			resp.RelayError(c, http.StatusUnauthorized, "无可用令牌，请确认是否已登录或令牌是否正确")
 			return
 		}
 		apiKeyObj, err := op.APIKeyGetByAPIKey(apiKey, c.Request.Context())
 		if err != nil {
-			resp.Error(c, http.StatusUnauthorized, resp.ErrUnauthorized)
-			c.Abort()
+			resp.RelayError(c, http.StatusUnauthorized, "无效的令牌")
 			return
 		}
 		if !apiKeyObj.Enabled {
-			resp.Error(c, http.StatusUnauthorized, "API key is disabled")
-			c.Abort()
+			resp.RelayError(c, http.StatusUnauthorized, "令牌已禁用")
 			return
 		}
 		if apiKeyObj.ExpireAt > 0 && apiKeyObj.ExpireAt < time.Now().Unix() {
-			resp.Error(c, http.StatusUnauthorized, "API key has expired")
-			c.Abort()
+			resp.RelayError(c, http.StatusUnauthorized, "令牌已过期")
 			return
 		}
 		// 密钥级限速(fail-fast): 进入业务 handler 前判定, 超限立即 429 + Retry-After,
@@ -103,15 +100,18 @@ func APIKeyAuth() gin.HandlerFunc {
 		// 与渠道级限速(relay/channellimit)独立叠加生效, 实际吞吐取两者较小值。
 		releaseConcurrency, err := keylimit.AcquireConcurrency(apiKeyObj.ID, apiKeyObj.MaxConcurrent)
 		if err != nil {
-			resp.ErrorRateLimited(c, resp.ErrAPIKeyConcurrencyFull, 0)
-			c.Abort()
+			c.Header("Retry-After", "1")
+			resp.RelayError(c, http.StatusTooManyRequests, resp.ErrAPIKeyConcurrencyFull)
 			return
 		}
 		defer releaseConcurrency()
 		retryAfter, err := keylimit.AcquireRPMPermit(apiKeyObj.ID, apiKeyObj.RateLimitRPM)
 		if err != nil {
-			resp.ErrorRateLimited(c, resp.ErrAPIKeyRateLimited, retryAfter)
-			c.Abort()
+			if retryAfter < 1 {
+				retryAfter = 1
+			}
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+			resp.RelayError(c, http.StatusTooManyRequests, resp.ErrAPIKeyRateLimited)
 			return
 		}
 		c.Set("supported_models", apiKeyObj.SupportedModels)

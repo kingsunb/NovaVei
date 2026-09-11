@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // createRefTestChannel 创建带指定模型名的渠道并写入缓存, 返回携带渠道模型 ID 的渠道。

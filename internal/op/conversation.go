@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 	"github.com/tidwall/gjson"
 )
 

@@ -1,18 +1,18 @@
 #!/bin/bash
-# 用最新本地构建产物启动 NovaVei，并做一次 HTTP 冒烟。
+# 用最新本地构建产物启动 NovaVeil，并做一次 HTTP 冒烟。
 # 保留 data/（配置、SQLite、管理员密码），只替换正在跑的进程。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
-PORT="${NOVAVEI_SERVER_PORT:-8080}"
-HOST="${NOVAVEI_SERVER_HOST:-0.0.0.0}"
+PORT="${NOVAVEIL_SERVER_PORT:-8080}"
+HOST="${NOVAVEIL_SERVER_HOST:-0.0.0.0}"
 BIN=""
 for candidate in \
-    "${ROOT}/build/bin/novavei-linux-amd64" \
-    "${ROOT}/build/bin/novavei-linux-arm64" \
-    "${ROOT}/novavei"; do
+    "${ROOT}/build/bin/novaveil-linux-amd64" \
+    "${ROOT}/build/bin/novaveil-linux-arm64" \
+    "${ROOT}/novaveil"; do
     if [ -x "${candidate}" ]; then
         BIN="${candidate}"
         break
@@ -23,14 +23,14 @@ if [ -z "${BIN}" ]; then
     exit 1
 fi
 
-LOG="${ROOT}/logs/novavei.log"
+LOG="${ROOT}/logs/novaveil.log"
 mkdir -p "${ROOT}/data" "${ROOT}/logs"
 
 stop_old() {
     local pids
-    pids="$(pgrep -f "${ROOT}/build/bin/novavei-" 2>/dev/null || true)"
+    pids="$(pgrep -f "${ROOT}/build/bin/novaveil-" 2>/dev/null || true)"
     if [ -z "${pids}" ]; then
-        pids="$(pgrep -f "${ROOT}/novavei start" 2>/dev/null || true)"
+        pids="$(pgrep -f "${ROOT}/novaveil start" 2>/dev/null || true)"
     fi
     if [ -n "${pids}" ]; then
         echo "stopping previous instance: ${pids}"
@@ -57,9 +57,9 @@ wait_listen() {
 
 stop_old
 echo "starting ${BIN} on ${HOST}:${PORT}"
-NOVAVEI_SERVER_HOST="${HOST}" NOVAVEI_SERVER_PORT="${PORT}" \
+NOVAVEIL_SERVER_HOST="${HOST}" NOVAVEIL_SERVER_PORT="${PORT}" \
     nohup "${BIN}" start >>"${LOG}" 2>&1 &
-echo $! >"${ROOT}/logs/novavei.pid"
+echo $! >"${ROOT}/logs/novaveil.pid"
 wait_listen
 
 code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:${PORT}/" || true)"

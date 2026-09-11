@@ -106,7 +106,7 @@ var BuiltinRules = []Rule{
 	},
 }
 
-// BuiltinRuleMeta 内置规则的对外元信息。硬约束: 全部默认关闭(NovaVei 面向网关多用户,
+// BuiltinRuleMeta 内置规则的对外元信息。硬约束: 全部默认关闭(NovaVeil 面向网关多用户,
 // 误报影响面更大, 首次引入应保守)。管理员按需在配置层开启, 详见 docs/脱敏开发/02 §2.2。
 var BuiltinRuleMeta = []RuleMeta{
 	{"PRIVATE_KEY", "PEM 私钥整块替换", false},

@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kingsunb/NovaVei/internal/model"
-	"github.com/kingsunb/NovaVei/internal/op"
-	"github.com/kingsunb/NovaVei/internal/server/middleware"
-	"github.com/kingsunb/NovaVei/internal/server/router"
+	"github.com/kingsunb/NovaVeil/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/op"
+	"github.com/kingsunb/NovaVeil/internal/server/middleware"
+	"github.com/kingsunb/NovaVeil/internal/server/router"
 	"github.com/samber/lo"
 )
 
@@ -58,7 +58,7 @@ func getModelList(c *gin.Context) {
 				ID:      m,
 				Object:  "model",
 				Created: 1763395200,
-				OwnedBy: "novavei",
+				OwnedBy: "novaveil",
 			})
 		}
 		c.JSON(200, gin.H{

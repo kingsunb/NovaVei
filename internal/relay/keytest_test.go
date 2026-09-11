@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/model"
-	"github.com/kingsunb/NovaVei/internal/op"
+	"github.com/kingsunb/NovaVeil/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/op"
 )
 
 // TestChannelKeyTestCandidatesOrdering 验证逐密钥测试候选的构造:

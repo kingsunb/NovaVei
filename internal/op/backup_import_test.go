@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/kingsunb/NovaVei/internal/db"
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/db"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // cleanupImportTestRows 删除导入测试使用的高 ID 段行, 避免跨测试污染。

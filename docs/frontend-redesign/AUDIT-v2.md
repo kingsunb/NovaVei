@@ -1,4 +1,4 @@
-# NovaVei 前端原型 v2 · UI/UX Pro Max 审计报告
+# NovaVeil 前端原型 v2 · UI/UX Pro Max 审计报告
 
 > 审计工具：[UI/UX Pro Max Skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) v2.13.0
 > 审计对象：`prototype/` (macOS 磨砂玻璃简白风)

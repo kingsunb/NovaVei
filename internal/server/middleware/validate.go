@@ -1,4 +1,4 @@
-// validate.go provides NovaVei request-validation middleware.
+// validate.go provides NovaVeil request-validation middleware.
 package middleware
 
 import (
@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kingsunb/NovaVei/internal/server/resp"
+	"github.com/kingsunb/NovaVeil/internal/server/resp"
 )
 
 // RequireJSON rejects non-GET/DELETE/OPTIONS requests whose Content-Type is

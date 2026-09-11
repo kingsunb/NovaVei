@@ -1,6 +1,6 @@
 # Secure deployment
 
-This document defines the supported Docker security posture for NovaVei. It is an
+This document defines the supported Docker security posture for NovaVeil. It is an
 operator runbook, not a replacement for application configuration documentation.
 
 ## Container identity and data ownership
@@ -13,12 +13,12 @@ For a host bind mount, prepare a dedicated directory before creating the externa
 Docker volume:
 
 ```bash
-sudo install -d -o 10001 -g 10001 -m 0700 /var/lib/novavei
+sudo install -d -o 10001 -g 10001 -m 0700 /var/lib/novaveil
 docker volume create --driver local \
   --opt type=none \
   --opt o=bind \
-  --opt device=/var/lib/novavei \
-  novavei-data
+  --opt device=/var/lib/novaveil \
+  novaveil-data
 ```
 
 Do not use `/tmp` for production data. `/tmp` is volatile, commonly cleaned by the
@@ -31,8 +31,8 @@ than silently weakening permissions.
 
 ## Image pinning
 
-The canonical image is `ghcr.io/kingsunb/novavei-api`. Production Compose requires
-`NOVAVEI_IMAGE`; no default `latest` or `dev` tag is accepted. Docker Hub synchronization
+The canonical image is `ghcr.io/kingsunb/novaveil-api`. Production Compose requires
+`NOVAVEIL_IMAGE`; no default `latest` or `dev` tag is accepted. Docker Hub synchronization
 is discontinued and Docker Hub images must be treated as unsupported/stale. Migrate by
 changing only the image reference to a reviewed GHCR version/digest while retaining the
 same `/app/data` volume.
@@ -40,7 +40,7 @@ same `/app/data` volume.
 Prefer a digest-qualified reference:
 
 ```bash
-export NOVAVEI_IMAGE='ghcr.io/kingsunb/novavei-api:v0.12.0@sha256:<manifest-digest>'
+export NOVAVEIL_IMAGE='ghcr.io/kingsunb/novaveil-api:v0.12.0@sha256:<manifest-digest>'
 docker compose pull
 docker compose up -d
 ```
@@ -49,7 +49,7 @@ A version tag without a digest is easier to operate but can be republished. Reco
 the resolved digest in the change ticket before deployment:
 
 ```bash
-docker buildx imagetools inspect ghcr.io/kingsunb/novavei-api:v0.12.0
+docker buildx imagetools inspect ghcr.io/kingsunb/novaveil-api:v0.12.0
 ```
 
 The runtime base is pinned to the Alpine 3.21.7 multi-platform OCI index digest
@@ -80,7 +80,7 @@ Dockerfile and Compose healthchecks.
 ## Network and HTTPS
 
 The production Compose template binds `127.0.0.1:8888:8080` by default, so only a
-reverse proxy on the same host can reach the backend. Set `NOVAVEI_BIND_ADDRESS`
+reverse proxy on the same host can reach the backend. Set `NOVAVEIL_BIND_ADDRESS`
 explicitly only when another trusted host must connect, and protect that port with
 host firewall rules.
 
@@ -88,7 +88,7 @@ Terminate TLS at a reverse proxy, preserve the original `Host` header, and set t
 application cookie flag when TLS terminates at the proxy:
 
 ```bash
-export NOVAVEI_SECURITY_COOKIE_SECURE=true
+export NOVAVEIL_SECURITY_COOKIE_SECURE=true
 ```
 
 Keep `server.host=0.0.0.0` inside the container; restrict exposure at the host,
@@ -99,15 +99,15 @@ requires an explicit trusted-proxy configuration in application code.
 
 ## Updates
 
-Docker deployments must upgrade by changing `NOVAVEI_IMAGE` to a reviewed version
+Docker deployments must upgrade by changing `NOVAVEIL_IMAGE` to a reviewed version
 or digest and recreating the container. The supplied read-only root filesystem and
-non-root user prevent the process from replacing `/app/novavei` in place.
+non-root user prevent the process from replacing `/app/novaveil` in place.
 
 For non-Docker installations, download the archive and `SHA256SUMS` from the same
 GitHub Release, then verify before extracting or replacing any executable:
 
 ```bash
-scripts/verify-release-archive.sh novavei-linux-amd64.zip SHA256SUMS
+scripts/verify-release-archive.sh novaveil-linux-amd64.zip SHA256SUMS
 ```
 
 SHA-256 detects download corruption and a mismatched release asset, but it does not

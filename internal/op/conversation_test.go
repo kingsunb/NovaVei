@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/db"
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/db"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // conversationTestEnv 返回指向临时目录的已初始化留存存储, 并保证用例间互不残留。

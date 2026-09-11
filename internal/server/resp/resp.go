@@ -1,8 +1,11 @@
 package resp
 
 import (
+	"crypto/rand"
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,7 +32,7 @@ func Error(c *gin.Context, code int, err string) {
 }
 
 // ErrorMustChangePassword 以 403 返回强制改密错误, 并携带机器可读标记头
-// (X-NovaVei-Error: password_change_required): 前端的改密引导按头判定,
+// (X-NovaVeil-Error: password_change_required): 前端的改密引导按头判定,
 // message 文案可自由调整。今后任何新的发射点都必须走本助手而不是直接 Error。
 func ErrorMustChangePassword(c *gin.Context) {
 	c.Header(ErrMarkerHeader, ErrMarkerPasswordChangeRequired)
@@ -44,4 +47,48 @@ func ErrorRateLimited(c *gin.Context, message string, retryAfterSeconds int) {
 	}
 	c.Header("Retry-After", strconv.Itoa(retryAfterSeconds))
 	Error(c, http.StatusTooManyRequests, message)
+}
+
+// ---------------------------------------------------------------------------
+// OpenAI 兼容错误响应（/v1/ 中转路由专用）
+// ---------------------------------------------------------------------------
+
+// openAIErrorBody 是 OpenAI / new-api 风格的错误响应体。
+type openAIErrorBody struct {
+	Error openAIErrorDetail `json:"error"`
+}
+
+type openAIErrorDetail struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Type    string `json:"type"`
+}
+
+// GenRequestID 生成与 new-api 风格一致的请求 ID: 时间戳(14 位) + 随机后缀。
+func GenRequestID() string {
+	const suffixLen = 20
+	b := make([]byte, suffixLen)
+	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	if _, err := rand.Read(b); err != nil {
+		// rand.Read 极少失败; 退化为时间戳纳秒保证仍有唯一性。
+		return fmt.Sprintf("%s%d", time.Now().Format("20060102150405"), time.Now().UnixNano())
+	}
+	for i := range b {
+		b[i] = chars[int(b[i])%len(chars)]
+	}
+	return time.Now().Format("20060102150405") + string(b)
+}
+
+// RelayError 以 OpenAI 兼容格式返回错误, 供 /v1/ 中转路由使用。
+// message 中自动追加 request id 便于排障。
+func RelayError(c *gin.Context, statusCode int, message string) {
+	rid := GenRequestID()
+	c.Header("X-Request-Id", rid)
+	c.AbortWithStatusJSON(statusCode, openAIErrorBody{
+		Error: openAIErrorDetail{
+			Code:    "",
+			Message: fmt.Sprintf("%s (request id: %s)", message, rid),
+			Type:    "novaveil_error",
+		},
+	})
 }

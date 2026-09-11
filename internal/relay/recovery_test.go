@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // stubRelayEnv 备份路由全局状态并替换为空环境, 测试结束自动还原注入点。

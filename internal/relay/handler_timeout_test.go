@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // TestMemberTimeoutSeconds 验证成员级响应超时按请求类型取值, 配置非法时回退默认配置。

@@ -114,7 +114,7 @@ export function CardGridSkeleton({ cards = 6 }: { cards?: number }) {
 /** 设置页骨架 */
 export function SettingsSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[180px,1fr]" role="status" aria-label="加载中">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[180px_1fr]" role="status" aria-label="加载中">
       <div className="space-y-1">
         {[...Array(8)].map((_, i) => (
           <Skeleton key={i} className="h-8 w-full rounded-control" />

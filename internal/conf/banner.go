@@ -1,4 +1,4 @@
-// banner.go renders the NovaVei startup banner and runtime info block.
+// banner.go renders the NovaVeil startup banner and runtime info block.
 package conf
 
 import (
@@ -7,14 +7,14 @@ import (
 	"time"
 )
 
-// Banner is the NovaVei ASCII wordmark shown on startup.
+// Banner is the NovaVeil ASCII wordmark shown on startup.
 const Banner = `
-███╗   ██╗ ██████╗ ██╗   ██╗ █████╗ ██╗   ██╗███████╗██╗██╗
-████╗  ██║██╔═══██╗██║   ██║██╔══██╗██║   ██║██╔════╝██║██║
-██╔██╗ ██║██║   ██║██║   ██║███████║██║   ██║█████╗  ██║██║
-██║╚██╗██║██║   ██║╚██╗ ██╔╝██╔══██║╚██╗ ██╔╝██╔══╝  ██║██║
-██║ ╚████║╚██████╔╝ ╚████╔╝ ██║  ██║ ╚████╔╝ ███████╗██║███████╗
-╚═╝  ╚═══╝ ╚═════╝   ╚═══╝  ╚═╝  ╚═╝  ╚═══╝  ╚══════╝╚═╝╚══════╝
+███╗   ██╗ ██████╗ ██╗   ██╗ █████╗ ██╗   ██╗███████╗██╗██╗ ██╗
+████╗  ██║██╔═══██╗██║   ██║██╔══██╗██║   ██║██╔════╝██║██║ ██║
+██╔██╗ ██║██║   ██║██║   ██║███████║██║   ██║█████╗  ██║██║ ██║
+██║╚██╗██║██║   ██║╚██╗ ██╔╝██╔══██║╚██╗ ██╔╝██╔══╝  ██║██║ ██║
+██║ ╚████║╚██████╔╝ ╚████╔╝ ██║  ██║ ╚████╔╝ ███████╗██║███████╗ ██║
+╚═╝  ╚═══╝ ╚═════╝   ╚═══╝  ╚═╝  ╚═╝  ╚═══╝  ╚══════╝╚═╝╚══════╝ ╚═╝
 `
 const (
 	Reset  string = "\033[0m"
@@ -35,7 +35,7 @@ func printInfo(label, value, printColor string) {
 		printColor, value, Reset)
 }
 
-// PrintBanner writes the NovaVei wordmark and build metadata to stdout.
+// PrintBanner writes the NovaVeil wordmark and build metadata to stdout.
 func PrintBanner() {
 	fmt.Print(Cyan + Bold)
 	fmt.Print(Banner)

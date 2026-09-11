@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Bot, MessageSquare, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@/lib/api";
@@ -21,7 +21,6 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { QueryErrorBanner } from "@/components/ui/query-error";
 import {
   Dialog,
-  DialogBody,
   DialogClose,
   DialogContent,
   DialogDescription,
@@ -176,7 +175,7 @@ export default function CustomModelsPage() {
             onChange={(e) => setSort(e.target.value as Sort)}
             aria-label="排序"
           >
-            <option value="custom">自定义排序</option>
+            <option value="custom">按优先级</option>
             <option value="name">按名称</option>
             <option value="status">按状态</option>
           </select>
@@ -217,7 +216,7 @@ export default function CustomModelsPage() {
                   <th scope="col" className="px-4 py-2.5 font-medium">模型名</th>
                   <th scope="col" className="px-4 py-2.5 font-medium">固定回复</th>
                   <th scope="col" className="px-4 py-2.5 font-medium">状态</th>
-                  <th scope="col" className="px-4 py-2.5 text-right font-medium" title="越小越靠前，允许重复和负数，相同值按名称排序">排序</th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-medium" title="越小越靠前，允许重复和负数，相同值按名称排序">优先级</th>
                   <th scope="col" className="px-4 py-2.5 font-medium">操作</th>
                 </tr>
               </thead>
@@ -254,14 +253,17 @@ export default function CustomModelsPage() {
                         </div>
                       </td>
                       <td
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          (e.currentTarget.querySelector("input") as HTMLInputElement | null)?.focus();
+                        }}
                         onKeyDown={(e) => e.stopPropagation()}
-                        className="whitespace-nowrap px-4 py-2.5 text-right"
+                        className="cursor-text whitespace-nowrap px-4 py-2.5 text-right"
                       >
                         <input
                           type="number"
                           step="1"
-                          className="h-7 w-20 rounded-control border border-border bg-card px-2 text-right text-sm text-ink"
+                          className="no-spin h-7 w-24 rounded-control border border-border bg-card px-2 text-right text-sm text-ink"
                           value={sortDraft[c.id] ?? String(c.sort ?? 0)}
                           disabled={sortMut.isPending && sortMut.variables?.id === c.id}
                           onChange={(e) =>
@@ -274,8 +276,8 @@ export default function CustomModelsPage() {
                               (e.target as HTMLInputElement).blur();
                             }
                           }}
-                          title="排序值：越小越靠前，允许重复和负数，相同值按名称排序"
-                          aria-label={`排序 ${c.name}`}
+                          title="优先级：越小越靠前，允许重复和负数，相同值按名称排序"
+                          aria-label={`优先级 ${c.name}`}
                         />
                       </td>
                       <td className="px-4 py-2.5">
@@ -439,44 +441,86 @@ function CustomModelEditor({
 
   return (
     <Dialog open={!!channel} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent variant="sheet">
-        <DialogHeader>
+      <DialogContent variant="fullscreen">
+        <DialogHeader className="pr-12">
           <DialogTitle>{isNew ? "新建自定义模型" : `编辑：${name}`}</DialogTitle>
           <DialogDescription>
             客户端命中模型名即返回固定文案；模型名创建后不可修改
           </DialogDescription>
         </DialogHeader>
-        <DialogBody className="space-y-3">
-          <Field label="名称" required error={nameError ?? undefined}>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="例如：客服欢迎语"
-            />
-          </Field>
-          <Field
-            label="模型名"
-            required
-            hint="客户端请求的模型名；创建后不可修改"
-            error={errors.model ?? modelError}
-          >
-            <Input
-              value={modelName}
-              onChange={(e) => setModelName(e.target.value)}
-              disabled={!isNew}
-              placeholder="例如：welcome-bot"
-              className={cn(!isNew && "opacity-70")}
-            />
-          </Field>
-          <Field label="固定回复" required error={errors.reply ?? replyError}>
-            <Textarea
-              value={reply}
-              onChange={(e) => setReply(e.target.value)}
-              rows={5}
-              placeholder="命中该模型时返回的固定文案"
-            />
-          </Field>
-        </DialogBody>
+
+        {/* 全屏双栏：左 = 命中预览，右 = 表单 */}
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          {/* ---------- 左栏：命中预览 ---------- */}
+          <aside className="flex h-[32vh] min-h-0 flex-col border-b border-border md:h-auto md:w-[38%] md:border-b-0 md:border-r">
+            <div className="border-b border-border px-4 py-2">
+              <span className="text-xs font-medium text-ink-muted">命中预览</span>
+            </div>
+            <div className="flex-1 space-y-3 overflow-y-auto p-4">
+              <div className="rounded-md border border-border bg-surface-subtle/30 p-3">
+                <p className="mb-1.5 flex items-center gap-1.5 text-[11px] text-ink-muted">
+                  <MessageSquare className="h-3 w-3" aria-hidden />
+                  客户端请求
+                </p>
+                <p className="mono text-sm text-ink">
+                  model:{" "}
+                  <span className="text-primary-text">
+                    {modelName.trim() || "（未填写）"}
+                  </span>
+                </p>
+              </div>
+              <div className="rounded-md border border-border bg-card/60 p-3">
+                <p className="mb-1.5 flex items-center gap-1.5 text-[11px] text-ink-muted">
+                  <Bot className="h-3 w-3" aria-hidden />
+                  固定回复
+                </p>
+                <pre className="mono max-h-[40vh] overflow-y-auto whitespace-pre-wrap break-words text-sm leading-relaxed text-ink">
+                  {reply.trim() || "（未填写）"}
+                </pre>
+              </div>
+              <p className="text-[11px] leading-relaxed text-ink-subtle">
+                命中该模型名时，中转不做任何上游请求，直接以固定文案合成响应
+                （兼容 OpenAI Chat / Responses / Anthropic 协议，流式与非流式）。
+              </p>
+            </div>
+          </aside>
+
+          {/* ---------- 右栏：表单 ---------- */}
+          <section className="flex min-h-0 flex-1 flex-col">
+            <div className="flex-1 space-y-3 overflow-y-auto p-4">
+              <Field label="名称" required error={nameError ?? undefined}>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="例如：客服欢迎语"
+                />
+              </Field>
+              <Field
+                label="模型名"
+                required
+                hint="客户端请求的模型名；创建后不可修改"
+                error={errors.model ?? modelError}
+              >
+                <Input
+                  value={modelName}
+                  onChange={(e) => setModelName(e.target.value)}
+                  disabled={!isNew}
+                  placeholder="例如：welcome-bot"
+                  className={cn(!isNew && "opacity-70")}
+                />
+              </Field>
+              <Field label="固定回复" required error={errors.reply ?? replyError}>
+                <Textarea
+                  value={reply}
+                  onChange={(e) => setReply(e.target.value)}
+                  rows={8}
+                  placeholder="命中该模型时返回的固定文案"
+                />
+              </Field>
+            </div>
+          </section>
+        </div>
+
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="ghost" size="sm" onClick={onClose}>

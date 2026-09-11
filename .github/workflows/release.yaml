@@ -26,7 +26,7 @@ concurrency:
 jobs:
   build:
     name: Build, test, and scan exact release images
-    if: github.repository == 'kingsunb/NovaVei' && github.ref == 'refs/heads/main'
+    if: github.repository == 'kingsunb/NovaVeil' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
@@ -100,7 +100,7 @@ jobs:
 
       - name: Validate scripts and Compose
         env:
-          NOVAVEI_IMAGE: ghcr.io/kingsunb/novavei-api:${{ steps.version.outputs.version }}
+          NOVAVEIL_IMAGE: ghcr.io/kingsunb/novaveil-api:${{ steps.version.outputs.version }}
         run: |
           bash -n \
             scripts/build.sh \
@@ -121,7 +121,7 @@ jobs:
           ndk-version: r28c
 
       - name: Test frontend
-        # 构建前先跑 vitest：前端回归在进入发布构建前就失败（借鉴 NovaVei_api 3e4e815）。
+        # 构建前先跑 vitest：前端回归在进入发布构建前就失败（借鉴 NovaVeil_api 3e4e815）。
         working-directory: web-next
         run: |
           pnpm install --frozen-lockfile
@@ -139,16 +139,16 @@ jobs:
       - name: Verify release artifacts
         run: |
           expected=(
-            novavei-linux-amd64.zip novavei-linux-arm64.zip novavei-linux-arm.zip novavei-linux-386.zip
-            novavei-windows-amd64.zip novavei-darwin-arm64.zip novavei-darwin-amd64.zip
-            novavei-android-amd64.zip novavei-android-arm64.zip novavei-android-arm.zip novavei-android-386.zip
+            novaveil-linux-amd64.zip novaveil-linux-arm64.zip novaveil-linux-arm.zip novaveil-linux-386.zip
+            novaveil-windows-amd64.zip novaveil-darwin-arm64.zip novaveil-darwin-amd64.zip
+            novaveil-android-amd64.zip novaveil-android-arm64.zip novaveil-android-arm.zip novaveil-android-386.zip
           )
-          scripts/verify-release-archive.sh build/archives/novavei-linux-amd64.zip build/archives/SHA256SUMS
+          scripts/verify-release-archive.sh build/archives/novaveil-linux-amd64.zip build/archives/SHA256SUMS
           cd build/archives
           for archive in "${expected[@]}"; do
             test -f "${archive}" || { echo "missing release archive: ${archive}" >&2; exit 1; }
           done
-          test "$(find . -maxdepth 1 -name 'novavei-*.zip' -type f | wc -l)" -eq "${#expected[@]}"
+          test "$(find . -maxdepth 1 -name 'novaveil-*.zip' -type f | wc -l)" -eq "${#expected[@]}"
           sha256sum -c SHA256SUMS
           for archive in "${expected[@]}"; do
             unzip -l "${archive}" | grep -q 'LICENSE'
@@ -189,7 +189,7 @@ jobs:
       - name: Upload verified release bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: novavei-release-${{ github.sha }}
+          name: novaveil-release-${{ github.sha }}
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -198,7 +198,7 @@ jobs:
   publish:
     name: Publish exact scanned release images
     needs: build
-    if: github.repository == 'kingsunb/NovaVei' && github.ref == 'refs/heads/main'
+    if: github.repository == 'kingsunb/NovaVeil' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: release
@@ -209,7 +209,7 @@ jobs:
       - name: Download verified release bundle
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: novavei-release-${{ github.sha }}
+          name: novaveil-release-${{ github.sha }}
           path: release-bundle
 
       - name: Verify release bundle
@@ -240,7 +240,7 @@ jobs:
 
       - name: Publish only scanned candidate platform images
         env:
-          IMAGE: ghcr.io/kingsunb/novavei-api
+          IMAGE: ghcr.io/kingsunb/novaveil-api
           CANDIDATE: ${{ needs.build.outputs.candidate_tag }}
         run: |
           set -euo pipefail
@@ -298,7 +298,7 @@ jobs:
 
       - name: Promote exact scanned candidate manifest
         env:
-          IMAGE: ghcr.io/kingsunb/novavei-api
+          IMAGE: ghcr.io/kingsunb/novaveil-api
           CANDIDATE: ${{ needs.build.outputs.candidate_tag }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |

@@ -1,4 +1,4 @@
-// genicons 从 NovaVei 星星面纱图形生成全套位图图标。
+// genicons 从 NovaVeil 星星面纱图形生成全套位图图标。
 // 仅用标准库: 直接以 1024 超采样绘制后盒式降采样抗锯齿, ICO 内嵌 PNG 数据。
 package main
 

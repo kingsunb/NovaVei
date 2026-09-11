@@ -111,7 +111,7 @@ func (s *SessionStore) GetOrCreate(sessionKey string) *Mapping {
 	return m
 }
 
-// Delete 回收指定会话的映射表, 防内存泄漏。随 NovaVei 会话粘合过期一并回收。
+// Delete 回收指定会话的映射表, 防内存泄漏。随 NovaVeil 会话粘合过期一并回收。
 func (s *SessionStore) Delete(sessionKey string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

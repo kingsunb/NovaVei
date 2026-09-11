@@ -1,5 +1,5 @@
 // 004.go migrates legacy channel "type" values to the provider column
-// as part of NovaVei schema migration v4.
+// as part of NovaVeil schema migration v4.
 package migrate
 
 import (

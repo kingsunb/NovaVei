@@ -5,16 +5,16 @@ static/out/*
 logs/
 
 # Local Go build artifacts
-novavei
-novavei.exe
-/novavei
+novaveil
+novaveil.exe
+/novaveil
 .zcode/
 
 # pnpm content-addressable store (local cache; never commit)
 .pnpm-store/
 .workbuddy/
 .codeartsdoer/
-/NovaVei
+/NovaVeil
 
 # OS files
 .DS_Store

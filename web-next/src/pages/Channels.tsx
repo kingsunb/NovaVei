@@ -313,7 +313,7 @@ export default function ChannelsPage() {
             onChange={(e) => setSort(e.target.value as Sort)}
             aria-label="排序"
           >
-            <option value="custom">自定义排序</option>
+            <option value="custom">按优先级</option>
             <option value="name">按名称</option>
             <option value="status">按状态</option>
             <option value="models">按模型数</option>
@@ -367,7 +367,7 @@ export default function ChannelsPage() {
                 <th scope="col" className="px-4 py-2.5 align-middle text-center font-medium">Keys</th>
                 <th scope="col" className="px-4 py-2.5 align-middle font-medium">模型</th>
                 <th scope="col" className="px-4 py-2.5 align-middle text-right font-medium">RPM/并发</th>
-                <th scope="col" className="px-4 py-2.5 align-middle text-right font-medium" title="越小越靠前，允许重复和负数，相同值按名称排序">排序</th>
+                <th scope="col" className="px-4 py-2.5 align-middle text-right font-medium" title="越小越靠前，允许重复和负数，相同值按名称排序">优先级</th>
                 <th scope="col" className="px-4 py-2.5 align-middle font-medium">操作</th>
               </tr>
             </thead>
@@ -443,14 +443,17 @@ export default function ChannelsPage() {
                       {(c.rate_limit_rpm > 0 ? formatNumber(c.rate_limit_rpm) : "∞")} / {(c.max_concurrent > 0 ? c.max_concurrent : "∞")}
                     </td>
                     <td
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        (e.currentTarget.querySelector("input") as HTMLInputElement | null)?.focus();
+                      }}
                       onKeyDown={(e) => e.stopPropagation()}
-                      className="whitespace-nowrap px-4 py-2.5 align-middle text-right"
+                      className="cursor-text whitespace-nowrap px-4 py-2.5 align-middle text-right"
                     >
                       <input
                         type="number"
                         step="1"
-                        className="h-7 w-20 rounded-control border border-border bg-card px-2 text-right text-sm text-ink"
+                        className="no-spin h-7 w-24 rounded-control border border-border bg-card px-2 text-right text-sm text-ink"
                         value={sortDraft[c.id] ?? String(c.sort ?? 0)}
                         disabled={sortMut.isPending && sortMut.variables?.id === c.id}
                         onChange={(e) =>
@@ -463,8 +466,8 @@ export default function ChannelsPage() {
                             (e.target as HTMLInputElement).blur();
                           }
                         }}
-                        title="排序值：越小越靠前，允许重复和负数，相同值按名称排序"
-                        aria-label={`排序 ${c.name}`}
+                        title="优先级：越小越靠前，允许重复和负数，相同值按名称排序"
+                        aria-label={`优先级 ${c.name}`}
                       />
                     </td>
                     <td

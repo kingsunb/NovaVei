@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 func TestAPIKeyUpdateKeepsSecretWhenOmitted(t *testing.T) {

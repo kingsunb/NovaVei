@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/db"
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/db"
+	"github.com/kingsunb/NovaVeil/internal/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

@@ -1,4 +1,4 @@
-# NovaVei 前端美化设计稿 v2
+# NovaVeil 前端美化设计稿 v2
 
 > 配套 `PLAN.md` + `AUDIT.md`。本文定义**设计令牌、组件规范、页面线框**，原型 `prototype/` v2 据此实现。
 > 设计风格：**macOS 磨砂玻璃简白风** — 浅色为默认、vibrancy 材质、极简留白、Apple system colors。

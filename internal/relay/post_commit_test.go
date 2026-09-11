@@ -3,7 +3,7 @@ package relay
 import (
 	"testing"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // TestPostCommitStrikesCooldownAfterThreshold 验证提交后失败连击跨请求累积:

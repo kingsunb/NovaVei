@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/kingsunb/NovaVei/internal/utils/shutdown"
+	"github.com/kingsunb/NovaVeil/internal/utils/shutdown"
 )
 
 // updateMu 串行化自更新: 更新含下载/校验/替换可执行文件并重启进程,
@@ -28,7 +28,7 @@ func UpdateCore() error {
 		return fmt.Errorf("已有更新任务正在进行中")
 	}
 	defer updateMu.Unlock()
-	if os.Getenv("NOVAVEI_DISABLE_SELF_UPDATE") == "1" || os.Getenv("NOVAVEI_DISABLE_SELF_UPDATE") == "true" {
+	if os.Getenv("NOVAVEIL_DISABLE_SELF_UPDATE") == "1" || os.Getenv("NOVAVEIL_DISABLE_SELF_UPDATE") == "true" {
 		return fmt.Errorf("容器镜像内已禁用自更新，请更新镜像")
 	}
 	log.Infof("start update core")
@@ -341,36 +341,36 @@ func getDownloadFilename() (string, error) {
 	case "windows":
 		switch arch {
 		case "amd64":
-			return "novavei-windows-amd64.zip", nil
+			return "novaveil-windows-amd64.zip", nil
 		}
 	case "darwin":
 		switch arch {
 		case "amd64":
-			return "novavei-darwin-amd64.zip", nil
+			return "novaveil-darwin-amd64.zip", nil
 		case "arm64":
-			return "novavei-darwin-arm64.zip", nil
+			return "novaveil-darwin-arm64.zip", nil
 		}
 	case "linux":
 		switch arch {
 		case "386":
-			return "novavei-linux-386.zip", nil
+			return "novaveil-linux-386.zip", nil
 		case "amd64":
-			return "novavei-linux-amd64.zip", nil
+			return "novaveil-linux-amd64.zip", nil
 		case "arm":
-			return "novavei-linux-arm.zip", nil
+			return "novaveil-linux-arm.zip", nil
 		case "arm64":
-			return "novavei-linux-arm64.zip", nil
+			return "novaveil-linux-arm64.zip", nil
 		}
 	case "android":
 		switch arch {
 		case "386":
-			return "novavei-android-386.zip", nil
+			return "novaveil-android-386.zip", nil
 		case "amd64":
-			return "novavei-android-amd64.zip", nil
+			return "novaveil-android-amd64.zip", nil
 		case "arm":
-			return "novavei-android-arm.zip", nil
+			return "novaveil-android-arm.zip", nil
 		case "arm64":
-			return "novavei-android-arm64.zip", nil
+			return "novaveil-android-arm64.zip", nil
 		}
 	}
 	return "", fmt.Errorf("不支持的平台: %s/%s", goos, arch)

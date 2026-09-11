@@ -8,7 +8,7 @@ usage() {
 
 [ "$#" -ge 1 ] && [ "$#" -le 3 ] || usage
 IMAGE="$1"
-NAME="${2:-novavei-image-smoke}"
+NAME="${2:-novaveil-image-smoke}"
 PLATFORM="${3:-}"
 VOLUME="${NAME}-data"
 
@@ -32,7 +32,7 @@ fi
     --tmpfs /tmp:size=64m,mode=1777,noexec,nosuid,nodev \
     --cap-drop ALL \
     --security-opt no-new-privileges:true \
-    -e NOVAVEI_DISABLE_SELF_UPDATE=true \
+    -e NOVAVEIL_DISABLE_SELF_UPDATE=true \
     -p 127.0.0.1::8080 \
     -v "${VOLUME}:/app/data" \
     "${IMAGE}" >/dev/null
@@ -65,9 +65,9 @@ done
 [ "$(docker inspect "${NAME}" --format '{{json .HostConfig.SecurityOpt}}')" = '["no-new-privileges:true"]' ]
 docker exec "${NAME}" sh -eu -c '
     test -x /entrypoint.sh
-    test -x /app/novavei
+    test -x /app/novaveil
     test -w /app/data
-    test ! -w /app/novavei
+    test ! -w /app/novaveil
     test ! -w /entrypoint.sh
     test "$(id -u):$(id -g)" = "10001:10001"
 '

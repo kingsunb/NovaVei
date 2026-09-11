@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // STA-04 回归: 截断破坏日志结构化脱敏。

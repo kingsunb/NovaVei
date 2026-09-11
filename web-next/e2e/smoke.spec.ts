@@ -187,7 +187,7 @@ test.describe("E2E 冒烟", () => {
       }),
     );
     await page.goto("/login");
-    await expect(page.getByText("NovaVei")).toBeVisible();
+    await expect(page.getByText("NovaVeil")).toBeVisible();
     await expect(page.getByText("LLM API 网关控制台")).toBeVisible();
     await page.route("**/api/v1/user/login", (route) =>
       route.fulfill({

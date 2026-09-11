@@ -3,7 +3,7 @@ package relay
 import (
 	"testing"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // TestEffectiveProbeChannelRejectsDisabled 验证停用渠道在探测路径被立即拒绝,

@@ -1,11 +1,11 @@
-// 006.go drops legacy group columns that are no longer used by the NovaVei
+// 006.go drops legacy group columns that are no longer used by the NovaVeil
 // group model as part of schema migration v6.
 package migrate
 
 import (
 	"fmt"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 	"gorm.io/gorm"
 )
 

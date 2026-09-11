@@ -1,5 +1,5 @@
 // 005.go collapses multi-address, multi-credential channels into a single
-// base_url/key pair and drops the legacy structures as part of NovaVei
+// base_url/key pair and drops the legacy structures as part of NovaVeil
 // schema migration v5.
 package migrate
 
@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 	"gorm.io/gorm"
 )
 

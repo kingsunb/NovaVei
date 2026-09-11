@@ -1,5 +1,5 @@
 // 003.go migrates legacy numeric channel types to the axonhub/llm string
-// API-format vocabulary as part of NovaVei schema migration v3.
+// API-format vocabulary as part of NovaVeil schema migration v3.
 package migrate
 
 import (

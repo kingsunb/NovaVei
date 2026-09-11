@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/db"
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/db"
+	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
 // usageBucketTestNow 冻结测试时钟(整点 + 30 分钟), 保证取桶与窗口计算完全确定,

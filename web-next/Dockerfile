@@ -1,5 +1,5 @@
 # =============================================================================
-# NovaVei web-next · 生产构建（多阶段）
+# NovaVeil web-next · 生产构建（多阶段）
 #  - Stage 1: install + build（含 tsc 类型检查 + vite build）
 #  - Stage 2: nginx alpine 提供 dist/，并反代 /api 到后端
 #  - 官方 nginx entrypoint 渲染配置模板；master 以 root 启动，worker 降权 nginx
@@ -9,11 +9,11 @@
 #   本 Dockerfile 仅用于「独立前端部署」的可选场景（docker-compose --profile web-next）。
 #
 # 构建（build context = web-next/）：
-#   docker build -t novavei-web-next:<ver> web-next/
+#   docker build -t novaveil-web-next:<ver> web-next/
 # 运行：
 #   docker run --rm -p 8080:8080 \
-#     -e NOVAVEI_UPSTREAM=novavei:8080 \
-#     novavei-web-next:<ver>
+#     -e NOVAVEIL_UPSTREAM=novaveil:8080 \
+#     novaveil-web-next:<ver>
 # =============================================================================
 
 # ---- Stage 1: builder ----
@@ -42,10 +42,10 @@ FROM nginx:1.27-alpine AS runtime
 RUN apk add --no-cache wget \
  && rm -f /etc/nginx/conf.d/default.conf
 
-# 后端 API upstream 默认值；运行时可用 -e NOVAVEI_UPSTREAM=host:port 覆盖。
+# 后端 API upstream 默认值；运行时可用 -e NOVAVEIL_UPSTREAM=host:port 覆盖。
 # 官方 nginx 镜像内置 envsubst：/etc/nginx/templates/*.template 渲染到
 # /etc/nginx/conf.d/，只替换实际存在的环境变量，nginx 内置变量（$host 等）不受影响。
-ENV NOVAVEI_UPSTREAM=novavei:8080
+ENV NOVAVEIL_UPSTREAM=novaveil:8080
 
 # 拷贝构建产物（Vite 输出在 /static/out，不是 /app/dist）+ nginx 配置模板
 COPY --from=builder /static/out /usr/share/nginx/html

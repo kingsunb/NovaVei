@@ -178,16 +178,10 @@ describe("buildMemberDiff 行为（间接通过 add/remove 后保存）", () => 
     await user.click(screen.getByRole("button", { name: /编辑/ }));
     await waitFor(() => screen.getByRole("dialog"));
 
-    // 切到成员 Tab
-    await user.click(screen.getByRole("tab", { name: /成员/ }));
-
-    // 添加一个成员：选择渠道模型
-    const select = screen.getByLabelText("选择渠道模型") as HTMLSelectElement;
-    await user.selectOptions(select, "c:1:101"); // 选第二个模型
-
-    // 点添加
-    const addButtons = screen.getAllByRole("button", { name: /^添加$/ });
-    await user.click(addButtons[0]!);
+    // 左栏选择器：点击模型直接加入成员（全屏布局无需切 Tab）
+    await user.click(
+      screen.getByRole("button", { name: "添加 openai-prod gpt-4o-mini" }),
+    );
 
     // 现在应该有 3 个 #N
     await waitFor(() => {

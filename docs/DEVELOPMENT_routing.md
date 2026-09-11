@@ -1,4 +1,4 @@
-# NovaVei API 开发文档：渠道路由、会话粘合与熔断恢复
+# NovaVeil API 开发文档：渠道路由、会话粘合与熔断恢复
 
 本文档描述请求路由的核心流程，包括正常路由与会话粘合、半开探测与全部不可用恢复、以及存在正常渠道时的非阻塞半开探测；同时给出分组 Relay 配置项说明、会话标识约定、分组引用的失败语义与设计条目到实现的映射，是本主题的唯一权威文档。
 
@@ -257,7 +257,7 @@
 
 ### 与 OmniRoute 对照
 
-OmniRoute 的组合路由决策追踪把「派发前被跳过」与「真实派发」分开记录：`skipped_before_dispatch` 按 reason 白名单（provider_cooldown、model_lockout、availability 等）登记候选在派发前被排除的原因，只有真实发出的请求才记为 dispatched 并消耗调用预算。NovaVei 的本次修正采用同一思想——引用解析失败属于派发前的结构性跳过，不应占用派发后才生效的重试与冷却预算。
+OmniRoute 的组合路由决策追踪把「派发前被跳过」与「真实派发」分开记录：`skipped_before_dispatch` 按 reason 白名单（provider_cooldown、model_lockout、availability 等）登记候选在派发前被排除的原因，只有真实发出的请求才记为 dispatched 并消耗调用预算。NovaVeil 的本次修正采用同一思想——引用解析失败属于派发前的结构性跳过，不应占用派发后才生效的重试与冷却预算。
 
 ---
 

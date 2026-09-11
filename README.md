@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="web-next/public/logo.svg" alt="NovaVei Logo" width="120" height="120">
+<img src="web-next/public/logo.svg" alt="NovaVeil Logo" width="120" height="120">
 
-### NovaVei
+### NovaVeil
 
 **A Simple, Beautiful, and Elegant LLM API Aggregation Service for Individuals**
 
@@ -38,11 +38,11 @@
 Use the hardened Compose template and pin an immutable release image:
 
 ```bash
-wget https://raw.githubusercontent.com/kingsunb/NovaVei/master/docker-compose.yml
-sudo install -d -o 10001 -g 10001 -m 0700 /var/lib/novavei
+wget https://raw.githubusercontent.com/kingsunb/NovaVeil/master/docker-compose.yml
+sudo install -d -o 10001 -g 10001 -m 0700 /var/lib/novaveil
 docker volume create --driver local \
-  --opt type=none --opt o=bind --opt device=/var/lib/novavei novavei-data
-export NOVAVEI_IMAGE='ghcr.io/kingsunb/novavei-api:v0.12.0@sha256:<manifest-digest>'
+  --opt type=none --opt o=bind --opt device=/var/lib/novaveil novaveil-data
+export NOVAVEIL_IMAGE='ghcr.io/kingsunb/novaveil-api:v0.12.0@sha256:<manifest-digest>'
 docker compose pull
 docker compose up -d
 ```
@@ -50,10 +50,10 @@ docker compose up -d
 The image runs as fixed UID/GID `10001:10001`, uses a read-only root filesystem,
 and writes only `/app/data` plus a bounded `/tmp` tmpfs. Compose binds
 `127.0.0.1:8888` by default for a local HTTPS reverse proxy. To listen elsewhere,
-set `NOVAVEI_BIND_ADDRESS` explicitly and protect the port with HTTPS and a firewall.
+set `NOVAVEIL_BIND_ADDRESS` explicitly and protect the port with HTTPS and a firewall.
 
 > **Docker Hub migration:** Docker Hub image synchronization has been discontinued.
-> `ghcr.io/kingsunb/novavei-api` is the only supported container release source.
+> `ghcr.io/kingsunb/novaveil-api` is the only supported container release source.
 > Existing Docker Hub deployments must change only their image reference to the GHCR
 > version/digest while retaining the same `/app/data` volume, then run
 > `docker compose pull && docker compose up -d`.
@@ -61,10 +61,10 @@ set `NOVAVEI_BIND_ADDRESS` explicitly and protect the port with HTTPS and a fire
 
 ### 📦 Download from Release
 
-Download the binary for your platform from [Releases](https://github.com/kingsunb/NovaVei/releases), then run:
+Download the binary for your platform from [Releases](https://github.com/kingsunb/NovaVeil/releases), then run:
 
 ```bash
-./novavei start
+./novaveil start
 ```
 
 ### 🛠️ Build from Source
@@ -76,8 +76,8 @@ Download the binary for your platform from [Releases](https://github.com/kingsun
 
 ```bash
 # Clone the repository
-git clone https://github.com/kingsunb/NovaVei.git
-cd NovaVei
+git clone https://github.com/kingsunb/NovaVeil.git
+cd NovaVeil
 # Daily loop: pull upstream, local production build, start :8080
 git pull --ff-only
 bash scripts/build.sh --local
@@ -156,7 +156,7 @@ The configuration file is located at `data/config.json` by default and is automa
 {
   "database": {
     "type": "mysql",
-    "path": "root:password@tcp(127.0.0.1:3306)/novavei"
+    "path": "root:password@tcp(127.0.0.1:3306)/novaveil"
   }
 }
 ```
@@ -167,7 +167,7 @@ The configuration file is located at `data/config.json` by default and is automa
 {
   "database": {
     "type": "postgres",
-    "path": "postgresql://user:password@localhost:5432/novavei?sslmode=disable"
+    "path": "postgresql://user:password@localhost:5432/novaveil?sslmode=disable"
   }
 }
 ```
@@ -176,16 +176,16 @@ The configuration file is located at `data/config.json` by default and is automa
 
 **Environment Variables:**
 
-Every option can be overridden via environment variables using the `NOVAVEI_` prefix (path joined by `_`):
+Every option can be overridden via environment variables using the `NOVAVEIL_` prefix (path joined by `_`):
 
 | Environment Variable | Option |
 |----------------------|--------|
-| `NOVAVEI_SERVER_PORT` | `server.port` |
-| `NOVAVEI_SERVER_HOST` | `server.host` |
-| `NOVAVEI_DATABASE_TYPE` | `database.type` |
-| `NOVAVEI_DATABASE_PATH` | `database.path` |
-| `NOVAVEI_LOG_LEVEL` | `log.level` |
-| `NOVAVEI_GITHUB_PAT` | GitHub PAT for update checks rate limit (optional) |
+| `NOVAVEIL_SERVER_PORT` | `server.port` |
+| `NOVAVEIL_SERVER_HOST` | `server.host` |
+| `NOVAVEIL_DATABASE_TYPE` | `database.type` |
+| `NOVAVEIL_DATABASE_PATH` | `database.path` |
+| `NOVAVEIL_LOG_LEVEL` | `log.level` |
+| `NOVAVEIL_GITHUB_PAT` | GitHub PAT for update checks rate limit (optional) |
 
 
 ## 📖 Guides
@@ -246,7 +246,7 @@ import os
 
 client = OpenAI(   
     base_url="http://127.0.0.1:8080/v1",   
-    api_key="sk-NovaVei-P48ROljwJmWBYVARjwQM8Nkiezlg7WOrXXOWDYY8TI5p9Mzg", 
+    api_key="sk-NovaVeil-P48ROljwJmWBYVARjwQM8Nkiezlg7WOrXXOWDYY8TI5p9Mzg", 
 )
 completion = client.chat.completions.create(
     model="gpt-4o",  # group name
@@ -265,7 +265,7 @@ Edit `~/.claude/settings.json`
 {
   "env": {
     "ANTHROPIC_BASE_URL": "http://127.0.0.1:8080",
-    "ANTHROPIC_AUTH_TOKEN": "sk-NovaVei-...",
+    "ANTHROPIC_AUTH_TOKEN": "sk-NovaVeil-...",
     "API_TIMEOUT_MS": "3000000",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     "ANTHROPIC_MODEL": "nova-sonnet-4-5",
@@ -284,16 +284,16 @@ Edit `~/.codex/config.toml`
 ```toml
 model = "gpt-5.6-sol"
 model_reasoning_effort = "xhigh"
-model_provider = "novavei"
+model_provider = "novaveil"
 preferred_auth_method = "apikey"
 
-[model_providers.novavei]
+[model_providers.novaveil]
 base_url = "http://127.0.0.1:8080/v1"
-name = "novavei"
+name = "novaveil"
 supports_websockets = false
 requires_openai_auth = true
 wire_api = "responses"
-experimental_bearer_token = "sk-NovaVei-..."
+experimental_bearer_token = "sk-NovaVeil-..."
 ```
 
 Edit `~/.codex/auth.json`
@@ -320,8 +320,8 @@ Edit `~/.codex/auth.json`
 - Login has built-in rate limiting: 5 failures within 15 minutes triggers a temporary block; counters are persisted in the database and shared across replicas
 - Backup export (`/api/v1/setting/export`) contains channel keys and API keys in **plaintext** (the exported file's `note` field warns about this); user passwords are not exported. Treat backup files as production credentials
 - Direct deployments trust no proxy headers (`X-Forwarded-For` cannot be spoofed to bypass rate limiting); behind a reverse proxy, configure gin trusted proxies to rate limit by real client IP — see [gin SetTrustedProxies](https://gin-gonic.com/docs/examples/trusted-proxies/)
-- Docker upgrades must use a reviewed version/digest through `NOVAVEI_IMAGE`; the read-only root filesystem intentionally prevents in-container binary replacement
+- Docker upgrades must use a reviewed version/digest through `NOVAVEIL_IMAGE`; the read-only root filesystem intentionally prevents in-container binary replacement
 - See [Secure deployment](docs/SECURE_DEPLOYMENT.md) for image pinning, HTTPS, permissions, resource limits, and update verification
 - See [Backup and restore](docs/BACKUP_RESTORE.md) for application exports, full database backups, and recovery testing
 - See [Standalone deployment](docs/STANDALONE_DEPLOYMENT.md) for building and running from source without Docker
-- `Build, test, and audit` scans every per-platform Docker archive and gates the multi-arch manifest via the `dev-publish` environment. The publish job **never rebuilds** images: it `docker load`s the scanned archive, verifies the image ID against `IMAGE_IDS.tsv`, and pushes the exact bytes under `image@sha256:...` references. Any HIGH/CRITICAL Trivy finding fails the run. A one-time operator action is required before the first publish: set the repository workflow default to `Read and write permissions`, and allow workflows to write to the `ghcr.io/kingsunb/novavei-api` package. Without this, GitHub returns `denied: permission_denied: write_package` and the publish step aborts after the build succeeds.
+- `Build, test, and audit` scans every per-platform Docker archive and gates the multi-arch manifest via the `dev-publish` environment. The publish job **never rebuilds** images: it `docker load`s the scanned archive, verifies the image ID against `IMAGE_IDS.tsv`, and pushes the exact bytes under `image@sha256:...` references. Any HIGH/CRITICAL Trivy finding fails the run. A one-time operator action is required before the first publish: set the repository workflow default to `Read and write permissions`, and allow workflows to write to the `ghcr.io/kingsunb/novaveil-api` package. Without this, GitHub returns `denied: permission_denied: write_package` and the publish step aborts after the build succeeds.

@@ -15,13 +15,13 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/kingsunb/NovaVei/internal/client"
-	"github.com/kingsunb/NovaVei/internal/conf"
+	"github.com/kingsunb/NovaVeil/internal/client"
+	"github.com/kingsunb/NovaVeil/internal/conf"
 )
 
 const (
-	updateUrl    = "https://github.com/kingsunb/NovaVei/releases/latest/download"
-	updateApiUrl = "https://api.github.com/repos/kingsunb/NovaVei/releases/latest"
+	updateUrl    = "https://github.com/kingsunb/NovaVeil/releases/latest/download"
+	updateApiUrl = "https://api.github.com/repos/kingsunb/NovaVeil/releases/latest"
 )
 
 const (

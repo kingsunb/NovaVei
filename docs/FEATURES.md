@@ -1,6 +1,6 @@
 # 功能需求清单
 
-> NovaVei 项目的需求与功能记录。每条需求包含背景、需求描述与边界约束，供贡献者了解设计意图。
+> NovaVeil 项目的需求与功能记录。每条需求包含背景、需求描述与边界约束，供贡献者了解设计意图。
 
 ## 需求清单
 
@@ -314,7 +314,7 @@
    - **自定义拦截词**：按分类增删改自定义敏感词（对应 `CustomTerms`，上限 500 条、单条 200 字节）。
    - **脱敏测试器**：左输入框输入文本，右实时显示脱敏结果 + 命中明细（调用 `/api/v1/mask/test`），供管理员调规则预览效果。
 2. **分组级开关**：在现有分组编辑页（Groups）的「基本」Tab 中新增「启用脱敏」开关（对应 `GroupRelayConfig.mask_enabled`），与「会话粘合」「优先透传」等开关并列。
-3. **样式与交互**：遵循 NovaVei 现有前端规范（Tailwind + 现有 UI 组件、Card / Switch / Field / Input / Button / Dialog），与 CustomModels / Settings 等页面风格一致。
+3. **样式与交互**：遵循 NovaVeil 现有前端规范（Tailwind + 现有 UI 组件、Card / Switch / Field / Input / Button / Dialog），与 CustomModels / Settings 等页面风格一致。
 4. **API 对接**：在 `lib/api.ts` 中新增 `getMaskConfig` / `putMaskConfig` / `getMaskRules` / `testMask` 方法，在 `lib/types.ts` 中新增对应类型定义。
 
 ### 边界（不做）

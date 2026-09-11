@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
 	"github.com/looplj/axonhub/llm/transformer"
@@ -601,7 +601,7 @@ func terminalStreamFrames(format llm.APIFormat) []*httpclient.StreamEvent {
 	switch format {
 	case llm.APIFormatOpenAIChatCompletion:
 		chunk := map[string]any{
-			"id":      "chatcmpl-novavei-recovery",
+			"id":      "chatcmpl-novaveil-recovery",
 			"object":  "chat.completion.chunk",
 			"created": now,
 			"model":   "",
@@ -632,7 +632,7 @@ func terminalStreamFrames(format llm.APIFormat) []*httpclient.StreamEvent {
 
 	case llm.APIFormatOpenAIResponse:
 		response := map[string]any{
-			"id":         "resp_novavei_recovery",
+			"id":         "resp_novaveil_recovery",
 			"object":     "response",
 			"created_at": now,
 			"status":     "completed",

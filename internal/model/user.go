@@ -1,4 +1,4 @@
-// user.go defines the NovaVei user model and the request DTOs for login and
+// user.go defines the NovaVeil user model and the request DTOs for login and
 // credential changes, plus bcrypt password helpers.
 package model
 

@@ -218,7 +218,7 @@ function RollbackNotice({ flags }: { flags: Flags }) {
             N
           </div>
           <h1 className="text-base font-semibold tracking-tight text-ink">
-            NovaVei
+            NovaVeil
           </h1>
         </div>
         <h2 className="text-sm font-medium text-ink">

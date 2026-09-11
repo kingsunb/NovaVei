@@ -1,17 +1,17 @@
 #!/bin/bash
 set -euo pipefail
 
-readonly APP_NAME="novavei" # 发布产物和容器内的可执行文件名。
+readonly APP_NAME="novaveil" # 发布产物和容器内的可执行文件名。
 readonly OUTPUT_DIR="build" # 所有构建、归档、许可证和容器输入的根目录。
 readonly DEFAULT_TARGET="linux/amd64" # 本地默认只构建 Docker/服务器最常用架构。
 readonly DEFAULT_VERSION="$(git describe --tags --abbrev=0 2>/dev/null || echo 'dev')"
 readonly VERSION="${VERSION:-${DEFAULT_VERSION}}" # CI 可传入已验证版本, 避免提前推送 tag。
 readonly COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')" # 当前提交短哈希。
 readonly BUILD_TIME="$(TZ='Asia/Shanghai' date +'%F %T %z')"
-readonly LDFLAGS="-X 'github.com/kingsunb/NovaVei/internal/conf.Version=${VERSION}' \
-                  -X 'github.com/kingsunb/NovaVei/internal/conf.BuildTime=${BUILD_TIME}' \
-                  -X 'github.com/kingsunb/NovaVei/internal/conf.Author=Kingsun' \
-                  -X 'github.com/kingsunb/NovaVei/internal/conf.Commit=${COMMIT}' \
+readonly LDFLAGS="-X 'github.com/kingsunb/NovaVeil/internal/conf.Version=${VERSION}' \
+                  -X 'github.com/kingsunb/NovaVeil/internal/conf.BuildTime=${BUILD_TIME}' \
+                  -X 'github.com/kingsunb/NovaVeil/internal/conf.Author=Kingsun' \
+                  -X 'github.com/kingsunb/NovaVeil/internal/conf.Commit=${COMMIT}' \
                   -s -w" # 注入版本信息并缩小发布二进制。
 
 TARGETS="${DEFAULT_TARGET}"

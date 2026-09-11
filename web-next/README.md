@@ -1,6 +1,6 @@
-# web-next · NovaVei 控制台
+# web-next · NovaVeil 控制台
 
-> NovaVei 控制台前端（v0.2.0+）。
+> NovaVeil 控制台前端（v0.2.0+）。
 > 设计依据见 [DESIGN.md](./DESIGN.md)。
 
 ## 状态
@@ -50,15 +50,15 @@ pnpm dlx lefthook install
 
 **推荐方式：Go 内嵌前端。** 仓库根 `scripts/build.sh` 会 `pnpm build` 产出到 `../static/out`，
 由 `static/static.go` 的 `//go:embed all:out` 打包进后端二进制。生产只需部署单个
-`novavei` 容器（见 `../docker-compose.yml`），控制台由后端直接提供，无需 nginx 或 web-next 镜像。
+`novaveil` 容器（见 `../docker-compose.yml`），控制台由后端直接提供，无需 nginx 或 web-next 镜像。
 
 **可选：独立前端部署（灰度 / A-B 路由）。** 用 `docker compose --profile web-next up` 启动
-`web-next` + `web-router` 两个额外容器。需先构建并指定 `NOVAVEI_WEB_NEXT_IMAGE`：
+`web-next` + `web-router` 两个额外容器。需先构建并指定 `NOVAVEIL_WEB_NEXT_IMAGE`：
 
 ```bash
-docker build -t novavei-web-next:<ver> web-next/
-NOVAVEI_WEB_NEXT_IMAGE=novavei-web-next:<ver> \
-NOVAVEI_IMAGE=ghcr.io/kingsunb/novavei-api:<ver> \
+docker build -t novaveil-web-next:<ver> web-next/
+NOVAVEIL_WEB_NEXT_IMAGE=novaveil-web-next:<ver> \
+NOVAVEIL_IMAGE=ghcr.io/kingsunb/novaveil-api:<ver> \
 docker compose --profile web-next up -d
 ```
 

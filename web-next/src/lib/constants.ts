@@ -1,5 +1,5 @@
 /**
- * 全局常量 —— 与 NovaVei 后端约定对齐
+ * 全局常量 —— 与 NovaVeil 后端约定对齐
  *  DEFAULT_TEST_MESSAGE：渠道「测试连通」默认 probe 消息。
  *  选题思路（与源项目一致）：考察常识判断与指令遵循。
  *  注意：前端总是显式携带 message（缺省时用本常量），后端自己的空 message

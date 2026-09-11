@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/kingsunb/NovaVei/internal/model"
-	"github.com/kingsunb/NovaVei/internal/op"
+	"github.com/kingsunb/NovaVeil/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/op"
 	"golang.org/x/net/proxy"
 )
 

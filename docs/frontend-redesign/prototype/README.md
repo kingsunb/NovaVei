@@ -1,4 +1,4 @@
-# NovaVei 前端美化原型 v2
+# NovaVeil 前端美化原型 v2
 
 > 零依赖纯 HTML/CSS/JS 原型，直接打开 `index.html` 即可预览。
 

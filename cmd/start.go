@@ -7,14 +7,14 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/kingsunb/NovaVei/internal/conf"
-	"github.com/kingsunb/NovaVei/internal/db"
-	"github.com/kingsunb/NovaVei/internal/op"
-	"github.com/kingsunb/NovaVei/internal/relay"
-	"github.com/kingsunb/NovaVei/internal/server"
-	"github.com/kingsunb/NovaVei/internal/task"
-	"github.com/kingsunb/NovaVei/internal/update"
-	"github.com/kingsunb/NovaVei/internal/utils/shutdown"
+	"github.com/kingsunb/NovaVeil/internal/conf"
+	"github.com/kingsunb/NovaVeil/internal/db"
+	"github.com/kingsunb/NovaVeil/internal/op"
+	"github.com/kingsunb/NovaVeil/internal/relay"
+	"github.com/kingsunb/NovaVeil/internal/server"
+	"github.com/kingsunb/NovaVeil/internal/task"
+	"github.com/kingsunb/NovaVeil/internal/update"
+	"github.com/kingsunb/NovaVeil/internal/utils/shutdown"
 	"github.com/spf13/cobra"
 )
 

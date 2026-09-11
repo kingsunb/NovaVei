@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="web-next/public/logo.svg" alt="NovaVei Logo" width="120" height="120">
+<img src="web-next/public/logo.svg" alt="NovaVeil Logo" width="120" height="120">
 
-### NovaVei
+### NovaVeil
 
 **为个人打造的简单、美观、优雅的 LLM API 聚合服务**
 
@@ -38,31 +38,31 @@
 使用加固后的 Compose 模板，并固定到不可变发布镜像：
 
 ```bash
-wget https://raw.githubusercontent.com/kingsunb/NovaVei/master/docker-compose.yml
-sudo install -d -o 10001 -g 10001 -m 0700 /var/lib/novavei
+wget https://raw.githubusercontent.com/kingsunb/NovaVeil/master/docker-compose.yml
+sudo install -d -o 10001 -g 10001 -m 0700 /var/lib/novaveil
 docker volume create --driver local \
-  --opt type=none --opt o=bind --opt device=/var/lib/novavei novavei-data
-export NOVAVEI_IMAGE='ghcr.io/kingsunb/novavei-api:v0.12.0@sha256:<manifest-digest>'
+  --opt type=none --opt o=bind --opt device=/var/lib/novaveil novaveil-data
+export NOVAVEIL_IMAGE='ghcr.io/kingsunb/novaveil-api:v0.12.0@sha256:<manifest-digest>'
 docker compose pull
 docker compose up -d
 ```
 
 镜像固定使用 UID/GID `10001:10001`，rootfs 只读，仅 `/app/data` 与受限的
 `/tmp` tmpfs 可写。Compose 默认仅绑定宿主 `127.0.0.1:8888`，供本机 HTTPS
-反向代理访问；若需监听其它地址，请显式设置 `NOVAVEI_BIND_ADDRESS` 并配置 HTTPS 与防火墙。
+反向代理访问；若需监听其它地址，请显式设置 `NOVAVEIL_BIND_ADDRESS` 并配置 HTTPS 与防火墙。
 
 > **Docker Hub 迁移说明：** Docker Hub 镜像同步已经停止，
-> `ghcr.io/kingsunb/novavei-api` 是唯一受支持的容器发布源。既有 Docker Hub
+> `ghcr.io/kingsunb/novaveil-api` 是唯一受支持的容器发布源。既有 Docker Hub
 > 部署只需把镜像引用改为 GHCR 的版本 tag/digest，保留原 `/app/data` 数据卷，
 > 再执行 `docker compose pull && docker compose up -d`。
 
 
 ### 📦 从 Release 下载
 
-从 [Releases](https://github.com/kingsunb/NovaVei/releases) 下载对应平台的二进制文件，然后运行：
+从 [Releases](https://github.com/kingsunb/NovaVeil/releases) 下载对应平台的二进制文件，然后运行：
 
 ```bash
-./novavei start
+./novaveil start
 ```
 
 ### 🛠️ 源码运行
@@ -78,8 +78,8 @@ docker compose up -d
 
 ```bash
 # 克隆项目
-git clone https://github.com/kingsunb/NovaVei.git
-cd NovaVei
+git clone https://github.com/kingsunb/NovaVeil.git
+cd NovaVeil
 # 日常：拉上游 → 本地生产构建 → 启动 8080
 git pull --ff-only
 bash scripts/build.sh --local
@@ -157,7 +157,7 @@ http://localhost:5174
 {
   "database": {
     "type": "mysql",
-    "path": "root:password@tcp(127.0.0.1:3306)/novavei"
+    "path": "root:password@tcp(127.0.0.1:3306)/novaveil"
   }
 }
 ```
@@ -168,7 +168,7 @@ http://localhost:5174
 {
   "database": {
     "type": "postgres",
-    "path": "postgresql://user:password@localhost:5432/novavei?sslmode=disable"
+    "path": "postgresql://user:password@localhost:5432/novaveil?sslmode=disable"
   }
 }
 ```
@@ -177,16 +177,16 @@ http://localhost:5174
 
 **环境变量：**
 
-所有配置项均可通过环境变量覆盖，格式为 `NOVAVEI_` + 配置路径（用 `_` 连接）：
+所有配置项均可通过环境变量覆盖，格式为 `NOVAVEIL_` + 配置路径（用 `_` 连接）：
 
 | 环境变量 | 对应配置项 |
 |----------|-----------|
-| `NOVAVEI_SERVER_PORT` | `server.port` |
-| `NOVAVEI_SERVER_HOST` | `server.host` |
-| `NOVAVEI_DATABASE_TYPE` | `database.type` |
-| `NOVAVEI_DATABASE_PATH` | `database.path` |
-| `NOVAVEI_LOG_LEVEL` | `log.level` |
-| `NOVAVEI_GITHUB_PAT` | 用于获取最新版本时的速率限制(可选) |
+| `NOVAVEIL_SERVER_PORT` | `server.port` |
+| `NOVAVEIL_SERVER_HOST` | `server.host` |
+| `NOVAVEIL_DATABASE_TYPE` | `database.type` |
+| `NOVAVEIL_DATABASE_PATH` | `database.path` |
+| `NOVAVEIL_LOG_LEVEL` | `log.level` |
+| `NOVAVEIL_GITHUB_PAT` | 用于获取最新版本时的速率限制(可选) |
 
 
 ## 📖 功能说明
@@ -247,7 +247,7 @@ import os
 
 client = OpenAI(   
     base_url="http://127.0.0.1:8080/v1",   
-    api_key="sk-NovaVei-P48ROljwJmWBYVARjwQM8Nkiezlg7WOrXXOWDYY8TI5p9Mzg", 
+    api_key="sk-NovaVeil-P48ROljwJmWBYVARjwQM8Nkiezlg7WOrXXOWDYY8TI5p9Mzg", 
 )
 completion = client.chat.completions.create(
     model="gpt-4o",  # 填写正确的分组名称
@@ -266,7 +266,7 @@ print(completion.choices[0].message.content)
 {
   "env": {
     "ANTHROPIC_BASE_URL": "http://127.0.0.1:8080",
-    "ANTHROPIC_AUTH_TOKEN": "sk-NovaVei-...",
+    "ANTHROPIC_AUTH_TOKEN": "sk-NovaVeil-...",
     "API_TIMEOUT_MS": "3000000",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     "ANTHROPIC_MODEL": "nova-sonnet-4-5",
@@ -285,16 +285,16 @@ print(completion.choices[0].message.content)
 ```toml
 model = "gpt-5.6-sol"
 model_reasoning_effort = "xhigh"
-model_provider = "novavei"
+model_provider = "novaveil"
 preferred_auth_method = "apikey"
 
-[model_providers.novavei]
+[model_providers.novaveil]
 base_url = "http://127.0.0.1:8080/v1"
-name = "novavei"
+name = "novaveil"
 supports_websockets = false
 requires_openai_auth = true
 wire_api = "responses"
-experimental_bearer_token = "sk-NovaVei-..."
+experimental_bearer_token = "sk-NovaVeil-..."
 ```
 编辑 `~/.codex/auth.json`
 
@@ -320,9 +320,9 @@ experimental_bearer_token = "sk-NovaVei-..."
 - 登录接口内置限速：15 分钟内失败 5 次将临时拒绝；失败计数持久化在数据库中，多副本部署共享同一份计数
 - 备份导出（`/api/v1/setting/export`）包含渠道 Key 与 API Key **明文**（用于完整还原，导出文件头部 `note` 字段亦有提示）；用户密码不在导出范围内。请将备份文件视同生产凭据妥善保管
 - 默认直连部署不信任任何代理头（`X-Forwarded-For` 不可伪造绕过限速）；若置于反向代理之后，需自行配置 gin 可信代理才能按真实客户端 IP 限速，参见 [gin SetTrustedProxies 说明](https://gin-gonic.com/docs/examples/trusted-proxies/)
-- Docker 升级必须通过 `NOVAVEI_IMAGE` 使用经过审查的版本或 digest；只读 rootfs 会有意阻止容器内替换二进制
+- Docker 升级必须通过 `NOVAVEIL_IMAGE` 使用经过审查的版本或 digest；只读 rootfs 会有意阻止容器内替换二进制
 - 镜像固定、HTTPS、目录权限、资源限制与更新校验见 [安全部署](docs/SECURE_DEPLOYMENT.md)
 - `Build, test, and audit` 会对每个平台 Docker archive 单独做漏洞扫描，并通过 `dev-publish` environment 控制多架构 manifest 的发布。发布 job **绝不重新 build** 镜像，只 `docker load` 刚才已扫描的 archive，与 `IMAGE_IDS.tsv` 逐镜像核对 ID，然后以 `image@sha256:...` 不可变引用推送。任何 HIGH/CRITICAL 漏洞都会让该次构建失败。
-- 首次发布需要一次运营操作：在 **仓库 Settings → Actions → General → Workflow permissions** 中勾选 `Read and write permissions`；在 kingsunb/novavei-api 的 **Package settings** 中允许 workflow 写该包。否则 GitHub 会在发布步骤返回 `denied: permission_denied: write_package`，即使构建已通过。
+- 首次发布需要一次运营操作：在 **仓库 Settings → Actions → General → Workflow permissions** 中勾选 `Read and write permissions`；在 kingsunb/novaveil-api 的 **Package settings** 中允许 workflow 写该包。否则 GitHub 会在发布步骤返回 `denied: permission_denied: write_package`，即使构建已通过。
 - 应用导出、数据库完整备份与恢复演练见 [备份与恢复](docs/BACKUP_RESTORE.md)
 - 无 Docker 的源码构建与运行见 [独立环境部署](docs/STANDALONE_DEPLOYMENT.md)

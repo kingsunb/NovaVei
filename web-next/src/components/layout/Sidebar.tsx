@@ -59,7 +59,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             collapsed && "hidden",
           )}
         >
-          NovaVei
+          NovaVeil
         </span>
       </div>
 

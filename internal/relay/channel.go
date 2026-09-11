@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/charmbracelet/log"
+	"github.com/kingsunb/NovaVeil/internal/model"
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/auth"
 	"github.com/looplj/axonhub/llm/httpclient"
@@ -366,5 +368,26 @@ func applyChannelConfig(channel model.Channel, request *httpclient.Request, rand
 	}
 	// 动态(随机/会话稳定)头在静态自定义 Header 之后注入, 同名时动态值覆盖静态固定值。
 	injectRandomHeaders(channel, randomValue, request)
+	// [debug] 打印最终发往上游的完整请求头, 便于排查 opencode 兼容头等注入是否生效。
+	// 仅 Debug 级别输出; Authorization / X-Api-Key / X-Goog-Api-Key 仅显示前缀, 不泄露完整凭据。
+	if log.GetLevel() <= log.DebugLevel {
+		keys := make([]string, 0, len(request.Headers))
+		for k := range request.Headers {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var sb strings.Builder
+		for _, k := range keys {
+			v := request.Headers.Get(k)
+			if httpclient.IsSensitiveHeader(k) && len(v) > 8 {
+				v = v[:8] + "***"
+			}
+			sb.WriteString("\n  ")
+			sb.WriteString(k)
+			sb.WriteString(": ")
+			sb.WriteString(v)
+		}
+		log.Debugf("channel %d(%s) outbound headers:%s", channel.ID, channel.Name, sb.String())
+	}
 	return nil
 }

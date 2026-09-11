@@ -389,7 +389,7 @@ describe("<ChannelsPage /> 渠道排序值行内编辑", () => {
     expect(screen.getByText("sort-b")).toBeInTheDocument();
 
     // 找到 sort-a 的排序输入并改为 5。
-    const inputA = screen.getByLabelText("排序 sort-a") as HTMLInputElement;
+    const inputA = screen.getByLabelText("优先级 sort-a") as HTMLInputElement;
     expect(inputA.value).toBe("0");
     await user.clear(inputA);
     await user.type(inputA, "5");
@@ -415,7 +415,7 @@ describe("<ChannelsPage /> 渠道排序值行内编辑", () => {
     render(<ChannelsPage />, { wrapper: Wrapper });
     await waitFor(() => screen.getByText("sort-neg"));
 
-    const input = screen.getByLabelText("排序 sort-neg") as HTMLInputElement;
+    const input = screen.getByLabelText("优先级 sort-neg") as HTMLInputElement;
     await user.clear(input);
     await user.type(input, "-10");
     await user.tab();
@@ -439,7 +439,7 @@ describe("<ChannelsPage /> 渠道排序值行内编辑", () => {
     render(<ChannelsPage />, { wrapper: Wrapper });
     await waitFor(() => screen.getByText("sort-to-zero"));
 
-    const input = screen.getByLabelText("排序 sort-to-zero") as HTMLInputElement;
+    const input = screen.getByLabelText("优先级 sort-to-zero") as HTMLInputElement;
     expect(input.value).toBe("7");
     await user.clear(input);
     await user.type(input, "0");

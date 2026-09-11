@@ -1,12 +1,12 @@
 // 007.go migrates legacy group routing to root-level mode and Relay JSON
-// config as part of NovaVei schema migration v7.
+// config as part of NovaVeil schema migration v7.
 package migrate
 
 import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 	"gorm.io/gorm"
 )
 

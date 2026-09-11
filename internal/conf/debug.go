@@ -1,4 +1,4 @@
-// debug.go exposes the NovaVei debug-mode flag, controlled by the
+// debug.go exposes the NovaVeil debug-mode flag, controlled by the
 // NOVAEIL_DEBUG environment variable.
 package conf
 

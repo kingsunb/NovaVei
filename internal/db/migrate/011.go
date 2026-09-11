@@ -3,7 +3,7 @@ package migrate
 import (
 	"fmt"
 
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/model"
 	"gorm.io/gorm"
 )
 

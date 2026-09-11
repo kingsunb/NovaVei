@@ -1,6 +1,6 @@
 # Backup and restore
 
-NovaVei has two distinct backup mechanisms. Choose based on the recovery objective;
+NovaVeil has two distinct backup mechanisms. Choose based on the recovery objective;
 the application export is not a full disaster-recovery snapshot.
 
 ## Application export
@@ -39,7 +39,7 @@ A safe operational sequence is:
 2. Create a database-consistent SQLite backup using the SQLite backup API/tool, or
    stop the application cleanly and wait for it to exit.
 3. Copy the complete data directory into encrypted backup storage.
-4. Record the deployed image digest, NovaVei version, backup timestamp, checksum,
+4. Record the deployed image digest, NovaVeil version, backup timestamp, checksum,
    and file owner (`10001:10001`).
 5. Restart only after the backup checksum and required files are verified.
 

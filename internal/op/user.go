@@ -14,8 +14,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/charmbracelet/log"
-	"github.com/kingsunb/NovaVei/internal/db"
-	"github.com/kingsunb/NovaVei/internal/model"
+	"github.com/kingsunb/NovaVeil/internal/db"
+	"github.com/kingsunb/NovaVeil/internal/model"
 	"gorm.io/gorm"
 )
 

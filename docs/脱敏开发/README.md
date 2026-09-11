@@ -1,4 +1,4 @@
-# NovaVei 请求脱敏与还原功能
+# NovaVeil 请求脱敏与还原功能
 
 > **状态：已实现**（2026-09-10，对应需求 REQ-015）。核心代码位于 `internal/relay/mask/`，并已接入 `internal/relay/handler.go` 与 `internal/relay/mask_integration.go`。出厂默认全关，详见第八节。
 > 本目录原为开发规划文档集，功能落地后保留作设计参考；技术内容仍有参考价值，行号以实际代码为准。
@@ -10,7 +10,7 @@
 | 文档 | 内容 |
 |---|---|
 | `README.md` | 本文件——总纲、能力对照、阶段拆分（已实现） |
-| `01-架构与插入点.md` | NovaVei 请求/响应链路分析与脱敏/还原精确插入点 |
+| `01-架构与插入点.md` | NovaVeil 请求/响应链路分析与脱敏/还原精确插入点 |
 | `02-规则引擎设计.md` | Go 版脱敏规则引擎、占位符规范、多轮会话一致性设计 |
 | `03-流式还原设计.md` | SSE 跨 chunk 增量还原（最难模块）的缓冲拼接方案 |
 | `04-配置与前端.md` | 规则开关、自定义敏感词、前端管理页与审计可视化 |
@@ -25,13 +25,13 @@
 使用 Cursor、Claude Code、Codex 等 AI 编程助手时，代码中的高危敏感信息（API Key、数据库连接串、内网 IP、手机号/身份证等）会随请求发往外部模型服务商。
 
 ### 1.2 目标
-在 NovaVei 网关层实现：**请求出网前在本地自动打码成结构化占位符，模型回答时流式无感还原成原文**，开发体验完全不受影响。
+在 NovaVeil 网关层实现：**请求出网前在本地自动打码成结构化占位符，模型回答时流式无感还原成原文**，开发体验完全不受影响。
 
-### 1.3 为什么在 NovaVei 做而不是另起 maskit
-NovaVei 本身就是 LLM API 网关，客户端的 `base_url` 已经指向它，**天然处于请求必经之路**：
+### 1.3 为什么在 NovaVeil 做而不是另起 maskit
+NovaVeil 本身就是 LLM API 网关，客户端的 `base_url` 已经指向它，**天然处于请求必经之路**：
 - **无需 mitmproxy 中间人代理**——maskit 的核心复杂度之一
 - **无需向操作系统安装自签名 CA 根证书**
-- **无需多端口反代与 Passthrough 兜底**——NovaVei 已有故障转移机制
+- **无需多端口反代与 Passthrough 兜底**——NovaVeil 已有故障转移机制
 - **Go 性能更高**——脱敏在每请求热路径，Go 正则比 Python 快
 - **已有会话（`X-Session-Id`）、审计、日志 redact 基建**可直接复用
 
@@ -39,16 +39,16 @@ NovaVei 本身就是 LLM API 网关，客户端的 `base_url` 已经指向它，
 
 ## 二、参考 maskit 的能力对照
 
-| maskit 能力 | maskit 源位置 | NovaVei 移植方式 | 工作量 |
+| maskit 能力 | maskit 源位置 | NovaVeil 移植方式 | 工作量 |
 |---|---|---|---|
 | 19 类正则规则库 | `engine/transparent.py:52` RULES | Go `regexp` 重写，放 `internal/relay/mask/` 新包 | 中（直接译） |
 | 占位符 `{{LABEL_6位辅音}}` | `transparent.py` 生成逻辑 | Go `crypto/rand` 生成 6 位辅音随机串 | 小 |
 | 请求体脱敏 | mitmproxy addon `request` 钩子 | `handler.go:88` 拿到请求体后、`sendPassthrough` 前插入 | 小 |
 | 非流式响应还原 | mitmproxy `response` 钩子 | `handler.go:552` `c.Writer.Write` 前还原 | 小 |
 | **流式 SSE 跨 chunk 还原** | `transparent.py` 缓冲拼接 | `handler.go:713/792` 写每个 event 前增量还原 | **大（最难）** |
-| 多轮会话占位符复用 | 滑动窗口映射 | 挂到 NovaVei 已有的 `X-Session-Id` 会话 | 中 |
-| Fail-Closed 熔断 | 异常→503 不放明文 | 契合 NovaVei 现有 `rejectRequest` 错误路径 | 小 |
-| 凭据只存哈希 | `event_store.py` 摘要 | NovaVei 已有 `op/error_log.go:350` 日志 redact，强化即可 | 小 |
+| 多轮会话占位符复用 | 滑动窗口映射 | 挂到 NovaVeil 已有的 `X-Session-Id` 会话 | 中 |
+| Fail-Closed 熔断 | 异常→503 不放明文 | 契合 NovaVeil 现有 `rejectRequest` 错误路径 | 小 |
+| 凭据只存哈希 | `event_store.py` 摘要 | NovaVeil 已有 `op/error_log.go:350` 日志 redact，强化即可 | 小 |
 | 安全审计信号 | `audit_signals.py` 纯函数 | Go 重写为审计模块（可选增强） | 中 |
 | 规则开关/自定义词 | `config.json` | 放 `model/setting.go` 系统设置 + 前端管理页 | 中 |
 
@@ -58,11 +58,11 @@ NovaVei 本身就是 LLM API 网关，客户端的 `base_url` 已经指向它，
 
 ```
 你的输入: 排查数据库 mysql://root:Pass123@192.168.1.50:3306  联系人李四 13800138000
-  ↓ NovaVei 本地脱敏（handler.go:88 插入点）
+  ↓ NovaVeil 本地脱敏（handler.go:88 插入点）
 上游收到: 排查数据库 {{CONNSTR_zkpmqx}}  联系人{{TERM_fnqtsw}} {{PHONE_bcdfgh}}
   ↓ 模型推理
 上游回答: 建议 {{TERM_fnqtsw}} 核对 {{CONNSTR_zkpmqx}} 的连通性
-  ↓ NovaVei 本地还原（handler.go:552 / 713 插入点）
+  ↓ NovaVeil 本地还原（handler.go:552 / 713 插入点）
 你看到:  建议 李四 核对 mysql://root:Pass123@192.168.1.50:3306 的连通性
 ```
 
@@ -77,7 +77,7 @@ NovaVei 本身就是 LLM API 网关，客户端的 `base_url` 已经指向它，
 | **P3** | 流式 SSE 增量还原（跨 chunk 缓冲拼接） | **大** | P1 |
 | **P4** | 会话级映射表 + 多轮一致性 | 中 | P1 |
 | **P5** | 配置持久化 + 前端管理 UI + 审计可视化 | 中 | P1-P4 |
-| **P6** | 单测 + 流式冒烟 + 回归（对齐 NovaVei 测试规范） | 中 | P1-P5 |
+| **P6** | 单测 + 流式冒烟 + 回归（对齐 NovaVeil 测试规范） | 中 | P1-P5 |
 
 **总体：中等偏上，约 3-5 人日。** 难点集中在 P3（流式 SSE 跨 chunk 还原）。
 
@@ -119,9 +119,9 @@ web-next/src/pages/Mask.tsx     # 前端脱敏管理页 — 已实现
 
 | 项 | 说明 | 倾向 |
 |---|---|---|
-| 规则默认开关 | maskit 默认开 7 类核心、关 12 类高误报。NovaVei 面向网关多用户，误报影响更大 | **已锁定：默认全关**（见第八节保证），管理员按需开 |
+| 规则默认开关 | maskit 默认开 7 类核心、关 12 类高误报。NovaVeil 面向网关多用户，误报影响更大 | **已锁定：默认全关**（见第八节保证），管理员按需开 |
 | 脱敏作用范围 | 全局开关 vs 按渠道/分组开关 | 按分组开关，粒度可控 |
-| 流式协议差异 | OpenAI/Anthropic SSE 事件结构不同，还原需按协议适配 | 复用 NovaVei 现有 transformer 协议判断 |
+| 流式协议差异 | OpenAI/Anthropic SSE 事件结构不同，还原需按协议适配 | 复用 NovaVeil 现有 transformer 协议判断 |
 | 性能影响 | 每请求正则扫描开销 | Go 正则 + 仅扫请求体非流式字段，可接受；提供开关一键关闭 |
 | 与现有日志 redact 关系 | `op/error_log.go:350` 已有日志字段脱敏 | 互补：日志 redact 管记录，请求脱敏管出网 |
 

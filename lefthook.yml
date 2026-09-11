@@ -1,4 +1,4 @@
-# NovaVei web-next Pre-commit Hook
+# NovaVeil web-next Pre-commit Hook
 #  - 在 commit 前跑 typecheck + lint
 #  - 不跑 test / build / e2e（这些在 CI 跑，太慢）
 #  - 安装：pnpm dlx lefthook install

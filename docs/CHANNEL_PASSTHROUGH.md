@@ -5,7 +5,7 @@
 
 ## 一、背景
 
-NovaVei 已实现「同协议透传」: 当客户端协议与渠道协议匹配时 (如 OpenAI 客户端 → OpenAI 渠道),
+NovaVeil 已实现「同协议透传」: 当客户端协议与渠道协议匹配时 (如 OpenAI 客户端 → OpenAI 渠道),
 请求体原样转发, 不经 axonhub 协议转换。判定逻辑在 `supportsNativeFormat()` 中, 按渠道类型 +
 API 格式硬编码匹配。
 
@@ -106,11 +106,11 @@ return relaycommon.GetFullRequestURL(info.ChannelBaseUrl, info.RequestURLPath, i
 - `"re:<regex>"` → 正则匹配的请求头透传
 - 跳过列表: 逐跳头、凭据头 (authorization/x-api-key)、cookie、host 等
 
-## 三、NovaVei 的设计方案
+## 三、NovaVeil 的设计方案
 
 ### 3.1 与 new-api 的关键差异
 
-| 维度 | new-api | NovaVei |
+| 维度 | new-api | NovaVeil |
 |------|---------|----------|
 | 触发方式 | 全局开关 + 渠道级开关 | 渠道级开关 (`PassThroughBodyEnabled`) |
 | 请求体 | 透传: 原样; 非透传: 协议转换 | 同协议: 原样透传; 跨协议: 经 axonhub 转换; 完全透传: 任意协议原样 |
@@ -119,13 +119,13 @@ return relaycommon.GetFullRequestURL(info.ChannelBaseUrl, info.RequestURLPath, i
 | 用量/计费 | 透传模式下仍提取用量并计费 | 完全透传: 不提取用量 (usage = nil) |
 | 音频/嵌入 | ❌ 无透传支持 | ✅ 支持透传 |
 
-**NovaVei 的完全透传更纯粹**: 请求和响应都原样转发, 不做任何解析。代价是不计费、不校验。
+**NovaVeil 的完全透传更纯粹**: 请求和响应都原样转发, 不做任何解析。代价是不计费、不校验。
 这适合上游本身就是网关/代理的场景, 计费由上游处理。
 
 ### 3.2 设计要点
 
 1. **渠道级开关 `PassThroughBodyEnabled`**: 加在 `Channel` 模型上, 不做全局开关
-   (NovaVei 没有全局设置系统, 渠道级已足够)。
+   (NovaVeil 没有全局设置系统, 渠道级已足够)。
 
 2. **`supportsNativeFormat` 优先判断**: 当 `PassThroughBodyEnabled` 为 true 时, 任意格式
    均返回 true, 走 `sendPassthrough` 路径而非 `sendConverted`。
@@ -316,7 +316,7 @@ func buildPassthroughRequest(format llm.APIFormat, raw *httpclient.Request, chan
 
 ### 5.4 数据库自动迁移 ✅ (无需手动操作)
 
-NovaVei 使用 GORM AutoMigrate, 新增字段会自动创建列。
+NovaVeil 使用 GORM AutoMigrate, 新增字段会自动创建列。
 `gorm:"not null;default:false"` 确保已有行默认值为 `false`。
 
 ### 5.5 前端 (待实现)

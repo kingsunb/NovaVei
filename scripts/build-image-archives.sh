@@ -21,10 +21,10 @@ VERSION="$3"
 }
 
 specs=(
-    "amd64|linux/amd64|novavei-linux-amd64.tar"
-    "386|linux/386|novavei-linux-386.tar"
-    "arm64|linux/arm64|novavei-linux-arm64.tar"
-    "arm-v7|linux/arm/v7|novavei-linux-arm-v7.tar"
+    "amd64|linux/amd64|novaveil-linux-amd64.tar"
+    "386|linux/386|novaveil-linux-386.tar"
+    "arm64|linux/arm64|novaveil-linux-arm64.tar"
+    "arm-v7|linux/arm/v7|novaveil-linux-arm-v7.tar"
 )
 
 rm -rf "$OUTPUT_DIR"
@@ -35,18 +35,18 @@ printf '%s\n' "$VERSION" >"$OUTPUT_DIR/IMAGE_VERSION"
 
 for spec in "${specs[@]}"; do
     IFS='|' read -r slug platform archive <<<"$spec"
-    binary="build/docker/${platform}/novavei"
+    binary="build/docker/${platform}/novaveil"
     [[ -s "$binary" ]] || {
         echo "missing Docker binary for ${platform}: ${binary}" >&2
         exit 1
     }
-    local_ref="novavei-candidate:${slug}"
+    local_ref="novaveil-candidate:${slug}"
     docker buildx build \
         --platform "$platform" \
         --file scripts/dockerfile/Dockerfile \
         --tag "$local_ref" \
-        --label org.opencontainers.image.title=novavei-api \
-        --label org.opencontainers.image.source=https://github.com/kingsunb/NovaVei \
+        --label org.opencontainers.image.title=novaveil-api \
+        --label org.opencontainers.image.source=https://github.com/kingsunb/NovaVeil \
         --label "org.opencontainers.image.revision=${REVISION}" \
         --label "org.opencontainers.image.version=${VERSION}" \
         --provenance=false \
@@ -57,8 +57,8 @@ done
 
 (
     cd "$OUTPUT_DIR"
-    sha256sum novavei-linux-amd64.tar novavei-linux-386.tar \
-        novavei-linux-arm64.tar novavei-linux-arm-v7.tar >ARCHIVES.sha256
+    sha256sum novaveil-linux-amd64.tar novaveil-linux-386.tar \
+        novaveil-linux-arm64.tar novaveil-linux-arm-v7.tar >ARCHIVES.sha256
     sha256sum -c ARCHIVES.sha256
 )
 

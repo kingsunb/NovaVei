@@ -71,8 +71,8 @@ jobs:
 
       - name: Validate scripts and Compose
         env:
-          NOVAVEI_IMAGE: ghcr.io/kingsunb/novavei-api:0.0.0-ci
-          NOVAVEI_WEB_NEXT_IMAGE: ghcr.io/kingsunb/novavei-web-next:0.0.0-ci
+          NOVAVEIL_IMAGE: ghcr.io/kingsunb/novaveil-api:0.0.0-ci
+          NOVAVEIL_WEB_NEXT_IMAGE: ghcr.io/kingsunb/novaveil-web-next:0.0.0-ci
         run: |
           bash -n \
             scripts/build.sh \
@@ -87,7 +87,7 @@ jobs:
           docker compose -f docker-compose.local.yml config --quiet
 
       - name: Test frontend
-        # 构建前先跑 vitest：前端回归在进入 Docker 构建前就失败（借鉴 NovaVei_api 3e4e815）。
+        # 构建前先跑 vitest：前端回归在进入 Docker 构建前就失败（借鉴 NovaVeil_api 3e4e815）。
         working-directory: web-next
         run: |
           pnpm install --frozen-lockfile
@@ -101,11 +101,11 @@ jobs:
 
       - name: Verify release archive checksums
         run: |
-          expected=(novavei-linux-amd64.zip novavei-linux-386.zip novavei-linux-arm64.zip novavei-linux-arm.zip)
-          scripts/verify-release-archive.sh build/archives/novavei-linux-amd64.zip build/archives/SHA256SUMS
+          expected=(novaveil-linux-amd64.zip novaveil-linux-386.zip novaveil-linux-arm64.zip novaveil-linux-arm.zip)
+          scripts/verify-release-archive.sh build/archives/novaveil-linux-amd64.zip build/archives/SHA256SUMS
           cd build/archives
           for archive in "${expected[@]}"; do test -f "${archive}"; done
-          test "$(find . -maxdepth 1 -name 'novavei-linux-*.zip' -type f | wc -l)" -eq "${#expected[@]}"
+          test "$(find . -maxdepth 1 -name 'novaveil-linux-*.zip' -type f | wc -l)" -eq "${#expected[@]}"
           sha256sum -c SHA256SUMS
           for archive in "${expected[@]}"; do
             unzip -l "$archive" | grep -q 'LICENSE'
@@ -128,7 +128,7 @@ jobs:
       - name: Upload audit artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: novavei-linux-${{ github.sha }}
+          name: novaveil-linux-${{ github.sha }}
           if-no-files-found: error
           retention-days: 14
           path: |
@@ -146,10 +146,10 @@ jobs:
       - name: Upload scanned image archives for publication
         # Manual validation runs may export the already-scanned bytes for an audited
         # operator publish, but only a real dev push can enter the write-permission job.
-        if: github.ref == 'refs/heads/dev' && github.repository == 'kingsunb/NovaVei'
+        if: github.ref == 'refs/heads/dev' && github.repository == 'kingsunb/NovaVeil'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: novavei-images-${{ github.sha }}
+          name: novaveil-images-${{ github.sha }}
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -160,7 +160,7 @@ jobs:
     needs: build
     # Only the official dev branch can publish. workflow_dispatch is permitted
     # solely to publish the exact artifact just scanned by that same run.
-    if: github.ref == 'refs/heads/dev' && github.repository == 'kingsunb/NovaVei' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: github.ref == 'refs/heads/dev' && github.repository == 'kingsunb/NovaVeil' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: dev-publish
@@ -171,7 +171,7 @@ jobs:
       - name: Download scanned image archives
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: novavei-images-${{ github.sha }}
+          name: novaveil-images-${{ github.sha }}
           path: image-archives
 
       - name: Verify scanned image archive bundle
@@ -197,7 +197,7 @@ jobs:
       - name: Publish only scanned platform images
         run: |
           set -euo pipefail
-          image=ghcr.io/kingsunb/novavei-api
+          image=ghcr.io/kingsunb/novaveil-api
           short_sha="${GITHUB_SHA::7}"
           refs=()
           while IFS=$'\t' read -r slug platform archive local_ref; do

@@ -2,9 +2,9 @@
 
 > **后续整理入口：** 已归档。本文是 2026-09 的只读审计；§8 记录已修/未修。不要按 §0 的「按密钥测试缺口」再做一遍（§8 已修）。
 
-Read-only comprehensive review of `/root/kaifa/NovaVei/web-next` after the
+Read-only comprehensive review of `/root/kaifa/NovaVeil/web-next` after the
 recent macOS-glass restyle, mapped against the four newer commits on
-`NovaVei origin/dev` (relative to local `4f50d98`):
+`NovaVeil origin/dev` (relative to local `4f50d98`):
 
 | sha | subject | files in web-next? |
 | --- | --- | --- |
@@ -668,7 +668,7 @@ unannounced regressions against the background tokens:
    inline (`grep -rn 'Icon as=' src`). Either commit to migration or drop
    the component + test.
 2. `src/lib/constants.ts:7` `DEFAULT_TEST_MESSAGE` is referenced, but the
-   comment "与 NovaVei 后端约定对齐" is the only place where the
+   comment "与 NovaVeil 后端约定对齐" is the only place where the
    backend string ("ping" in `internal/relay/test.go:37`) is mentioned;
    they intentionally differ (常识判断 vs blank-ping). OK.
 3. `src/lib/utils.ts:267-274` `MODEL_RULE` is exported but never imported.

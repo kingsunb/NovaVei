@@ -6,7 +6,7 @@ import "time"
 // 渠道 Key 与 API Key 明文属备份还原本意保留, 用户表(含 bcrypt 密码哈希)不参与导出。
 const DBDumpSensitiveNote = "WARNING: this backup contains upstream channel keys and API keys in PLAINTEXT for full restore. Store it securely and never share it. 注意: 此备份包含渠道 Key 与 API Key 明文等敏感凭据, 请妥善保管, 切勿外传; 用户密码不在导出范围内。"
 
-// DBDump is a full-database JSON export format for NovaVei.
+// DBDump is a full-database JSON export format for NovaVeil.
 // Import uses incremental semantics (insert new rows, and upsert on tables with natural keys).
 //
 // 敏感性: Channels.Key 与 APIKeys.APIKey 以明文包含在导出中(见 Note 字段);

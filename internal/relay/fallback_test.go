@@ -187,7 +187,7 @@ func TestReadStreamWindowDeliversWhenUsageMissing(t *testing.T) {
 	if len(window) == 0 {
 		t.Fatal("窗口事件应保留以便交付客户端")
 	}
-	if strings.Contains(string(window[len(window)-1].Data), "novavei") {
+	if strings.Contains(string(window[len(window)-1].Data), "novaveil") {
 		t.Fatal("交付路径不应混入合成帧")
 	}
 }

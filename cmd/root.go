@@ -1,10 +1,10 @@
-// root.go defines the NovaVei root CLI command.
+// root.go defines the NovaVeil root CLI command.
 package cmd
 
 import (
 	"os"
 
-	"github.com/kingsunb/NovaVei/internal/conf"
+	"github.com/kingsunb/NovaVeil/internal/conf"
 	"github.com/spf13/cobra"
 )
 

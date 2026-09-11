@@ -8,8 +8,10 @@ import {
   Snowflake,
   Pencil,
   X,
+  Check,
   ChevronUp,
   ChevronDown,
+  CornerDownLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -36,7 +38,6 @@ import { ConfirmButton } from "@/components/ui/confirm-button";
 import { QueryErrorBanner } from "@/components/ui/query-error";
 import {
   Dialog,
-  DialogBody,
   DialogClose,
   DialogContent,
   DialogDescription,
@@ -48,6 +49,7 @@ import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
 import { Switch } from "@/components/ui/switch";
 import { cn, NAME_RULE, validateField } from "@/lib/utils";
+import { PROVIDER_LABELS } from "./channels/constants";
 
 /**
  * 分组模式标签 —— manual / failover 在 db/API 仍是英文短码（兼容旧数据），
@@ -447,7 +449,6 @@ function GroupEditor({
     DEFAULT_GROUP_RELAY_CONFIG.member_cooldown_seconds,
   );
   const [activeItemId, setActiveItemId] = useState(0);
-  const [tab, setTab] = useState<"basic" | "members">("basic");
 
   // 成员编辑需要：所有渠道（拉模型）和所有分组（用于引用）
   const { data: channels } = useQuery({
@@ -513,7 +514,6 @@ function GroupEditor({
       setOriginalItems([]);
       setDraftItems([]);
     }
-    setTab("basic");
   }, [group]);
 
   const isNew = !group || group === "new";
@@ -676,175 +676,284 @@ function GroupEditor({
     onError: (e: Error) => toast.error(e.message || "保存失败"),
   });
 
+  // 已加入分组的渠道模型 / 引用名 —— 左侧选择器据此显示「已添加」标记
+  // 必须在 early return 之前调用，遵守 Rules of Hooks
+  const addedModelIds = useMemo(
+    () =>
+      new Set(
+        draftItems
+          .filter((d) => !d.ref_group_name && d.channel_model_id > 0)
+          .map((d) => d.channel_model_id),
+      ),
+    [draftItems],
+  );
+  const addedRefNames = useMemo(
+    () =>
+      new Set(
+        draftItems.filter((d) => d.ref_group_name).map((d) => d.ref_group_name),
+      ),
+    [draftItems],
+  );
+  const otherGroups = useMemo(
+    () =>
+      (groups ?? []).filter(
+        (g) => g.id !== (group && group !== "new" ? group.id : 0),
+      ),
+    [groups, group],
+  );
+  const channelById = useMemo(
+    () => new Map((channels ?? []).map((c) => [c.id, c])),
+    [channels],
+  );
+
   if (!open) return null;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent variant="sheet">
-        <DialogHeader>
+      <DialogContent variant="fullscreen">
+        <DialogHeader className="pr-12">
           <DialogTitle>{isNew ? "新建分组" : `编辑：${name}`}</DialogTitle>
           <DialogDescription>
-            分组是客户端模型名的承载单元；成员可来自渠道模型或引用其他分组
+            左侧选择渠道模型或引用其他分组加入成员，右侧配置分组参数与成员顺序
           </DialogDescription>
         </DialogHeader>
 
-        {/* 锚点 Tab —— WAI-ARIA tabs 模式：id/aria-controls 关联 + 左右方向键切换 */}
-        <div
-          className="flex items-center gap-1 border-b border-border bg-card/30 px-4"
-          role="tablist"
-          aria-label="分组编辑区块"
-          onKeyDown={(e) => {
-            if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-            e.preventDefault();
-            const next = tab === "basic" ? "members" : "basic";
-            setTab(next);
-            document.getElementById(`group-tab-${next}`)?.focus();
-          }}
-        >
-          {[
-            { k: "basic", label: "基本信息" },
-            { k: "members", label: `成员 (${draftItems.length})` },
-          ].map((t) => (
-            <button
-              key={t.k}
-              id={`group-tab-${t.k}`}
-              type="button"
-              role="tab"
-              aria-selected={tab === t.k}
-              aria-controls={`group-panel-${t.k}`}
-              tabIndex={tab === t.k ? 0 : -1}
-              onClick={() => setTab(t.k as typeof tab)}
-              className={cn(
-                "border-b-2 px-3 py-2 text-sm transition-colors",
-                tab === t.k
-                  ? "border-primary font-medium text-primary-text"
-                  : "border-transparent text-ink-muted hover:text-ink",
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        {/* 全屏双栏：左 = 可用渠道/模型选择器，右 = 分组配置 + 成员列表 */}
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          {/* ---------- 左栏：可用渠道与模型 ---------- */}
+          <aside className="flex h-[36vh] min-h-0 flex-col border-b border-border md:h-auto md:w-[42%] md:border-b-0 md:border-r">
+            <div className="flex items-center gap-1.5 border-b border-border px-4 py-2">
+              <span className="text-xs font-medium text-ink-muted">
+                可用渠道与模型
+              </span>
+              <span className="ml-auto text-[11px] text-ink-subtle">
+                点击添加到分组
+              </span>
+            </div>
+            <ChannelModelPicker
+              channels={channels ?? []}
+              groups={otherGroups}
+              addedModelIds={addedModelIds}
+              addedRefNames={addedRefNames}
+              onAdd={addItem}
+            />
+          </aside>
 
-        <DialogBody
-          className="space-y-4"
-          role="tabpanel"
-          id={`group-panel-${tab}`}
-          aria-labelledby={`group-tab-${tab}`}
-          tabIndex={0}
-        >
-          {tab === "basic" ? (
-            <>
-              <Field label="名称" required error={validateField(name, NAME_RULE) ?? undefined}>
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="例如：gpt-4o-prod"
-                  invalid={!!validateField(name, NAME_RULE)}
-                  aria-invalid={!!validateField(name, NAME_RULE)}
-                />
-              </Field>
-              <Field label="模式">
-                <div className="flex gap-2">
-                  {(["manual", "failover"] as GroupMode[]).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setMode(m)}
-                      className={cn(
-                        "rounded-control border px-3 py-1.5 text-sm",
-                        mode === m
-                          ? "border-primary bg-primary/10 text-primary-text"
-                          : "border-border text-ink-muted",
-                      )}
-                    >
-                      {MODE_LABELS[m]}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-
-              <div className="grid grid-cols-2 gap-3">
+          {/* ---------- 右栏：分组配置 + 成员 ---------- */}
+          <section className="flex min-h-0 flex-1 flex-col">
+            <div className="flex-1 space-y-4 overflow-y-auto p-4">
+              {/* 基本信息 */}
+              <div className="space-y-3">
+                <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">
+                  基本信息
+                </p>
                 <Field
-                  label="最大轮次"
-                  error={
-                    Number.isFinite(maxRounds) && maxRounds >= 1
-                      ? undefined
-                      : "最小为 1"
-                  }
+                  label="名称"
+                  required
+                  error={validateField(name, NAME_RULE) ?? undefined}
                 >
                   <Input
-                    type="number"
-                    min={1}
-                    value={maxRounds}
-                    onChange={(e) => setMaxRounds(Number(e.target.value))}
-                    invalid={!(Number.isFinite(maxRounds) && maxRounds >= 1)}
-                    aria-invalid={!(Number.isFinite(maxRounds) && maxRounds >= 1)}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="例如：gpt-4o-prod"
+                    invalid={!!validateField(name, NAME_RULE)}
+                    aria-invalid={!!validateField(name, NAME_RULE)}
                   />
                 </Field>
-                <Field
-                  label="成员冷却（秒）"
-                  error={
-                    Number.isFinite(cooldownSeconds) && cooldownSeconds >= 1
-                      ? undefined
-                      : "最小为 1"
-                  }
-                >
-                  <Input
-                    type="number"
-                    min={1}
-                    value={cooldownSeconds}
-                    onChange={(e) => setCooldownSeconds(Number(e.target.value))}
-                    invalid={
-                      !(Number.isFinite(cooldownSeconds) && cooldownSeconds >= 1)
-                    }
-                    aria-invalid={
-                      !(Number.isFinite(cooldownSeconds) && cooldownSeconds >= 1)
-                    }
-                  />
+                <Field label="模式">
+                  <div className="flex gap-2">
+                    {(["manual", "failover"] as GroupMode[]).map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setMode(m)}
+                        className={cn(
+                          "rounded-control border px-3 py-1.5 text-sm",
+                          mode === m
+                            ? "border-primary bg-primary/10 text-primary-text"
+                            : "border-border text-ink-muted",
+                        )}
+                      >
+                        {MODE_LABELS[m]}
+                      </button>
+                    ))}
+                  </div>
                 </Field>
               </div>
 
-              <Toggle
-                label="会话粘合"
-                description="同一会话的请求在粘合有效期内固定使用同一成员"
-                checked={sticky}
-                onChange={setSticky}
-              />
-              <Toggle
-                label="优先透传"
-                description="故障转移时优先选择与客户端协议相同的渠道直接透传"
-                checked={preferPassthrough}
-                onChange={setPreferPassthrough}
-              />
-              <Toggle
-                label="启用脱敏"
-                description="对本分组的请求启用脱敏（须同时全局开启才生效）"
-                checked={maskEnabled}
-                onChange={setMaskEnabled}
-              />
-
-              {!isNew && group && (
-                <div className="rounded-md border border-border bg-surface-subtle/30 p-3 text-xs text-ink-muted">
-                  <p>提示：切到「成员」Tab 可调整成员顺序、增删成员。</p>
+              {/* 路由参数 */}
+              <div className="space-y-3">
+                <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">
+                  路由参数
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field
+                    label="最大轮次"
+                    error={
+                      Number.isFinite(maxRounds) && maxRounds >= 1
+                        ? undefined
+                        : "最小为 1"
+                    }
+                  >
+                    <Input
+                      type="number"
+                      min={1}
+                      value={maxRounds}
+                      onChange={(e) => setMaxRounds(Number(e.target.value))}
+                      invalid={!(Number.isFinite(maxRounds) && maxRounds >= 1)}
+                      aria-invalid={!(Number.isFinite(maxRounds) && maxRounds >= 1)}
+                    />
+                  </Field>
+                  <Field
+                    label="成员冷却（秒）"
+                    error={
+                      Number.isFinite(cooldownSeconds) && cooldownSeconds >= 1
+                        ? undefined
+                        : "最小为 1"
+                    }
+                  >
+                    <Input
+                      type="number"
+                      min={1}
+                      value={cooldownSeconds}
+                      onChange={(e) => setCooldownSeconds(Number(e.target.value))}
+                      invalid={
+                        !(Number.isFinite(cooldownSeconds) && cooldownSeconds >= 1)
+                      }
+                      aria-invalid={
+                        !(Number.isFinite(cooldownSeconds) && cooldownSeconds >= 1)
+                      }
+                    />
+                  </Field>
                 </div>
-              )}
-            </>
-          ) : (
-            <MembersTab
-              items={draftItems}
-              channels={channels ?? []}
-              groups={(groups ?? []).filter(
-                (g) => g.id !== (group && group !== "new" ? group.id : 0),
-              )}
-              mode={mode}
-              activeItemId={activeItemId}
-              onActiveChange={setActiveItemId}
-              onMove={moveItem}
-              onRemove={removeItem}
-              onAdd={addItem}
-            />
-          )}
-        </DialogBody>
+
+                <Toggle
+                  label="会话粘合"
+                  description="同一会话的请求在粘合有效期内固定使用同一成员"
+                  checked={sticky}
+                  onChange={setSticky}
+                />
+                <Toggle
+                  label="优先透传"
+                  description="故障转移时优先选择与客户端协议相同的渠道直接透传"
+                  checked={preferPassthrough}
+                  onChange={setPreferPassthrough}
+                />
+                <Toggle
+                  label="启用脱敏"
+                  description="对本分组的请求启用脱敏（须同时全局开启才生效）"
+                  checked={maskEnabled}
+                  onChange={setMaskEnabled}
+                />
+              </div>
+
+              {/* 成员列表 */}
+              <div className="space-y-2 border-t border-border pt-4">
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">
+                    成员
+                  </p>
+                  <Pill tone="neutral">{draftItems.length}</Pill>
+                  <span className="text-[11px] text-ink-subtle">
+                    {mode === "failover" ? "按顺序故障转移" : "手动指定当前成员"}
+                  </span>
+                </div>
+
+                <ul className="space-y-1.5" role="list">
+                  {draftItems.length === 0 ? (
+                    <li className="rounded-md bg-surface-subtle/40 p-6 text-center text-xs text-ink-muted">
+                      还没有成员，从左侧点击渠道模型或引用分组来添加
+                    </li>
+                  ) : (
+                    draftItems.map((it, idx) => {
+                      const channel = it.channel_model
+                        ? channelById.get(it.channel_model.channel_id)
+                        : undefined;
+                      const label = it.ref_group_name
+                        ? `→ 引用：${it.ref_group_name}`
+                        : it.channel_model?.name
+                          ? `${channel?.name ?? "?"} → ${it.channel_model.name}（#${it.channel_model_id}）`
+                          : `渠道模型 #${it.channel_model_id}`;
+                      const channelDisabled =
+                        !it.ref_group_name &&
+                        channel !== undefined &&
+                        !channel.enabled;
+                      return (
+                        <li
+                          key={it.client_uid}
+                          className={cn(
+                            "flex items-center gap-2 rounded-md border border-border bg-card/60 px-2.5 py-1.5",
+                            channelDisabled && "opacity-70",
+                          )}
+                        >
+                          {mode === "manual" ? (
+                            <label className="flex shrink-0 items-center gap-1 text-[11px] text-ink-muted">
+                              <input
+                                type="radio"
+                                name="active-group-item"
+                                checked={it.id > 0 && activeItemId === it.id}
+                                disabled={it.id === 0}
+                                onChange={() => it.id > 0 && setActiveItemId(it.id)}
+                                aria-label={`设为当前成员 ${label}`}
+                                className="h-3.5 w-3.5 accent-primary"
+                              />
+                              当前
+                            </label>
+                          ) : null}
+                          <Pill tone="neutral">#{it.priority}</Pill>
+                          <span className="mono flex-1 truncate text-sm text-ink">
+                            {label}
+                          </span>
+                          {channelDisabled && (
+                            <Pill tone="danger" className="text-[10px]">
+                              已停用
+                            </Pill>
+                          )}
+                          {it.id !== 0 && (
+                            <Pill tone="info" className="text-[10px]">
+                              已保存
+                            </Pill>
+                          )}
+                          <div className="flex items-center gap-0.5">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => moveItem(it.client_uid, -1)}
+                              disabled={idx === 0}
+                              aria-label="上移"
+                            >
+                              <ChevronUp className="h-3.5 w-3.5" aria-hidden />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => moveItem(it.client_uid, 1)}
+                              disabled={idx === draftItems.length - 1}
+                              aria-label="下移"
+                            >
+                              <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                              onClick={() => removeItem(it.client_uid)}
+                              aria-label="移除"
+                            >
+                              <X className="h-3.5 w-3.5" aria-hidden />
+                            </Button>
+                          </div>
+                        </li>
+                      );
+                    })
+                  )}
+                </ul>
+              </div>
+            </div>
+          </section>
+        </div>
+
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={onClose}>
             取消
@@ -870,216 +979,169 @@ function GroupEditor({
 }
 
 /**
- * Group 成员编辑子面板
- *  - 显示当前 draft 顺序（按 priority 升序）
- *  - 支持上移/下移（改 priority）和删除
- *  - 新增：渠道模型（从所有 enabled 渠道拉取）或引用其他分组
- *  - 实际写回时在 buildMemberDiff() 拆成 items_to_add/update/delete
+ * 左栏选择器：列出所有渠道及其模型，点击即加入分组成员。
+ *  - 顶部搜索框按渠道名 / 模型名过滤
+ *  - 停用渠道保留（方便提前配置备用成员），标注「已停用」
+ *  - 已在当前分组中的模型 / 引用显示 ✓ 标记（仍可重复添加）
+ *  - 底部「引用其他分组」区列出可被引用的分组
  */
-function MembersTab({
-  items,
+function ChannelModelPicker({
   channels,
   groups,
-  mode,
-  activeItemId,
-  onActiveChange,
-  onMove,
-  onRemove,
+  addedModelIds,
+  addedRefNames,
   onAdd,
 }: {
-  items: DraftGroupItem[];
   channels: Channel[];
   groups: Group[];
-  mode: GroupMode;
-  activeItemId: number;
-  onActiveChange: (id: number) => void;
-  onMove: (clientUid: string, dir: -1 | 1) => void;
-  onRemove: (clientUid: string) => void;
+  addedModelIds: Set<number>;
+  addedRefNames: Set<string>;
   onAdd: (it: { channel_model_id: number; ref_group_name: string }) => void;
 }) {
-  const [refName, setRefName] = useState("");
-  const [selectedModel, setSelectedModel] = useState("");
+  const [search, setSearch] = useState("");
 
-  // 把所有渠道的所有模型展开成下拉选项；停用渠道也保留，方便提前配置备用成员。
-  const modelOptions = channels.flatMap((c) =>
-      c.models.map((m) => ({
-        value: `c:${c.id}:${m.id}`,
-        label: `${c.name}${c.enabled ? "" : "（已停用）"} → ${m.name}`,
-        channel_model_id: m.id,
-      })),
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return channels;
+    return channels.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.models.some((m) => m.name.toLowerCase().includes(q)),
     );
-
-  // channel_model 只有 channel_id，渠道名靠 channels 列表反查；
-  // 引用成员（ref_group_name）解析到其他分组，不直接绑定渠道，单独展示。
-  const channelById = useMemo(
-    () => new Map(channels.map((c) => [c.id, c])),
-    [channels],
-  );
+  }, [channels, search]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-ink-muted">
-          {items.length} 个成员；故障转移模式下按顺序选择
-        </p>
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* 搜索 */}
+      <div className="border-b border-border px-3 py-2">
+        <label className="relative block">
+          <Search
+            className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted"
+            aria-hidden
+          />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="搜索渠道或模型…"
+            className="h-8 pl-7"
+            aria-label="搜索渠道或模型"
+          />
+        </label>
       </div>
 
-      <ul className="space-y-1.5" role="list">
-        {items.length === 0 ? (
-          <li className="rounded-md bg-surface-subtle/40 p-4 text-center text-xs text-ink-muted">
-            还没有成员，从下方添加
-          </li>
+      {/* 渠道 → 模型 列表 */}
+      <div
+        className="flex-1 space-y-1.5 overflow-y-auto p-2"
+        role="list"
+        aria-label="选择渠道模型"
+      >
+        {filtered.length === 0 ? (
+          <p className="p-6 text-center text-xs text-ink-muted">
+            {search ? "没有匹配的渠道或模型" : "还没有可用渠道"}
+          </p>
         ) : (
-          items.map((it, idx) => {
-            const channel = it.channel_model
-              ? channelById.get(it.channel_model.channel_id)
-              : undefined;
-            const label = it.ref_group_name
-              ? `→ 引用：${it.ref_group_name}`
-              : it.channel_model?.name
-                ? `${channel?.name ?? "?"} → ${it.channel_model.name}（#${it.channel_model_id}）`
-                : `渠道模型 #${it.channel_model_id}`;
-            const itemKey = it.client_uid;
-            // 渠道级停用状态：停用成员仍可列出但不会被故障转移选中，徽标突出提示。
-            const channelDisabled =
-              !it.ref_group_name && channel !== undefined && !channel.enabled;
-            return (
-              <li
-                key={itemKey}
-                className={cn(
-                  "flex items-center gap-2 rounded-md border border-border bg-card/60 px-2.5 py-1.5",
-                  channelDisabled && "opacity-70",
-                )}
-              >
-                {mode === "manual" ? (
-                  <label className="flex shrink-0 items-center gap-1 text-[11px] text-ink-muted">
-                    <input
-                      type="radio"
-                      name="active-group-item"
-                      checked={it.id > 0 && activeItemId === it.id}
-                      disabled={it.id === 0}
-                      onChange={() => it.id > 0 && onActiveChange(it.id)}
-                      aria-label={`设为当前成员 ${label}`}
-                      className="h-3.5 w-3.5 accent-primary"
-                    />
-                    当前
-                  </label>
-                ) : null}
-                <Pill tone="neutral">#{it.priority}</Pill>
-                <span className="mono flex-1 truncate text-sm text-ink">
-                  {label}
+          filtered.map((channel) => (
+            <div
+              key={channel.id}
+              className="overflow-hidden rounded-md border border-border"
+            >
+              {/* 渠道头 */}
+              <div className="flex items-center gap-1.5 bg-surface-subtle/30 px-2.5 py-1.5">
+                <span
+                  className={cn(
+                    "flex-1 truncate text-sm font-medium",
+                    !channel.enabled && "text-ink-muted",
+                  )}
+                >
+                  {channel.name}
                 </span>
-                {channelDisabled && (
+                <Pill tone="neutral" className="text-[10px]">
+                  {PROVIDER_LABELS[channel.type] ?? channel.type}
+                </Pill>
+                {!channel.enabled && (
                   <Pill tone="danger" className="text-[10px]">
                     已停用
                   </Pill>
                 )}
-                {it.id !== 0 && (
-                  <Pill tone="info" className="text-[10px]">
-                    已保存
-                  </Pill>
+              </div>
+              {/* 模型行：点击添加 */}
+              <div className="border-t border-border/60">
+                {channel.models.length === 0 ? (
+                  <p className="px-2.5 py-1.5 text-[11px] text-ink-subtle">
+                    无模型
+                  </p>
+                ) : (
+                  channel.models.map((m) => {
+                    const added = addedModelIds.has(m.id);
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() =>
+                          onAdd({ channel_model_id: m.id, ref_group_name: "" })
+                        }
+                        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-primary/[0.06] active:bg-primary/[0.1]"
+                        aria-label={`添加 ${channel.name} ${m.name}`}
+                      >
+                        <Plus
+                          className="h-3.5 w-3.5 shrink-0 text-ink-muted"
+                          aria-hidden
+                        />
+                        <span className="mono flex-1 truncate">{m.name}</span>
+                        {added && (
+                          <Check
+                            className="h-3.5 w-3.5 shrink-0 text-emerald-500"
+                            aria-hidden
+                          />
+                        )}
+                      </button>
+                    );
+                  })
                 )}
-                <div className="flex items-center gap-0.5">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => onMove(it.client_uid, -1)}
-                    disabled={idx === 0}
-                    aria-label="上移"
-                  >
-                    <ChevronUp className="h-3.5 w-3.5" aria-hidden />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => onMove(it.client_uid, 1)}
-                    disabled={idx === items.length - 1}
-                    aria-label="下移"
-                  >
-                    <ChevronDown className="h-3.5 w-3.5" aria-hidden />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                    onClick={() => onRemove(it.client_uid)}
-                    aria-label="移除"
-                  >
-                    <X className="h-3.5 w-3.5" aria-hidden />
-                  </Button>
-                </div>
-              </li>
-            );
-          })
-        )}
-      </ul>
-
-      <div className="space-y-2 border-t border-border pt-4">
-        <p className="text-xs font-medium text-ink-muted">添加渠道模型成员</p>
-        <div className="flex gap-2">
-          <select
-            className="h-8 flex-1 rounded-control border border-border bg-card px-2 text-sm"
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            aria-label="选择渠道模型"
-          >
-            <option value="">选择渠道模型</option>
-            {modelOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={!selectedModel}
-            onClick={() => {
-              const opt = modelOptions.find((o) => o.value === selectedModel);
-              if (opt) {
-                onAdd({ channel_model_id: opt.channel_model_id, ref_group_name: "" });
-                setSelectedModel("");
-              }
-            }}
-          >
-            <Plus className="h-3.5 w-3.5" aria-hidden />
-            添加
-          </Button>
-        </div>
-
-        {groups.length > 0 && (
-          <>
-            <p className="text-xs font-medium text-ink-muted">或引用其他分组</p>
-            <div className="flex gap-2">
-              <select
-                className="h-8 flex-1 rounded-control border border-border bg-card px-2 text-sm"
-                value={refName}
-                onChange={(e) => setRefName(e.target.value)}
-                aria-label="选择被引用分组"
-              >
-                <option value="">选择被引用分组</option>
-                {groups.map((g) => (
-                  <option key={g.id} value={g.name}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={!refName}
-                onClick={() => {
-                  onAdd({ channel_model_id: 0, ref_group_name: refName });
-                  setRefName("");
-                }}
-              >
-                <Plus className="h-3.5 w-3.5" aria-hidden />
-                引用
-              </Button>
+              </div>
             </div>
-          </>
+          ))
+        )}
+
+        {/* 引用其他分组 */}
+        {groups.length > 0 && (
+          <div className="mt-2 overflow-hidden rounded-md border border-border">
+            <div className="flex items-center gap-1.5 bg-surface-subtle/30 px-2.5 py-1.5">
+              <CornerDownLeft
+                className="h-3.5 w-3.5 text-ink-muted"
+                aria-hidden
+              />
+              <span className="flex-1 text-sm font-medium">引用其他分组</span>
+            </div>
+            <div className="border-t border-border/60">
+              {groups.map((g) => {
+                const added = addedRefNames.has(g.name);
+                return (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() =>
+                      onAdd({ channel_model_id: 0, ref_group_name: g.name })
+                    }
+                    className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-primary/[0.06] active:bg-primary/[0.1]"
+                    aria-label={`引用分组 ${g.name}`}
+                  >
+                    <Plus
+                      className="h-3.5 w-3.5 shrink-0 text-ink-muted"
+                      aria-hidden
+                    />
+                    <span className="mono flex-1 truncate">→ {g.name}</span>
+                    {added && (
+                      <Check
+                        className="h-3.5 w-3.5 shrink-0 text-emerald-500"
+                        aria-hidden
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
     </div>

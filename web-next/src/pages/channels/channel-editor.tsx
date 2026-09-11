@@ -40,7 +40,6 @@ import { cn, NAME_RULE, URL_RULE, validateField } from "@/lib/utils";
 import { PROVIDER_LABELS } from "./constants";
 import {
   Dialog,
-  DialogBody,
 
   DialogContent,
   DialogDescription,
@@ -336,7 +335,7 @@ export function ChannelEditor({
     () => new Set(),
   );
 
-  // ---- 按密钥测试（对齐 NovaVei 1bf0487 的 legacy 能力）----
+  // ---- 按密钥测试（对齐 NovaVeil 1bf0487 的 legacy 能力）----
   // testKeyID 按模型测试使用的密钥：空串 = 默认（第一把健康 Key），非空为
   // 已保存密钥行的后端 id（测试会绕过该 Key 的冷却）。
   const [testKeyID, setTestKeyID] = useState("");
@@ -565,8 +564,8 @@ export function ChannelEditor({
         onClose();
       }}
     >
-      <DialogContent variant="sheet">
-        <DialogHeader>
+      <DialogContent variant="fullscreen">
+        <DialogHeader className="pr-12">
           <DialogTitle>{isNew ? "新建渠道" : `编辑：${draft.name}`}</DialogTitle>
           <DialogDescription>
             {inFetchMode
@@ -575,99 +574,107 @@ export function ChannelEditor({
           </DialogDescription>
         </DialogHeader>
 
-        {/* 顶部锚点 Tab —— 选择模式下隐藏，避免视觉杂乱；窄视口横向滚动 */}
-        {!inFetchMode && (
-          <div className="flex items-center gap-1 overflow-x-auto border-b border-border bg-card/30 px-4">
-            {[
-              { k: "cred", label: "凭据" },
-              { k: "models", label: `模型 (${draft.models.length})` },
-              { k: "limits", label: "限制" },
-              { k: "advanced", label: "高级" },
-            ].map((t) => (
-              <button
-                key={t.k}
-                onClick={() => setTab(t.k as typeof tab)}
-                className={cn(
-                  "border-b-2 px-3 py-2 text-sm transition-colors",
-                  tab === t.k
-                    ? "border-primary font-medium text-primary-text"
-                    : "border-transparent text-ink-muted hover:text-ink",
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <DialogBody>
-          {inFetchMode ? (
-            <FetchPicker
-              fetched={fetchedForSelect}
-              checked={fetchChecked}
-              existing={new Set(draft.models.map((m) => m.name))}
-              onToggle={toggleFetchChecked}
-              onToggleAll={toggleFetchAll}
-              onConfirm={confirmFetchSelection}
-              onCancel={cancelFetchSelection}
-            />
-          ) : (
-            <>
-              {tab === "cred" && (
-                <CredTab
-                  draft={draft}
-                  update={update}
-                  setNewTag={setNewTag}
-                  newTag={newTag}
-                  channelId={isNew ? undefined : channel!.id}
-                  errors={{
-                    name: nameError ?? undefined,
-                    base_url: urlError ?? undefined,
-                  }}
-                />
-              )}
-              {tab === "models" && (
-                <ModelsTab
-                  draft={draft}
-                  update={update}
-                  newModel={newModel}
-                  setNewModel={setNewModel}
-                  onFetch={() => {
-                    if (!draft.base_url.trim()) {
-                      toast.warning("请先填写 Base URL 再拉取模型");
-                      return;
-                    }
-                    fetchMut.mutate();
-                  }}
-                  fetching={fetchMut.isPending}
-                  handleTestModel={handleTestModel}
-                  testAllModels={testAllModels}
-                  testCheckedModels={testCheckedModels}
-                  toggleTestModelChecked={toggleTestModelChecked}
-                  toggleAllTestModels={toggleAllTestModels}
-                  checkedTestModels={checkedTestModels}
-                  testingModels={testingModels}
-                  testingAll={testingAll}
-                  modelTestResults={modelTestResults}
-                  savedKeyOptions={savedKeyOptions}
-                  testKeyID={testKeyID}
-                  onTestKeyChange={handleTestKeyChange}
-                  testableKeyCount={testableKeyCount}
-                  keyTests={keyTests}
-                  keyTestRunning={keyTestRunning}
-                  keyTestUsedModel={keyTestUsedModel}
-                  onKeyTest={handleKeyTest}
-                />
-              )}
-              {tab === "limits" && (
-                <LimitsTab draft={draft} update={update} />
-              )}
-              {tab === "advanced" && (
-                <AdvancedTab draft={draft} update={update} />
-              )}
-            </>
+        {/* 全屏双栏：左 = 分区导航，右 = 分区内容；拉取选择模式下导航隐藏 */}
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          {/* ---------- 左栏：垂直分区导航 ---------- */}
+          {!inFetchMode && (
+            <aside className="flex shrink-0 flex-col border-b border-border md:h-auto md:w-[180px] md:border-b-0 md:border-r">
+              <nav className="flex gap-1 overflow-x-auto p-2 md:flex-col md:overflow-y-auto">
+                {[
+                  { k: "cred", label: "凭据" },
+                  { k: "models", label: `模型 (${draft.models.length})` },
+                  { k: "limits", label: "限制" },
+                  { k: "advanced", label: "高级" },
+                ].map((t) => (
+                  <button
+                    key={t.k}
+                    onClick={() => setTab(t.k as typeof tab)}
+                    className={cn(
+                      "shrink-0 rounded-control px-3 py-2 text-left text-sm transition-colors md:w-full",
+                      tab === t.k
+                        ? "bg-primary/10 font-medium text-primary-text"
+                        : "text-ink-muted hover:bg-surface-subtle/50 hover:text-ink",
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </nav>
+            </aside>
           )}
-        </DialogBody>
+
+          {/* ---------- 右栏：分区内容 ---------- */}
+          <section className="flex min-h-0 flex-1 flex-col">
+            <div className="flex-1 overflow-y-auto p-4">
+              {inFetchMode ? (
+                <FetchPicker
+                  fetched={fetchedForSelect}
+                  checked={fetchChecked}
+                  existing={new Set(draft.models.map((m) => m.name))}
+                  onToggle={toggleFetchChecked}
+                  onToggleAll={toggleFetchAll}
+                  onConfirm={confirmFetchSelection}
+                  onCancel={cancelFetchSelection}
+                />
+              ) : (
+                <>
+                  {tab === "cred" && (
+                    <CredTab
+                      draft={draft}
+                      update={update}
+                      setNewTag={setNewTag}
+                      newTag={newTag}
+                      channelId={isNew ? undefined : channel!.id}
+                      errors={{
+                        name: nameError ?? undefined,
+                        base_url: urlError ?? undefined,
+                      }}
+                    />
+                  )}
+                  {tab === "models" && (
+                    <ModelsTab
+                      draft={draft}
+                      update={update}
+                      newModel={newModel}
+                      setNewModel={setNewModel}
+                      onFetch={() => {
+                        if (!draft.base_url.trim()) {
+                          toast.warning("请先填写 Base URL 再拉取模型");
+                          return;
+                        }
+                        fetchMut.mutate();
+                      }}
+                      fetching={fetchMut.isPending}
+                      handleTestModel={handleTestModel}
+                      testAllModels={testAllModels}
+                      testCheckedModels={testCheckedModels}
+                      toggleTestModelChecked={toggleTestModelChecked}
+                      toggleAllTestModels={toggleAllTestModels}
+                      checkedTestModels={checkedTestModels}
+                      testingModels={testingModels}
+                      testingAll={testingAll}
+                      modelTestResults={modelTestResults}
+                      savedKeyOptions={savedKeyOptions}
+                      testKeyID={testKeyID}
+                      onTestKeyChange={handleTestKeyChange}
+                      testableKeyCount={testableKeyCount}
+                      keyTests={keyTests}
+                      keyTestRunning={keyTestRunning}
+                      keyTestUsedModel={keyTestUsedModel}
+                      onKeyTest={handleKeyTest}
+                    />
+                  )}
+                  {tab === "limits" && (
+                    <LimitsTab draft={draft} update={update} />
+                  )}
+                  {tab === "advanced" && (
+                    <AdvancedTab draft={draft} update={update} />
+                  )}
+                </>
+              )}
+            </div>
+          </section>
+        </div>
 
         {/* Footer —— 选择模式下隐藏 */}
         {!inFetchMode && (

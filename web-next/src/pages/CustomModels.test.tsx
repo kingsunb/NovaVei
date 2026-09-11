@@ -256,7 +256,7 @@ describe("<CustomModelsPage /> 搜索与排序", () => {
     render(<CustomModelsPage />, { wrapper: Wrapper });
     await waitFor(() => screen.getByText("alpha-bot"));
 
-    const input = screen.getByLabelText("排序 alpha-bot") as HTMLInputElement;
+    const input = screen.getByLabelText("优先级 alpha-bot") as HTMLInputElement;
     expect(input.value).toBe("5");
     await user.clear(input);
     await user.type(input, "-10");

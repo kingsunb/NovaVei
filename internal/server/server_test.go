@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kingsunb/NovaVei/internal/conf"
+	"github.com/kingsunb/NovaVeil/internal/conf"
 )
 
 // setServerConf 把全局配置指到 127.0.0.1:port, 测试结束还原。

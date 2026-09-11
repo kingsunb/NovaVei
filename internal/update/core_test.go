@@ -11,13 +11,13 @@ import (
 func TestReplaceExecutable(t *testing.T) {
 	dir := t.TempDir()
 
-	execPath := filepath.Join(dir, "novavei")
+	execPath := filepath.Join(dir, "novaveil")
 	oldContent := []byte("old binary content")
 	if err := os.WriteFile(execPath, oldContent, 0o755); err != nil {
 		t.Fatalf("write current exec: %v", err)
 	}
 
-	newExec := filepath.Join(dir, "new-novavei")
+	newExec := filepath.Join(dir, "new-novaveil")
 	newContent := []byte("new binary content")
 	if err := os.WriteFile(newExec, newContent, 0o755); err != nil {
 		t.Fatalf("write new exec: %v", err)
@@ -54,12 +54,12 @@ func TestReplaceExecutable(t *testing.T) {
 func TestReplaceExecutablePreservesPermissions(t *testing.T) {
 	dir := t.TempDir()
 
-	execPath := filepath.Join(dir, "novavei")
+	execPath := filepath.Join(dir, "novaveil")
 	if err := os.WriteFile(execPath, []byte("old"), 0o700); err != nil {
 		t.Fatalf("write current exec: %v", err)
 	}
 
-	newExec := filepath.Join(dir, "new-novavei")
+	newExec := filepath.Join(dir, "new-novaveil")
 	if err := os.WriteFile(newExec, []byte("new"), 0o644); err != nil {
 		t.Fatalf("write new exec: %v", err)
 	}
@@ -80,13 +80,13 @@ func TestReplaceExecutablePreservesPermissions(t *testing.T) {
 func TestReplaceExecutableRollsBackOnInstallFailure(t *testing.T) {
 	dir := t.TempDir()
 
-	execPath := filepath.Join(dir, "novavei")
+	execPath := filepath.Join(dir, "novaveil")
 	oldContent := []byte("old binary")
 	if err := os.WriteFile(execPath, oldContent, 0o755); err != nil {
 		t.Fatalf("write current exec: %v", err)
 	}
 
-	newExec := filepath.Join(dir, "new-novavei")
+	newExec := filepath.Join(dir, "new-novaveil")
 	if err := os.WriteFile(newExec, []byte("new binary"), 0o755); err != nil {
 		t.Fatalf("write new exec: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestReplaceExecutableRollsBackOnInstallFailure(t *testing.T) {
 func TestReplaceExecutableCleansStaleOld(t *testing.T) {
 	dir := t.TempDir()
 
-	execPath := filepath.Join(dir, "novavei")
+	execPath := filepath.Join(dir, "novaveil")
 	if err := os.WriteFile(execPath, []byte("current"), 0o755); err != nil {
 		t.Fatalf("write exec: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestFileSHA256(t *testing.T) {
 
 func TestWriteUpdateMarker(t *testing.T) {
 	dir := t.TempDir()
-	execPath := filepath.Join(dir, "novavei")
+	execPath := filepath.Join(dir, "novaveil")
 
 	if err := writeUpdateMarker(execPath); err != nil {
 		t.Fatalf("writeUpdateMarker: %v", err)
@@ -221,16 +221,16 @@ func TestWriteUpdateMarker(t *testing.T) {
 }
 
 func TestUpdateMarkerPath(t *testing.T) {
-	got := updateMarkerPath("/usr/local/bin/novavei")
-	want := "/usr/local/bin/novavei.update-pending"
+	got := updateMarkerPath("/usr/local/bin/novaveil")
+	want := "/usr/local/bin/novaveil.update-pending"
 	if got != want {
 		t.Fatalf("updateMarkerPath = %q, want %q", got, want)
 	}
 }
 
 func TestOldExecPath(t *testing.T) {
-	got := oldExecPath("/usr/local/bin/novavei")
-	want := "/usr/local/bin/novavei.old"
+	got := oldExecPath("/usr/local/bin/novaveil")
+	want := "/usr/local/bin/novaveil.old"
 	if got != want {
 		t.Fatalf("oldExecPath = %q, want %q", got, want)
 	}
