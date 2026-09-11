@@ -176,4 +176,44 @@ describe("openSSE 断连认证探活", () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it("非 JSON 数据仍回传原文", () => {
+    vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
+    const fn = vi.fn();
+    openSSE("/api/v1/x", { onMessage: fn });
+    const es = FakeEventSource.instances[0]!;
+    es.fireOpen();
+    // 直接触发 onmessage，绕过 fireMessage 的 JSON.stringify
+    es.onmessage?.(new MessageEvent("message", { data: "plain text" }));
+    expect(fn).toHaveBeenCalledWith("plain text", "plain text");
+  });
+
+  it("onMessage 回调抛错不破坏监听器", () => {
+    vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
+    const fn = vi.fn(() => {
+      throw new Error("boom");
+    });
+    openSSE("/api/v1/x", { onMessage: fn });
+    const es = FakeEventSource.instances[0]!;
+    es.fireOpen();
+    // 第一次抛错
+    es.fireMessage({ a: 1 });
+    expect(fn).toHaveBeenCalledTimes(1);
+    // 第二次仍能收到消息
+    es.fireMessage({ a: 2 });
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("error 后 close 清除重连定时器", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
+    const handle = openSSE("/api/v1/x", { onMessage: () => {} });
+    // 触发 error → 设置 timer
+    FakeEventSource.instances[0]!.fireError();
+    // close 时 timer 不为 null，走 clearTimeout 分支
+    handle.close();
+    vi.advanceTimersByTime(10_000);
+    expect(FakeEventSource.instances).toHaveLength(1);
+    vi.useRealTimers();
+  });
 });

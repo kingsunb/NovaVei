@@ -177,3 +177,25 @@ describe("shouldUseNewWeb", () => {
     expect(ratio).toBeLessThan(0.6);
   });
 });
+
+describe("异常分支", () => {
+  it("readLocalOverride 遇非法 JSON 静默返回 null", async () => {
+    mockFetchOnce({});
+    localStorage.setItem("nv-flags-override", "{bad json");
+    const f = await loadFlags();
+    expect(f).toBeDefined();
+  });
+
+  it("setLocalOverride 遇 localStorage 异常静默忽略", () => {
+    const desc = Object.getOwnPropertyDescriptor(localStorage, "setItem");
+    Object.defineProperty(localStorage, "setItem", {
+      value: () => {
+        throw new Error("quota");
+      },
+      configurable: true,
+      writable: true,
+    });
+    expect(() => setLocalOverride({ "ab-mode": "new" })).not.toThrow();
+    if (desc) Object.defineProperty(localStorage, "setItem", desc);
+  });
+});

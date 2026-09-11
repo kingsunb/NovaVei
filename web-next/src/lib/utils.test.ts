@@ -5,6 +5,7 @@ import {
   downloadJson,
   formatBytes,
   formatDatetimeLocal,
+  formatDuration,
   formatNumber,
   MODEL_RULE,
   NAME_RULE,
@@ -299,5 +300,30 @@ describe("NAME_RULE / URL_RULE / MODEL_RULE", () => {
 
   it("MODEL_RULE 拒非法字符", () => {
     expect(validateField("gpt 4o", MODEL_RULE)).toBe("模型名格式非法");
+  });
+});
+
+describe("formatDuration 小时格式", () => {
+  it("超过 1 小时显示 h*m 格式", () => {
+    const now = Date.now();
+    // 1 小时 5 分 3 秒前开始
+    const startedAt = new Date(now - (3600 + 300 + 3) * 1000).toISOString();
+    const result = formatDuration(
+      { status: "running", started_at: startedAt },
+      now,
+    );
+    expect(result).toContain("1h05m");
+  });
+});
+
+describe("validateDBDumpImport 异常分支", () => {
+  it("非法 JSON 被拒", () => {
+    expect(() => validateDBDumpImport("{bad json", 9)).toThrow(/JSON 解析失败/);
+  });
+
+  it("version 非数字被拒", () => {
+    expect(() =>
+      validateDBDumpImport('{"version":"abc"}', 16),
+    ).toThrow(/version 必须是数字/);
   });
 });
