@@ -85,6 +85,7 @@ type RequestState struct {
 	UpstreamType  string          `json:"upstream_type"`            // 最新一轮上游渠道的协议类型。
 	RelayMode     string          `json:"relay_mode"`               // 最新一轮转发方式: passthrough 同协议透传, converted 跨协议转换。
 	ProxyAddr     string          `json:"proxy_addr,omitempty"`     // 最新一轮使用的渠道代理完整地址(密码打码, 含 {account} 解析出的别名); 未走渠道代理为空。
+	Masked        bool            `json:"masked,omitempty"`         // 本次请求是否执行了脱敏(请求体占位符替换), 面板据此展示脱敏标记。
 	Sending       bool            `json:"sending"`                  // 最新一轮是否仍在等待上游响应。
 	Error         string          `json:"error,omitempty"`          // 最新一轮的失败原因, 请求结束后即为最终错误。
 	Class         ErrClass        `json:"class,omitempty"`          // 终态错误分类, 请求结束后写入。
@@ -94,6 +95,7 @@ type RequestState struct {
 	responseBody   string             // 聚合后的完整最终响应体, 同样按需拉取。
 	cancel         context.CancelFunc // 中止最新一轮上游请求, 仅在该轮等待响应期间非空。
 	stopRequested  bool               // 管理端请求整体终止标记: 置位后转发循环在最近的安全点退出, 不再发起任何新尝试。
+	stopCh         chan struct{}      // 管理端整体终止信号: StopRequest 中 close 一次, wait/select 据此立即唤醒而非等定时器到期。
 	roundStartedAt time.Time          // 最新一轮的开始时刻, 用于计算该轮尝试耗时。
 }
 
@@ -117,6 +119,9 @@ const maxFinished = 200 // 进程内最多保留的已结束请求数量, 需覆
 const errBriefLimit = 256     // 错误摘要的最大保留字节数, 超长按 UTF-8 边界截断。
 const maxAttempts = 200       // 单个请求最多保留的尝试轨迹条数, 超出后丢弃最旧记录。
 const maxFailureRecords = 200 // 失败环形缓冲容量, 仅保留摘要元数据, 不含请求体。
+
+// errAdminStopped 管理端对单个请求发起整体终止时的终态原因。
+var errAdminStopped = errors.New("管理端已停止请求")
 
 // maxBodyPreview 已结束请求常驻内存的请求体/响应体预览上限(字节)。
 // 完整报文仅在请求进行期间存在, 终态定稿后即截断, 避免大上下文负载下数百 MB 的长期驻留。
@@ -147,6 +152,7 @@ func newRequestState(model, body, clientIP, apiKeyRaw, keyName string) *RequestS
 		APIKey:    maskAPIKey(apiKeyRaw),
 		KeyName:   keyName,
 		body:      body,
+		stopCh:    make(chan struct{}),
 	}
 	requests[request.ID] = request
 	publishRequestLocked(request)
@@ -200,6 +206,7 @@ func (r RequestState) MarshalJSON() ([]byte, error) {
 		ClientFormat   string          `json:"client_format"`
 		UpstreamType   string          `json:"upstream_type"`
 		RelayMode      string          `json:"relay_mode"`
+		Masked         bool            `json:"masked,omitempty"`
 		Sending        bool            `json:"sending"`
 		Error          string          `json:"error,omitempty"`
 		Class          ErrClass        `json:"class,omitempty"`
@@ -219,6 +226,7 @@ func (r RequestState) MarshalJSON() ([]byte, error) {
 		KeyName: r.KeyName, Usage: r.Usage, UsageEstimated: r.UsageEstimated, Round: r.Round,
 		TargetChannel: r.TargetChannel, TargetModel: r.TargetModel, ThinkingLevel: r.ThinkingLevel,
 		ClientFormat: r.ClientFormat, UpstreamType: r.UpstreamType, RelayMode: r.RelayMode,
+		Masked: r.Masked,
 		Sending: r.Sending, Error: r.Error, Class: r.Class, Attempts: attempts,
 	})
 }
@@ -285,13 +293,22 @@ type RoundTarget struct {
 // StopRequest 请求整体终止: 置位终止标记并立即中止当前等待中的轮次。
 // 转发循环在最近的循环顶部检查该标记后以取消终态收尾, 不再发起新尝试。
 // 取消函数不从此处清零, 由 releaseRoundLifecycle 在定稿时统一释放, 避免在首帧后失去取消能力。
+// stopCh 同步关闭: 正阻塞在轮间 wait/RPM 等待的 goroutine 据此立即唤醒, 不必等定时器到期。
 func (r *RequestState) StopRequest() {
 	mu.Lock()
+	if r.stopRequested {
+		mu.Unlock()
+		return
+	}
 	r.stopRequested = true
 	cancel := r.cancel
+	ch := r.stopCh
 	mu.Unlock()
 	if cancel != nil {
 		cancel()
+	}
+	if ch != nil {
+		close(ch)
 	}
 }
 
@@ -411,13 +428,16 @@ func Interrupt(id uint64, round int) bool {
 	return true
 }
 
-// wait 在重新选择目标之前退避 seconds 秒; 客户端在退避期间断开时以取消终态定稿并返回 false。
+// wait 在重新选择目标之前退避 seconds 秒; 客户端在退避期间断开或管理端终止请求时以取消终态定稿并返回 false。
 func (r *RequestState) wait(ctx context.Context, seconds int) bool {
 	timer := time.NewTimer(time.Duration(seconds) * time.Second)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		r.markCanceled(ctx.Err(), "", nil)
+		return false
+	case <-r.stopCh:
+		r.markCanceled(errAdminStopped, "", nil)
 		return false
 	case <-timer.C:
 		return true

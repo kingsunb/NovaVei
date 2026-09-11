@@ -24,6 +24,7 @@ const MaskPage = lazy(() => import("@/pages/Mask"));
 const KeysPage = lazy(() => import("@/pages/Keys"));
 const LogsPage = lazy(() => import("@/pages/Logs"));
 const SettingsPage = lazy(() => import("@/pages/Settings"));
+const ChatPage = lazy(() => import("@/pages/Chat"));
 
 /**
  * 懒加载 fallback —— 与最终页面同形状的骨架屏
@@ -197,6 +198,14 @@ export default function App() {
           element={
             <LazyPage>
               <SettingsPage />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/chat"
+          element={
+            <LazyPage>
+              <ChatPage />
             </LazyPage>
           }
         />

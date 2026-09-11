@@ -480,6 +480,7 @@ export interface RequestState {
   client_format: string;
   upstream_type: string;
   relay_mode: "passthrough" | "converted";
+  masked?: boolean;
   sending: boolean;
   attempts?: AttemptRecord[];
 }
@@ -627,4 +628,22 @@ export interface MaskTestMatch {
 export interface MaskTestResult {
   masked: string;
   matches: MaskTestMatch[];
+}
+
+// ============================================================
+// 代理池
+// ============================================================
+
+/** 代理池条目，与后端 model.ProxyEntry 对齐。 */
+export interface ProxyEntry {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+}
+
+/** 代理测试结果，与后端 handlers.proxyTestResult 对齐。 */
+export interface ProxyTestResult {
+  ip: string;
+  elapsed: number;
 }

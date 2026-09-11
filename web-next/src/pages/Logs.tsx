@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Pause, Play, Trash2 } from "lucide-react";
+import {
+  ArrowDownToLine,
+  ArrowRight,
+  Brain,
+  Clock,
+  Cpu,
+  Loader2,
+  Pause,
+  Play,
+  Square,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { api, APIError } from "@/lib/api";
@@ -493,6 +504,11 @@ function LiveTable({
                     >
                       {r.relay_mode === "passthrough" ? "透传" : "转换"}
                     </Pill>
+                    {r.masked && (
+                      <Pill tone="info" className="ml-1">
+                        脱敏
+                      </Pill>
+                    )}
                   </div>
                   <div role="gridcell" className="mono truncate text-xs text-ink-muted">
                     {r.client_ip}
@@ -628,19 +644,20 @@ function TraceSheet({
   req: RequestState | null;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<"body" | "timeline" | "response" | "route">(
-    "timeline",
-  );
+  // 双列布局：左列切「请求体 / 分组路由」，右列时间线 + 响应始终可见。
+  const [leftTab, setLeftTab] = useState<"body" | "route">("body");
   const [body, setBody] = useState<string>("");
   const [response, setResponse] = useState<string>("");
-  const [loading, setLoading] = useState(false);
+  const [bodyLoading, setBodyLoading] = useState(false);
+  const [responseLoading, setResponseLoading] = useState(false);
   const attempts = req?.attempts ?? [];
-  // 切换请求时清空上次缓存的请求体/响应体，避免切到 body/response Tab 之前
-  // 误看到上一个请求的内容；effect 依赖 req.id 重置 loading 与文案。
+
+  // 切换请求时清空上次缓存的请求体/响应体。
   useEffect(() => {
     setBody("");
     setResponse("");
-    setLoading(false);
+    setBodyLoading(false);
+    setResponseLoading(false);
   }, [req?.id]);
 
   const stopMut = useMutation({
@@ -672,10 +689,11 @@ function TraceSheet({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // 请求体：弹窗打开即加载（不再等切 Tab）。
   useEffect(() => {
-    if (!req || tab !== "body") return;
+    if (!req) return;
     const myReqId = req.id;
-    setLoading(true);
+    setBodyLoading(true);
     let cancelled = false;
     api
       .getRequestBody(myReqId)
@@ -686,17 +704,18 @@ function TraceSheet({
         if (!cancelled) setBody("（拉取失败或请求体已截断）");
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setBodyLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [req, tab]);
+  }, [req?.id]);
 
+  // 响应体：终态才拉取（running / committed 展示等待指示）。
   useEffect(() => {
-    if (!req || tab !== "response") return;
+    if (!req || req.status === "running" || req.status === "committed") return;
     const myReqId = req.id;
-    setLoading(true);
+    setResponseLoading(true);
     let cancelled = false;
     api
       .getResponseBody(myReqId)
@@ -707,181 +726,297 @@ function TraceSheet({
         if (!cancelled) setResponse("（拉取失败或响应体已截断）");
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setResponseLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [req, tab]);
+  }, [req?.id, req?.status]);
 
   if (!req) return null;
+
+  const requestFailed = req.status === "failed" || req.status === "canceled";
+  const isRunning = req.status === "running" || req.status === "committed";
+  const cachedTokens = cacheTokensOf(req);
 
   return (
     <Dialog open={!!req} onOpenChange={(o) => !o && onClose()}>
       <DialogContent variant="fullscreen">
-        <DialogHeader className="pr-12">
-          <DialogTitle>
-            追踪 #{req.id} · {req.model} → {req.target_channel} → {req.target_model}
-          </DialogTitle>
-          <DialogDescription>
-            客户端 {req.client_ip} · 密钥{" "}
-            {req.key_name ?? (req.api_key ? `尾缀 ${req.api_key}` : "—")} ·{" "}
-            {new Date(req.started_at).toLocaleString("zh-CN")}
-          </DialogDescription>
-        </DialogHeader>
-
-        {/* 关键诊断信息：状态/耗时/用量/出口/协议链路一眼可读 */}
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-4 py-2 text-xs">
-          <Pill tone={STATE_TONE[req.status] ?? "neutral"}>
-            {STATE_LABEL[req.status] ?? req.status}
-          </Pill>
-          <Pill tone="neutral">耗时 {formatElapsedWithFirst(req)}</Pill>
-          <Pill tone="neutral">
-            tokens {formatNumber(req.usage.prompt_tokens)} /{" "}
-            {formatNumber(req.usage.completion_tokens)}
-            {cacheTokensOf(req) > 0 && (
-              <>
-                {" / 缓存"}
-                {formatNumber(cacheTokensOf(req))}
-              </>
+        {/* ---------- 富头部 ---------- */}
+        <div className="border-b border-border px-5 py-3">
+          <div className="flex items-center gap-2">
+            <DialogTitle className="text-sm font-semibold text-ink">
+              {req.model}
+            </DialogTitle>
+            {isRunning ? (
+              <Loader2 className="size-3.5 animate-spin text-ink-muted" />
+            ) : (
+              <ArrowRight className="size-3.5 text-ink-muted" />
             )}
-            {req.usage_estimated ? "（估算）" : ""}
-          </Pill>
-          <Pill tone={req.proxy_addr ? "info" : "neutral"}>
-            {req.proxy_addr ? `出口代理 ${req.proxy_addr}` : "直连（未走代理）"}
-          </Pill>
-          <Pill tone="neutral" className="mono text-[10px]">
-            {req.client_format} → {req.upstream_type}
-          </Pill>
-          <Pill tone={req.relay_mode === "passthrough" ? "success" : "warning"}>
-            {req.relay_mode === "passthrough" ? "协议透传" : "协议转换"}
-          </Pill>
+            <Pill tone="neutral" dot={false}>
+              {req.target_channel || "-"}
+            </Pill>
+            <span className="text-sm text-ink-muted">{req.target_model}</span>
+            {req.thinking_level && (
+              <Pill tone="info" dot={false}>
+                <Brain className="size-3" />
+                {req.thinking_level}
+              </Pill>
+            )}
+          </div>
+          <DialogDescription className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <Pill tone={STATE_TONE[req.status] ?? "neutral"} dot={false}>
+              {STATE_LABEL[req.status] ?? req.status}
+            </Pill>
+            <Pill tone="neutral" dot={false} className="mono text-[10px]">
+              {req.client_format} → {req.upstream_type}
+            </Pill>
+            <Pill
+              tone={req.relay_mode === "passthrough" ? "success" : "warning"}
+              dot={false}
+            >
+              {req.relay_mode === "passthrough" ? "协议透传" : "协议转换"}
+            </Pill>
+            {req.masked && (
+              <Pill tone="info" dot={false}>
+                已脱敏
+              </Pill>
+            )}
+            <Pill tone={req.proxy_addr ? "info" : "neutral"} dot={false}>
+              {req.proxy_addr ? `出口代理 ${req.proxy_addr}` : "直连（未走代理）"}
+            </Pill>
+            <span>· 客户端 {req.client_ip}</span>
+            <span>
+              · 密钥{" "}
+              {req.key_name ?? (req.api_key ? `尾缀 ${req.api_key}` : "—")}
+            </span>
+            <span>· {new Date(req.started_at).toLocaleString("zh-CN")}</span>
+          </DialogDescription>
         </div>
 
-        {/* 全屏双栏：左 = 分区导航，右 = 分区内容 */}
-        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-          {/* ---------- 左栏：垂直分区导航 ---------- */}
-          <aside className="flex shrink-0 flex-col border-b border-border md:h-auto md:w-[180px] md:border-b-0 md:border-r">
-            <nav className="flex gap-1 overflow-x-auto p-2 md:flex-col md:overflow-y-auto">
-              {[
-                { k: "timeline", label: `时间线 (${attempts.length})` },
-                { k: "route", label: "分组路由" },
-                { k: "body", label: "请求体" },
-                { k: "response", label: "响应体" },
-              ].map((t) => (
+        {/* ---------- 双列网格 ---------- */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-4 md:grid-cols-2">
+          {/* 左列：请求体 / 分组路由 */}
+          <div className="flex min-h-0 flex-col overflow-hidden rounded-card border border-border bg-surface-subtle/20">
+            <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-2">
+              {(["body", "route"] as const).map((t) => (
                 <button
-                  key={t.k}
-                  onClick={() => setTab(t.k as typeof tab)}
+                  key={t}
+                  onClick={() => setLeftTab(t)}
                   className={cn(
-                    "shrink-0 rounded-control px-3 py-2 text-left text-sm transition-colors md:w-full",
-                    tab === t.k
+                    "rounded-control px-2.5 py-1 text-xs transition-colors",
+                    leftTab === t
                       ? "bg-primary/10 font-medium text-primary-text"
-                      : "text-ink-muted hover:bg-surface-subtle/50 hover:text-ink",
+                      : "text-ink-muted hover:text-ink",
                   )}
                 >
-                  {t.label}
+                  {t === "body" ? "请求体" : "分组路由"}
                 </button>
               ))}
-            </nav>
-          </aside>
-
-          {/* ---------- 右栏：分区内容 ---------- */}
-          <section className="flex min-h-0 flex-1 flex-col">
-            <div className="flex-1 space-y-3 overflow-y-auto p-4">
-              {tab === "timeline" && (
-                <ol className="space-y-2">
-                  {attempts.length === 0 ? (
-                    <p className="py-6 text-center text-sm text-ink-muted">
-                      暂无尝试记录
-                    </p>
-                  ) : (
-                    attempts.map((a) => <AttemptLine key={a.seq} a={a} />)
-                  )}
-                </ol>
-              )}
-
-              {tab === "body" && (
-                <FormattedBody content={loading ? "" : body} loading={loading} />
-              )}
-
-              {tab === "response" && (
-                <FormattedBody content={loading ? "" : response} loading={loading} />
-              )}
-
-              {tab === "route" && req && <RouteTab req={req} attempts={attempts} />}
             </div>
-          </section>
+            <div className="min-h-0 flex-1 overflow-auto p-3">
+              {leftTab === "body" ? (
+                <FormattedBody
+                  content={bodyLoading ? "" : body}
+                  loading={bodyLoading}
+                />
+              ) : (
+                <RouteTab req={req} attempts={attempts} />
+              )}
+            </div>
+          </div>
+
+          {/* 右列：时间线 + 响应/错误 */}
+          <div className="flex min-h-0 flex-col gap-3">
+            {/* 时间线面板 */}
+            {attempts.length > 0 && (
+              <div
+                className="flex shrink flex-col overflow-hidden rounded-card border border-border bg-surface-subtle/20"
+                style={{ maxHeight: "45%" }}
+              >
+                <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3">
+                  <span className="text-sm font-medium text-ink">
+                    尝试时间线
+                  </span>
+                  <Pill tone="neutral" dot={false} className="ml-auto">
+                    {attempts.length}
+                  </Pill>
+                </div>
+                <div className="min-h-0 flex-1 overflow-auto">
+                  <ol className="divide-y divide-border">
+                    {attempts.map((a) => (
+                      <AttemptLine key={a.seq} a={a} />
+                    ))}
+                  </ol>
+                </div>
+              </div>
+            )}
+
+            {/* 响应 / 错误面板 */}
+            <div className="flex flex-1 flex-col overflow-hidden rounded-card border border-border bg-surface-subtle/20 min-h-0">
+              <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3">
+                <span className="text-sm font-medium text-ink">
+                  {requestFailed ? "错误信息" : "响应内容"}
+                </span>
+                {isRunning && (
+                  <div className="ml-auto flex items-center gap-1.5">
+                    {req.status === "running" &&
+                      req.sending &&
+                      req.round > 0 && (
+                        <button
+                          type="button"
+                          disabled={interruptMut.isPending}
+                          onClick={() =>
+                            interruptMut.mutate({
+                              id: req.id,
+                              round: req.round,
+                            })
+                          }
+                          title="仅中止当前一轮次；不终止整个请求"
+                          className="flex items-center gap-1.5 rounded-control px-2 py-1 text-xs text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
+                        >
+                          {interruptMut.isPending ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Square className="size-3.5" />
+                          )}
+                          中止轮次
+                        </button>
+                      )}
+                    <button
+                      type="button"
+                      disabled={stopMut.isPending}
+                      onClick={() => stopMut.mutate(req.id)}
+                      className="flex items-center gap-1.5 rounded-control px-2 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
+                    >
+                      {stopMut.isPending ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Square className="size-3.5 fill-destructive" />
+                      )}
+                      终止请求
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto p-3">
+                {isRunning ? (
+                  <div className="flex h-full items-center justify-center gap-2 text-xs text-ink-muted">
+                    <Loader2 className="size-4 animate-spin" />
+                    {req.status === "committed"
+                      ? "响应流式提交中…"
+                      : "等待响应…"}
+                  </div>
+                ) : (
+                  <FormattedBody
+                    content={responseLoading ? "" : response}
+                    loading={responseLoading}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
-        <DialogFooter>
-          {req && (req.status === "running" || req.status === "committed") && (
-            <>
-              {req.round > 0 && (
-                <Button
-                  variant="danger-outline"
-                  size="sm"
-                  loading={interruptMut.isPending}
-                  onClick={() =>
-                    interruptMut.mutate({ id: req.id, round: req.round })
-                  }
-                  title="仅中止当前一轮次；不终止整个请求"
-                >
-                  中止当前轮次
-                </Button>
+        {/* ---------- 底部彩色指标 + 关闭 ---------- */}
+        <div className="flex flex-wrap items-center gap-4 border-t border-border px-5 py-2.5 text-xs text-ink-muted">
+          <div className="flex items-center gap-1.5">
+            <Clock className="size-3.5 text-blue-500" />
+            <span className="tabular-nums">
+              {new Date(req.started_at).toLocaleTimeString("zh-CN")}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Cpu className="size-3.5 text-blue-500" />
+            <span>{formatElapsedWithFirst(req)}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <ArrowDownToLine className="size-3.5 text-emerald-500" />
+            <span className="tabular-nums">
+              tokens {formatNumber(req.usage.prompt_tokens)} /{" "}
+              {formatNumber(req.usage.completion_tokens)}
+              {cachedTokens > 0 && (
+                <>
+                  {" / 缓存"}
+                  {formatNumber(cachedTokens)}
+                </>
               )}
-              <Button
-                variant="destructive"
-                size="sm"
-                loading={stopMut.isPending}
-                onClick={() => stopMut.mutate(req.id)}
-              >
-                终止请求
+            </span>
+            {req.usage_estimated && (
+              <span className="text-ink-subtle">（估算）</span>
+            )}
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <DialogClose asChild>
+              <Button variant="ghost" size="sm">
+                关闭
               </Button>
-            </>
-          )}
-          <DialogClose asChild>
-            <Button variant="ghost" size="sm">
-              关闭
-            </Button>
-          </DialogClose>
-        </DialogFooter>
+            </DialogClose>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
 }
 
 function AttemptLine({ a }: { a: AttemptRecord }) {
+  const outcomeTone =
+    a.outcome === "success"
+      ? "success"
+      : a.outcome === "failed"
+        ? "danger"
+        : "neutral";
+  const outcomeLabel =
+    a.outcome === "success"
+      ? "成功"
+      : a.outcome === "failed"
+        ? "失败"
+        : "已取消";
   return (
-    <li className="flex items-center gap-3 rounded-md border border-border bg-card/60 px-3 py-2">
-      <Pill tone={a.outcome === "success" ? "success" : a.outcome === "failed" ? "danger" : "neutral"}>
-        #{a.seq}
-      </Pill>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-ink">{a.channel_name}</span>
-          <span className="text-ink-muted">→</span>
-          <span className="mono text-ink-muted">{a.model}</span>
-          {a.key_label && (
-            <Pill tone="neutral" className="text-[10px]">
-              {a.key_label}
+    <li className="flex flex-col gap-1.5 px-3 py-2.5 text-xs">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="shrink-0 tabular-nums text-ink-muted">
+          #{a.seq}
+        </span>
+        <span className="font-semibold text-ink truncate">
+          {a.channel_name}
+        </span>
+        {a.key_label && (
+          <Pill tone="neutral" dot={false} className="text-[10px]">
+            {a.key_label}
+          </Pill>
+        )}
+        <span className="mono truncate text-ink-muted" title={a.model}>
+          {a.model}
+        </span>
+        <span className="ml-auto flex shrink-0 items-center gap-1.5 tabular-nums text-ink-muted">
+          {a.latency_ms > 0 && (
+            <>
+              <Clock className="size-3" />
+              <span>{a.latency_ms}ms</span>
+            </>
+          )}
+          {a.latency_ms === 0 && <span>—</span>}
+          <Pill tone={outcomeTone} dot={false}>
+            {outcomeLabel}
+          </Pill>
+        </span>
+      </div>
+      {a.err_brief && (
+        <div className="flex items-start gap-1.5 min-w-0">
+          {a.err_class && (
+            <Pill tone="danger" dot={false} className="text-[10px]">
+              {a.err_class}
             </Pill>
           )}
-          {a.err_class && <Pill tone="danger">{a.err_class}</Pill>}
-        </div>
-        {/* 出口代理只在请求级（RequestState.proxy_addr）下发；后端 AttemptRecord 无此字段，
-            曾在这里渲染的每轮「出口」chip 永远不可达，已删 */}
-        {a.err_brief && (
-          <p className="mt-0.5 truncate text-xs text-ink-muted">
+          <p
+            className="min-w-0 flex-1 text-[11px] leading-relaxed text-destructive/90 line-clamp-2 whitespace-pre-wrap"
+            title={a.err_brief}
+          >
             {a.err_brief}
           </p>
-        )}
-      </div>
-      <span
-        className="num text-xs text-ink-muted"
-        title="本轮从发起到终态的耗时"
-      >
-        {a.latency_ms > 0 ? `${a.latency_ms}ms` : "—"}
-      </span>
+        </div>
+      )}
     </li>
   );
 }
@@ -950,6 +1085,9 @@ function RouteTab({
           <div className="flex items-center gap-2">
             <span className="text-ink-muted min-w-[80px]">中继方式</span>
             <Pill tone="neutral">{req.relay_mode === "passthrough" ? "透传" : "转换"}</Pill>
+            {req.masked && (
+              <Pill tone="info">已脱敏</Pill>
+            )}
           </div>
         </div>
       </div>

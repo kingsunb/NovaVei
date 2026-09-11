@@ -14,6 +14,8 @@ import {
   type HeaderTemplate,
   type DBImportResult,
   type GroupTestResult,
+  type ProxyEntry,
+  type ProxyTestResult,
 } from "@/lib/types";
 import {
   Card,
@@ -63,6 +65,7 @@ type Section =
   | "appearance"
   | "account"
   | "system"
+  | "proxy-pool"
   | "header-templates"
   | "conversation"
   | "retention"
@@ -76,6 +79,7 @@ const SECTIONS: { id: Section; label: string }[] = [
   { id: "appearance", label: "外观" },
   { id: "account", label: "账户" },
   { id: "system", label: "系统" },
+  { id: "proxy-pool", label: "代理池" },
   { id: "header-templates", label: "Header 模板" },
   { id: "conversation", label: "对话留存" },
   { id: "retention", label: "错误日志保留" },
@@ -111,6 +115,7 @@ export default function SettingsPage() {
         {active === "appearance" && <AppearanceSection />}
         {active === "account" && <AccountSection />}
         {active === "system" && <SystemSection />}
+        {active === "proxy-pool" && <ProxyPoolSection />}
         {active === "header-templates" && <HeaderTemplatesSection />}
         {active === "conversation" && <ConversationSection />}
         {active === "retention" && <RetentionSection />}
@@ -359,6 +364,236 @@ function SystemSection() {
             </Button>
           </div>
         </Field>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------- 代理池 ----------------
+
+/** parseProxyPool 从设置值解析代理列表; 非法或空时返回空数组。 */
+function parseProxyPool(raw?: string): ProxyEntry[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function ProxyPoolSection() {
+  const qc = useQueryClient();
+  const { data: settings } = useQuery({
+    queryKey: ["settings", "list"],
+    queryFn: api.listSettings,
+  });
+
+  const [proxies, setProxies] = useState<ProxyEntry[]>([]);
+  const [hydrated, setHydrated] = useState(false);
+  // 每条代理的测试结果: id -> { ip, elapsed } | error string | "loading"
+  const [testResults, setTestResults] = useState<
+    Record<string, ProxyTestResult | { error: string } | "loading">
+  >({});
+
+  useEffect(() => {
+    if (!settings || hydrated) return;
+    setProxies(
+      parseProxyPool(
+        settings.find((s) => s.key === "proxy_pool")?.value,
+      ),
+    );
+    setHydrated(true);
+  }, [settings, hydrated]);
+
+  const dirty = useMemo(() => {
+    if (!hydrated || !settings) return false;
+    const initial = parseProxyPool(
+      settings.find((s) => s.key === "proxy_pool")?.value,
+    );
+    return JSON.stringify(proxies) !== JSON.stringify(initial);
+  }, [proxies, settings, hydrated]);
+
+  const saveMut = useMutation({
+    mutationFn: (value: string) => api.setSetting("proxy_pool", value),
+    onSuccess: () => {
+      toast.success("代理池已保存");
+      qc.invalidateQueries({ queryKey: ["settings", "list"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "保存失败"),
+  });
+
+  function handleSave() {
+    if (!dirty) return;
+    for (const p of proxies) {
+      if (!p.name.trim()) {
+        toast.error("代理名称不能为空");
+        return;
+      }
+      if (!p.url.trim()) {
+        toast.error(`代理 ${p.name.trim()} 的地址不能为空`);
+        return;
+      }
+    }
+    saveMut.mutate(JSON.stringify(proxies));
+  }
+
+  async function handleTest(proxy: ProxyEntry) {
+    if (!proxy.url.trim()) {
+      toast.error("代理地址不能为空");
+      return;
+    }
+    setTestResults((prev) => ({ ...prev, [proxy.id]: "loading" }));
+    try {
+      const result = await api.testProxy(proxy.url.trim());
+      setTestResults((prev) => ({ ...prev, [proxy.id]: result }));
+    } catch (e) {
+      setTestResults((prev) => ({
+        ...prev,
+        [proxy.id]: { error: e instanceof Error ? e.message : "未知错误" },
+      }));
+    }
+  }
+
+  function addProxy() {
+    setProxies((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        name: "",
+        url: "",
+        enabled: true,
+      },
+    ]);
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>代理池</CardTitle>
+          <CardDescription>
+            管理多个可选代理地址，支持 http(s) 与 socks5/socks5h；可逐条测试出口 IP
+          </CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {proxies.length === 0 ? (
+          <div className="flex h-10 items-center justify-center rounded-md border border-border bg-surface-subtle/40 text-xs text-ink-muted">
+            还没有代理；点击下方「新增代理」添加
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {proxies.map((proxy, idx) => {
+              const result = testResults[proxy.id];
+              return (
+                <div
+                  key={proxy.id}
+                  className="space-y-2 rounded-md border border-border bg-surface-subtle/30 p-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={proxy.name}
+                      onChange={(e) =>
+                        setProxies((prev) =>
+                          prev.map((p, i) =>
+                            i === idx ? { ...p, name: e.target.value } : p,
+                          ),
+                        )
+                      }
+                      placeholder="名称，如 香港-01"
+                      className="flex-1"
+                    />
+                    <Switch
+                      checked={proxy.enabled}
+                      onCheckedChange={(checked) =>
+                        setProxies((prev) =>
+                          prev.map((p, i) =>
+                            i === idx ? { ...p, enabled: checked } : p,
+                          ),
+                        )
+                      }
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:bg-destructive/10"
+                      onClick={() => {
+                        setProxies((prev) =>
+                          prev.filter((_, i) => i !== idx),
+                        );
+                        setTestResults((prev) => {
+                          const next = { ...prev };
+                          delete next[proxy.id];
+                          return next;
+                        });
+                      }}
+                      aria-label="删除代理"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={proxy.url}
+                      onChange={(e) =>
+                        setProxies((prev) =>
+                          prev.map((p, i) =>
+                            i === idx ? { ...p, url: e.target.value } : p,
+                          ),
+                        )
+                      }
+                      placeholder="socks5h://user:pass@host:port"
+                      className="mono flex-1 text-xs"
+                    />
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={result === "loading"}
+                      loading={result === "loading"}
+                      onClick={() => handleTest(proxy)}
+                    >
+                      测试
+                    </Button>
+                  </div>
+                  {result === "loading" && (
+                    <p className="text-xs text-ink-muted">测试中…</p>
+                  )}
+                  {result && result !== "loading" && "ip" in result && (
+                    <p className="text-xs text-success">
+                      出口 IP: <span className="mono">{result.ip}</span>
+                      <span className="ml-2 text-ink-muted">
+                        ({result.elapsed} ms)
+                      </span>
+                    </p>
+                  )}
+                  {result && result !== "loading" && "error" in result && (
+                    <p className="text-xs text-danger break-words">
+                      {result.error}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between">
+          <Button variant="ghost" size="sm" onClick={addProxy}>
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            新增代理
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            loading={saveMut.isPending}
+            disabled={!dirty}
+            aria-label="保存 代理池"
+            onClick={handleSave}
+          >
+            保存
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -711,7 +946,7 @@ function ConversationSection() {
           <CardTitle>对话留存</CardTitle>
           <CardDescription>
             完整记录终态对话(请求/响应/用量)按天写入 data/conversations,
-            跨天自动 gzip 压缩; 供审计与本地模型训练直接消费
+            跨天自动 gzip 压缩; 供本地审计使用
           </CardDescription>
         </div>
       </CardHeader>

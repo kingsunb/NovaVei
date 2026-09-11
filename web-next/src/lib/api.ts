@@ -24,6 +24,7 @@ import type {
   MaskRuleMeta,
   MaskTestResult,
   NowVersion,
+  ProxyTestResult,
   SettingItem,
   StopAllResult,
   StopAllState,
@@ -924,6 +925,11 @@ export const api = {
     http<SettingItem>("/setting/set", {
       method: "POST",
       body: JSON.stringify({ key, value }),
+    }),
+  testProxy: (url: string) =>
+    http<ProxyTestResult>("/setting/proxy/test", {
+      method: "POST",
+      body: JSON.stringify({ url }),
     }),
   exportSettings: () => rawDownloadJson<DBDump>("/setting/export"),
   importSettings: (data: DBDump) =>

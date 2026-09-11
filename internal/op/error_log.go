@@ -82,8 +82,8 @@ func ErrorLogCreate(ctx context.Context, entry model.ErrorLog) error {
 // ErrorLogEnqueue 把失败记录非阻塞投入内存队列, 由后台写入协程攒批落库。
 // 协程未启动或已停止时惰性(重新)启动; 队列满载时丢弃该条并递增计数, 返回 false。
 // 无数据库环境直接返回 false; 绝不阻塞转发链路。
-// 入队路径只做纯字节截断(无正则/JSON 解码), 正则脱敏与请求体重编码全部由写入协程完成,
-// 保证转发协程不为脱敏付出整包解析的代价; 入队前先截断也同时约束了队列内存与脱敏输入规模。
+// 入队路径对请求体做 JSON 感知截断(保留合法 JSON 结构), 正则脱敏由写入协程完成;
+// 仅在失败路径(recordErrorLog)调用, JSON 解码开销可接受。入队前先截断也约束了队列内存与脱敏输入规模。
 func ErrorLogEnqueue(entry model.ErrorLog) bool {
 	errorLogLifeMu.Lock()
 	if db.GetDB() == nil {
@@ -112,13 +112,14 @@ func ErrorLogEnqueue(entry model.ErrorLog) bool {
 	}
 }
 
-// truncateErrorLogForEnqueue 入队前的纯字节裁剪, 不含任何正则替换与 JSON 重编码:
-// API Key 只留尾缀, 摘要/详情/请求体按各自上限截断, 让队列条目与后续脱敏输入都有界。
+// truncateErrorLogForEnqueue 入队前的裁剪, 不含正则脱敏(脱敏由写入协程完成):
+// API Key 只留尾缀, 摘要/详情按字节上限截断; 请求体走 JSON 感知截断以保留合法 JSON 结构,
+// 使前端可格式化展示。仅在失败路径调用(recordErrorLog), JSON 解码开销可接受。
 func truncateErrorLogForEnqueue(entry model.ErrorLog) model.ErrorLog {
 	entry.APIKeySuffix = apiKeyTail(entry.APIKeySuffix)
 	entry.ErrBrief = truncateUTF8Bytes(entry.ErrBrief, errBriefMaxBytes)
 	entry.ErrDetail = truncateUTF8Bytes(entry.ErrDetail, model.MaxErrDetailBytes)
-	entry.RequestBody = truncateUTF8Bytes(entry.RequestBody, model.MaxRequestBodyLogBytes)
+	entry.RequestBody = truncateRequestBodyJSON(entry.RequestBody, model.MaxRequestBodyLogBytes)
 	return entry
 }
 
@@ -355,7 +356,7 @@ func sanitizeErrorLog(entry model.ErrorLog) model.ErrorLog {
 	entry.APIKeySuffix = apiKeyTail(entry.APIKeySuffix)
 	entry.ErrBrief = truncateErrorBrief(redactSensitiveText(entry.ErrBrief))
 	entry.ErrDetail = truncateErrorDetail(redactSensitiveText(entry.ErrDetail))
-	entry.RequestBody = truncateUTF8Bytes(redactRequestBody(entry.RequestBody), model.MaxRequestBodyLogBytes)
+	entry.RequestBody = truncateRequestBodyJSON(redactRequestBody(entry.RequestBody), model.MaxRequestBodyLogBytes)
 	return entry
 }
 
@@ -372,12 +373,12 @@ func apiKeyTail(value string) string {
 }
 
 // redactRequestBody 对请求体做有预算的结构化脱敏, 是 RequestBody 落库前的唯一安全边界。
-// 入队前已按 MaxRequestBodyLogBytes 截断, 故本函数输入有界, 解码/正则代价可控。
+// 入队前已按 MaxRequestBodyLogBytes 做 JSON 感知截断, 故本函数输入有界, 解码/正则代价可控。
 //
 // 策略(明确的安全失败):
 //  1. 空串原样返回;
 //  2. 先尝试 JSON 解码并递归脱敏敏感字段, 成功则重编码返回合法 JSON;
-//  3. JSON 解码失败(截断破坏结构/非 JSON 文本)时绝不退回原文, 走文本正则兜底脱敏。
+//  3. JSON 解码失败(非 JSON 文本)时绝不退回原文, 走文本正则兜底脱敏。
 //     fieldSecretPattern 已覆盖 JSON key 结束双引号、引号转义、嵌套字段与截断处不完整值,
 //     保证 "api_key":"..."、"password":"..." 等形态在结构化路径失效后仍被脱敏。
 //     正则未命中的残余文本不含已知敏感字段名, 可安全保留。
@@ -423,6 +424,81 @@ func redactJSONValue(value any) {
 	case []any:
 		for _, child := range current {
 			redactJSONValue(child)
+		}
+	}
+}
+
+// truncateRequestBodyJSON 把请求体截断到 maxBytes 以内, 尽量保持 JSON 合法性:
+// 能解码为完整 JSON 时, 递归缩短过长的字符串值使重编码结果落在预算内, 返回合法 JSON;
+// 不能解码(非 JSON 或已破坏)时回退到 UTF-8 边界字节截断。
+//
+// 用于错误日志请求体截断: 字节截断会切断 JSON 字符串导致结构破坏, 前端无法格式化展示;
+// JSON 感知截断保留合法 JSON 结构, 仅缩短过长的字符串值(如 messages[].content),
+// 使前端 FormattedBody 始终能解析并缩进展示。
+func truncateRequestBodyJSON(body string, maxBytes int) string {
+	if len(body) <= maxBytes {
+		return body
+	}
+	// 逐步收紧字符串值上限, 直到重编码落在预算内。
+	for cap := 512; cap >= 16; cap /= 2 {
+		encoded, ok := shrinkAndEncodeJSON(body, cap)
+		if !ok {
+			return truncateUTF8Bytes(body, maxBytes) // 非 JSON, 回退字节截断
+		}
+		if len(encoded) <= maxBytes {
+			return encoded
+		}
+	}
+	// 所有上限下仍超限(结构本身过大), 兜底字节截断紧凑编码。
+	encoded, ok := shrinkAndEncodeJSON(body, 0)
+	if !ok {
+		return truncateUTF8Bytes(body, maxBytes)
+	}
+	return truncateUTF8Bytes(encoded, maxBytes)
+}
+
+// shrinkAndEncodeJSON 把 body 解码为 JSON, 按 maxLen 截断过长的字符串值后重编码为紧凑 JSON。
+// maxLen <= 0 时不截断, 仅重编码。解码或重编码失败返回 ("", false)。
+func shrinkAndEncodeJSON(body string, maxLen int) (string, bool) {
+	var value any
+	decoder := json.NewDecoder(strings.NewReader(body))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
+		return "", false
+	}
+	if maxLen > 0 {
+		shrinkJSONStrings(value, maxLen)
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return "", false
+	}
+	return string(encoded), true
+}
+
+// shrinkJSONStrings 递归截断 JSON 树中超过 maxLen 字节的字符串值,
+// 截断处追加 "...[truncated]" 标记, 使重编码结果可控且保留合法 JSON 结构。
+func shrinkJSONStrings(value any, maxLen int) {
+	switch current := value.(type) {
+	case map[string]any:
+		for key, child := range current {
+			if str, ok := child.(string); ok {
+				if len(str) > maxLen {
+					current[key] = truncateUTF8Bytes(str, maxLen) + "...[truncated]"
+				}
+			} else {
+				shrinkJSONStrings(child, maxLen)
+			}
+		}
+	case []any:
+		for i, child := range current {
+			if str, ok := child.(string); ok {
+				if len(str) > maxLen {
+					current[i] = truncateUTF8Bytes(str, maxLen) + "...[truncated]"
+				}
+			} else {
+				shrinkJSONStrings(child, maxLen)
+			}
 		}
 	}
 }

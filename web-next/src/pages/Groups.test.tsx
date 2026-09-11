@@ -92,15 +92,18 @@ describe("GroupEditor relay_config 默认值契约", () => {
     await user.click(screen.getByRole("button", { name: "新建分组" }));
     await waitFor(() => screen.getByRole("dialog"));
 
+    // 路由策略字段在「路由策略」Tab 内，切过去才能看到
+    await user.click(screen.getByRole("button", { name: "路由策略" }));
+
     // sampleGroup 的服务端值是 60；若误用旧的手写默认 60 会与后端默认 600 混淆不了，
     // 所以这里断言 600 —— 只有真正引用 DEFAULT_GROUP_RELAY_CONFIG 才能得到。
-    const maxRounds = screen.getByLabelText("最大轮次") as HTMLInputElement;
+    const maxRounds = screen.getByLabelText(/单请求最大轮次/) as HTMLInputElement;
     expect(maxRounds.value).toBe("600");
-    const cooldown = screen.getByLabelText("成员冷却（秒）") as HTMLInputElement;
+    const cooldown = screen.getByLabelText(/^冷却时间/) as HTMLInputElement;
     expect(cooldown.value).toBe("60");
-    // 基本页签有 会话粘合 / 优先透传 / 启用脱敏 三个开关；粘合默认开
+    // 路由策略页有 会话粘合 / 后台定时探测 / 协议透传偏好 / 启用脱敏 四个开关；粘合默认开
     const switches = screen.getAllByRole("switch");
-    expect(switches.length).toBe(3);
+    expect(switches.length).toBe(4);
     expect(switches[0]).toHaveAttribute("aria-checked", "true");
   });
 
@@ -114,7 +117,10 @@ describe("GroupEditor relay_config 默认值契约", () => {
     await user.click(screen.getByRole("button", { name: /编辑/ }));
     await waitFor(() => screen.getByRole("dialog"));
 
-    const maxRounds = screen.getByLabelText("最大轮次") as HTMLInputElement;
+    // 路由策略字段在「路由策略」Tab 内
+    await user.click(screen.getByRole("button", { name: "路由策略" }));
+
+    const maxRounds = screen.getByLabelText(/单请求最大轮次/) as HTMLInputElement;
     expect(maxRounds.value).toBe("60");
     const switches = screen.getAllByRole("switch");
     expect(switches[0]).toHaveAttribute("aria-checked", "false");
@@ -155,15 +161,22 @@ describe("buildMemberDiff 行为（间接通过 add/remove 后保存）", () => 
   it("新增成员 → 走 items_to_add；删除 → items_to_delete", async () => {
     const user = userEvent.setup();
     const calls: Array<{ url: string; body?: any }> = [];
+    // 仅含一个成员（model 100）的分组，使 gpt-4o-mini(101) 可作为新成员添加
+    const groupWithOneItem = {
+      ...sampleGroup,
+      items: [
+        { id: 1, group_id: 10, channel_model_id: 100, ref_group_name: "", priority: 1 },
+      ],
+    };
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string, init?: RequestInit) => {
         const body = init?.body ? JSON.parse(String(init.body)) : null;
         calls.push({ url, body });
-        if (url.includes("/group/list")) return Promise.resolve(jsonOk([sampleGroup]));
+        if (url.includes("/group/list")) return Promise.resolve(jsonOk([groupWithOneItem]));
         if (url.includes("/channel/list")) return Promise.resolve(jsonOk([sampleChannel]));
         if (url.includes("/group/update") && init?.method === "POST") {
-          return Promise.resolve(jsonOk(sampleGroup));
+          return Promise.resolve(jsonOk(groupWithOneItem));
         }
         if (url.includes("/group/cooldown/clear/")) return Promise.resolve(jsonOk(null));
         if (url.includes("/group/active/")) return Promise.resolve(jsonOk(null));
@@ -183,9 +196,9 @@ describe("buildMemberDiff 行为（间接通过 add/remove 后保存）", () => 
       screen.getByRole("button", { name: "添加 openai-prod gpt-4o-mini" }),
     );
 
-    // 现在应该有 3 个 #N
+    // 现在应该有 2 个 #N
     await waitFor(() => {
-      expect(screen.getByText("#3")).toBeInTheDocument();
+      expect(screen.getByText("#2")).toBeInTheDocument();
     });
 
     // 保存
@@ -200,7 +213,7 @@ describe("buildMemberDiff 行为（间接通过 add/remove 后保存）", () => 
       expect((updateCall!.body as any).items_to_add[0]).toEqual({
         channel_model_id: 101,
         ref_group_name: "",
-        priority: 3,
+        priority: 2,
       });
     });
   });

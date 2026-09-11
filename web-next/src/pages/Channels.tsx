@@ -3,6 +3,10 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Copy,
+  Globe,
+  KeyRound,
+  Layers,
+  Link2,
   Pencil,
   Plus,
   Search,
@@ -349,183 +353,186 @@ export default function ChannelsPage() {
         </div>
       </div>
 
-      {/* 表格 */}
+      {/* 卡片网格 */}
       {isLoading ? (
         <TableSkeleton rows={6} />
       ) : isError ? (
         <QueryErrorBanner onRetry={() => refetch()} />
+      ) : rows.length === 0 ? (
+        <Card>
+          <div className="py-12 text-center text-sm text-ink-muted">
+            {data?.length === 0
+              ? "还没有渠道，点右上角新建"
+              : "没有匹配的渠道"}
+          </div>
+        </Card>
       ) : (
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs text-ink-muted">
-                <th scope="col" className="px-4 py-2.5 align-middle font-medium">状态</th>
-                <th scope="col" className="px-4 py-2.5 align-middle font-medium">渠道</th>
-                <th scope="col" className="px-4 py-2.5 align-middle font-medium">类型</th>
-                <th scope="col" className="px-4 py-2.5 align-middle font-medium">Base URL</th>
-                <th scope="col" className="px-4 py-2.5 align-middle text-center font-medium">Keys</th>
-                <th scope="col" className="px-4 py-2.5 align-middle font-medium">模型</th>
-                <th scope="col" className="px-4 py-2.5 align-middle text-right font-medium">RPM/并发</th>
-                <th scope="col" className="px-4 py-2.5 align-middle text-right font-medium" title="越小越靠前，允许重复和负数，相同值按名称排序">优先级</th>
-                <th scope="col" className="px-4 py-2.5 align-middle font-medium">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-ink-muted">
-                    {data?.length === 0
-                      ? "还没有渠道，点右上角新建"
-                      : "没有匹配的渠道"}
-                  </td>
-                </tr>
-              ) : (
-                rows.map((c) => (
-                  <tr
-                    key={c.id}
-                    onClick={() => setEditing(c)}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {rows.map((c) => (
+            <article
+              key={c.id}
+              onClick={() => setEditing(c)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setEditing(c);
+                }
+              }}
+              tabIndex={0}
+              role="button"
+              aria-haspopup="dialog"
+              aria-label={`编辑渠道 ${c.name}`}
+              className="flex cursor-pointer flex-col gap-3 rounded-card border border-border bg-card p-4 transition-colors hover:bg-surface-subtle/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {/* 头部：名称 + 标签 + 开关 */}
+              <header className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                  <span className="font-semibold text-ink">{c.name}</span>
+                  {c.tags?.map((t) => (
+                    <Pill key={t} tone="info">
+                      {t}
+                    </Pill>
+                  )) ?? null}
+                </div>
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex shrink-0 items-center gap-2"
+                >
+                  <Switch
+                    checked={c.enabled}
+                    onCheckedChange={(v) =>
+                      enableMut.mutate({ id: c.id, enabled: v })
+                    }
+                  />
+                  {c.enabled ? (
+                    <Pill tone="success">启用</Pill>
+                  ) : (
+                    <Pill tone="neutral">停用</Pill>
+                  )}
+                </div>
+              </header>
+
+              {/* 信息面板 */}
+              <div className="flex flex-col gap-1.5 rounded-xl border border-border/60 bg-surface-subtle/20 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <Pill tone="neutral" dot={false}>
+                    {PROVIDER_LABELS[c.type] ?? c.type}
+                  </Pill>
+                  <span className="flex items-center gap-1 text-xs text-ink-muted">
+                    <Layers className="size-3" />
+                    {c.models?.length ?? 0} 模型
+                  </span>
+                  <span className="flex items-center gap-1 text-xs text-ink-muted">
+                    <KeyRound className="size-3" />
+                    {c.keys?.length || (c.key_masked ? 1 : 0)} 密钥
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Link2 className="size-3.5 shrink-0 text-ink-muted" />
+                  <span className="mono min-w-0 flex-1 truncate text-xs text-ink-muted">
+                    {c.base_url}
+                  </span>
+                </div>
+                {c.proxy && c.channel_proxy && (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Globe className="size-3.5 shrink-0 text-ink-muted" />
+                    <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">
+                      {c.channel_proxy}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* 底部：统计 + 操作 */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3 text-xs text-ink-muted">
+                  <span className="num">
+                    RPM{" "}
+                    {c.rate_limit_rpm > 0
+                      ? formatNumber(c.rate_limit_rpm)
+                      : "∞"}
+                  </span>
+                  <span className="num">
+                    并发 {c.max_concurrent > 0 ? c.max_concurrent : "∞"}
+                  </span>
+                  <input
+                    type="number"
+                    step="1"
+                    className="no-spin h-6 w-16 rounded-control border border-border bg-card px-1.5 text-right text-xs text-ink"
+                    value={sortDraft[c.id] ?? String(c.sort ?? 0)}
+                    disabled={
+                      sortMut.isPending && sortMut.variables?.id === c.id
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) =>
+                      setSortDraft((d) => ({ ...d, [c.id]: e.target.value }))
+                    }
+                    onBlur={(e) => commitSort(c, e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
+                      e.stopPropagation();
+                      if (e.key === "Enter") {
                         e.preventDefault();
-                        setEditing(c);
+                        (e.target as HTMLInputElement).blur();
                       }
                     }}
-                    tabIndex={0}
-                    role="button"
-                    aria-haspopup="dialog"
-                    aria-label={`编辑渠道 ${c.name}`}
-                    className="cursor-pointer border-b border-border/60 last:border-b-0 transition-colors hover:bg-surface-subtle/60 focus:bg-surface-subtle/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    title="优先级：越小越靠前"
+                    aria-label={`优先级 ${c.name}`}
+                  />
+                </div>
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-0.5"
+                >
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    loading={testingId === c.id}
+                    onClick={() => testMut.mutate(c.id)}
+                    title="测试"
+                    aria-label={`测试 ${c.name}`}
                   >
-                    <td
-                      onClick={(e) => e.stopPropagation()}
-                      className="px-4 py-2.5 align-middle"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={c.enabled}
-                          onCheckedChange={(v) =>
-                            enableMut.mutate({ id: c.id, enabled: v })
-                          }
-                        />
-                        {c.enabled ? (
-                          <Pill tone="success">启用</Pill>
-                        ) : (
-                          <Pill tone="neutral">停用</Pill>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5 align-middle">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-ink">{c.name}</span>
-                        {c.tags?.map((t) => (
-                          <Pill key={t} tone="info">
-                            {t}
-                          </Pill>
-                        )) ?? null}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5 align-middle">
-                      <Pill tone="neutral">
-                        {PROVIDER_LABELS[c.type] ?? c.type}
-                      </Pill>
-                    </td>
-                    <td className="mono max-w-[260px] truncate px-4 py-2.5 align-middle text-ink-muted">
-                      {c.base_url}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 align-middle text-center text-ink-muted">
-                      {(c.keys?.length || (c.key_masked ? 1 : 0))}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 align-middle text-center text-ink-muted">
-                      {c.models?.length ?? 0} 个
-                    </td>
-                    <td className="num whitespace-nowrap px-4 py-2.5 align-middle text-right text-ink-muted">
-                      {(c.rate_limit_rpm > 0 ? formatNumber(c.rate_limit_rpm) : "∞")} / {(c.max_concurrent > 0 ? c.max_concurrent : "∞")}
-                    </td>
-                    <td
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        (e.currentTarget.querySelector("input") as HTMLInputElement | null)?.focus();
-                      }}
-                      onKeyDown={(e) => e.stopPropagation()}
-                      className="cursor-text whitespace-nowrap px-4 py-2.5 align-middle text-right"
-                    >
-                      <input
-                        type="number"
-                        step="1"
-                        className="no-spin h-7 w-24 rounded-control border border-border bg-card px-2 text-right text-sm text-ink"
-                        value={sortDraft[c.id] ?? String(c.sort ?? 0)}
-                        disabled={sortMut.isPending && sortMut.variables?.id === c.id}
-                        onChange={(e) =>
-                          setSortDraft((d) => ({ ...d, [c.id]: e.target.value }))
-                        }
-                        onBlur={(e) => commitSort(c, e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            (e.target as HTMLInputElement).blur();
-                          }
-                        }}
-                        title="优先级：越小越靠前，允许重复和负数，相同值按名称排序"
-                        aria-label={`优先级 ${c.name}`}
-                      />
-                    </td>
-                    <td
-                      onClick={(e) => e.stopPropagation()}
-                      className="px-4 py-2.5 align-middle"
-                    >
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          loading={testingId === c.id}
-                          onClick={() => testMut.mutate(c.id)}
-                          title="测试"
-                          aria-label={`测试 ${c.name}`}
-                        >
-                          <FlaskConical className="h-3.5 w-3.5" aria-hidden />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => setEditing(c)}
-                          title="编辑"
-                          aria-label={`编辑 ${c.name}`}
-                        >
-                          <Pencil className="h-3.5 w-3.5" aria-hidden />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          loading={copyMut.isPending && copyMut.variables?.sourceId === c.id}
-                          onClick={() => onCopy(c)}
-                          title="复制"
-                          aria-label={`复制 ${c.name}`}
-                        >
-                          <Copy className="h-3.5 w-3.5" aria-hidden />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
-                          onClick={() => setPendingDelete(c)}
-                          title="删除"
-                          aria-label={`删除 ${c.name}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                    <FlaskConical className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => setEditing(c)}
+                    title="编辑"
+                    aria-label={`编辑 ${c.name}`}
+                  >
+                    <Pencil className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    loading={
+                      copyMut.isPending &&
+                      copyMut.variables?.sourceId === c.id
+                    }
+                    onClick={() => onCopy(c)}
+                    title="复制"
+                    aria-label={`复制 ${c.name}`}
+                  >
+                    <Copy className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                    onClick={() => setPendingDelete(c)}
+                    title="删除"
+                    aria-label={`删除 ${c.name}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
-      </Card>
       )}
 
       {/* 编辑 Sheet */}

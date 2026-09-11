@@ -30,6 +30,7 @@ export function CommandPalette({
       { label: "前往 API 密钥", hint: "导航", run: () => navigate("/keys") },
       { label: "前往 日志", hint: "导航", run: () => navigate("/logs") },
       { label: "前往 设置", hint: "导航", run: () => navigate("/settings") },
+      { label: "前往 对话", hint: "导航", run: () => navigate("/chat") },
     ],
     [navigate],
   );

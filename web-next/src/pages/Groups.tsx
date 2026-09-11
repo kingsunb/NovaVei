@@ -12,6 +12,11 @@ import {
   ChevronUp,
   ChevronDown,
   CornerDownLeft,
+  Users,
+  ArrowRight,
+  Circle,
+  Zap,
+  Hand,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,6 +30,7 @@ import {
 } from "./useGroupRuntime";
 import type {
   Channel,
+  ChannelModel,
   Group,
   GroupItem,
   GroupMode,
@@ -272,6 +278,9 @@ export default function GroupsPage() {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {rows.map((g, idx) => {
             const routeState = runtime.get(g.id);
+            const sortedItems = g.items
+              .slice()
+              .sort((a, b) => a.priority - b.priority);
             return (
             <Card key={g.id}>
               <CardHeader>
@@ -300,51 +309,87 @@ export default function GroupsPage() {
                   )}
                   <CardTitle>{g.name}</CardTitle>
                   <Pill tone={g.mode === "failover" ? "info" : "neutral"}>
+                    {g.mode === "failover" ? (
+                      <Zap className="mr-0.5 h-3 w-3" aria-hidden />
+                    ) : (
+                      <Hand className="mr-0.5 h-3 w-3" aria-hidden />
+                    )}
                     {MODE_LABELS[g.mode]}
                   </Pill>
                   {routeState && routeState.emergency_active > 0 && (
                     <Pill tone="danger">紧急兜底</Pill>
                   )}
                 </div>
-                <span className="text-xs text-ink-muted">
+                <span className="flex items-center gap-1 text-xs text-ink-muted">
+                  <Users className="h-3 w-3" aria-hidden />
                   {g.items.length} 个成员
                 </span>
               </CardHeader>
               <CardContent className="space-y-1.5">
-                {g.items
-                  .slice()
-                  .sort((a, b) => a.priority - b.priority)
-                  .slice(0, 4)
-                  .map((it) => (
-                    <div
-                      key={it.id}
-                      className="flex items-center justify-between gap-2 text-xs"
-                    >
-                      <span className="truncate text-ink-muted">
-                        {it.ref_group_name
-                          ? `→ ${it.ref_group_name}`
-                          : `${channelById.get(it.channel_model?.channel_id ?? 0)?.name ?? "?"} → ${it.channel_model?.name ?? `#${it.channel_model_id}`}`}
-                      </span>
-                      <div className="flex shrink-0 items-center gap-1">
-                        {routeState && (
-                          <MemberRuntimeChips
-                            state={routeState}
-                            itemId={it.id}
-                          />
-                        )}
-                        {g.mode === "manual" && g.active_item_id === it.id && (
-                          <Pill tone="success">当前</Pill>
-                        )}
-                        <Pill tone="neutral">#{it.priority}</Pill>
-                      </div>
-                    </div>
-                  ))}
-                {g.items.length > 4 && (
-                  <p className="text-[11px] text-ink-muted">
-                    +{g.items.length - 4} 个成员
-                  </p>
-                )}
+                {/* 成员列表 */}
+                <div className="rounded-xl border border-border/50 bg-surface-subtle/20 px-2.5 py-2">
+                  {sortedItems
+                    .slice(0, 4)
+                    .map((it) => {
+                      const chName = it.ref_group_name
+                        ? null
+                        : channelById.get(it.channel_model?.channel_id ?? 0)?.name ?? "?";
+                      const modelName = it.ref_group_name ?? it.channel_model?.name ?? `#${it.channel_model_id}`;
+                      return (
+                        <div
+                          key={it.id}
+                          className="flex items-center justify-between gap-2 py-0.5 text-xs"
+                        >
+                          <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                            {it.ref_group_name ? (
+                              <span className="truncate text-ink-muted">
+                                → {it.ref_group_name}
+                              </span>
+                            ) : (
+                              <>
+                                <span className="shrink-0 truncate font-medium text-ink">
+                                  {chName}
+                                </span>
+                                <ArrowRight className="h-3 w-3 shrink-0 text-ink-subtle" aria-hidden />
+                                <span className="truncate text-ink-muted">
+                                  {modelName}
+                                </span>
+                              </>
+                            )}
+                          </span>
+                          <div className="flex shrink-0 items-center gap-1">
+                            {routeState && (
+                              <MemberRuntimeChips
+                                state={routeState}
+                                itemId={it.id}
+                              />
+                            )}
+                            {g.mode === "manual" && g.active_item_id === it.id && (
+                              <Pill tone="success">
+                                <Circle className="mr-0.5 h-2 w-2 fill-current" aria-hidden />
+                                当前
+                              </Pill>
+                            )}
+                            <Pill tone="neutral" dot={false}>
+                              #{it.priority}
+                            </Pill>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  {g.items.length > 4 && (
+                    <p className="pt-1 text-[11px] text-ink-muted">
+                      +{g.items.length - 4} 个成员
+                    </p>
+                  )}
+                  {g.items.length === 0 && (
+                    <p className="py-1 text-center text-[11px] text-ink-muted">
+                      暂无成员
+                    </p>
+                  )}
+                </div>
 
+                {/* 操作按钮 */}
                 <div className="mt-2 flex items-center gap-1.5">
                   <Button
                     variant="ghost"
@@ -435,20 +480,14 @@ function GroupEditor({
 }) {
   const [name, setName] = useState("");
   const [mode, setMode] = useState<GroupMode>("manual");
-  const [sticky, setSticky] = useState(
-    DEFAULT_GROUP_RELAY_CONFIG.session_sticky_enabled,
-  );
-  const [preferPassthrough, setPreferPassthrough] = useState(
-    DEFAULT_GROUP_RELAY_CONFIG.prefer_passthrough,
-  );
-  const [maskEnabled, setMaskEnabled] = useState(false);
-  const [maxRounds, setMaxRounds] = useState(
-    DEFAULT_GROUP_RELAY_CONFIG.max_request_rounds,
-  );
-  const [cooldownSeconds, setCooldownSeconds] = useState(
-    DEFAULT_GROUP_RELAY_CONFIG.member_cooldown_seconds,
+  // 单个 relayConfig 对象管理全部路由策略字段，避免 17+ 个零散 useState。
+  // 后端 DefaultGroupRelayConfig 同款默认（failover-first 调优版）。
+  const [relayConfig, setRelayConfig] = useState<GroupRelayConfig>(
+    DEFAULT_GROUP_RELAY_CONFIG,
   );
   const [activeItemId, setActiveItemId] = useState(0);
+  // Tab 切分「成员」与「路由策略」两个独立页面，对齐 NovaVeil_api 编辑器布局。
+  const [tab, setTab] = useState<"members" | "relay">("members");
 
   // 成员编辑需要：所有渠道（拉模型）和所有分组（用于引用）
   const { data: channels } = useQuery({
@@ -464,33 +503,25 @@ function GroupEditor({
   const [originalItems, setOriginalItems] = useState<DraftGroupItem[]>([]);
   const [draftItems, setDraftItems] = useState<DraftGroupItem[]>([]);
 
+  // updateRelay 更新 relayConfig 的单个字段，保持其余字段不变。
+  function updateRelay<K extends keyof GroupRelayConfig>(
+    key: K,
+    value: GroupRelayConfig[K],
+  ) {
+    setRelayConfig((prev) => ({ ...prev, [key]: value }));
+  }
+
   useEffect(() => {
     if (group && group !== "new") {
       setName(group.name);
       setMode(group.mode);
       // relay_config 由后端负责字段兜底；这里再兜一道，避免旧版本/手工数据
       // 缺字段时本端把 0 / undefined 写回覆盖原值。兜底值取后端
-      // DefaultGroupRelayConfig 同款默认（与 legacy 表单一致），而不是 0/60。
-      const relay = group.relay_config;
-      setSticky(
-        relay
-          ? !!relay.session_sticky_enabled
-          : DEFAULT_GROUP_RELAY_CONFIG.session_sticky_enabled,
-      );
-      setPreferPassthrough(
-        relay
-          ? !!relay.prefer_passthrough
-          : DEFAULT_GROUP_RELAY_CONFIG.prefer_passthrough,
-      );
-      setMaskEnabled(!!relay?.mask_enabled);
-      setMaxRounds(
-        relay?.max_request_rounds ??
-          DEFAULT_GROUP_RELAY_CONFIG.max_request_rounds,
-      );
-      setCooldownSeconds(
-        relay?.member_cooldown_seconds ??
-          DEFAULT_GROUP_RELAY_CONFIG.member_cooldown_seconds,
-      );
+      // DefaultGroupRelayConfig 同款默认。
+      setRelayConfig({
+        ...DEFAULT_GROUP_RELAY_CONFIG,
+        ...(group.relay_config ?? {}),
+      });
       setActiveItemId(group.active_item_id ?? 0);
       const sorted = [...(group.items ?? [])]
         .sort((a, b) => a.priority - b.priority)
@@ -503,17 +534,13 @@ function GroupEditor({
     } else {
       setName("");
       setMode("manual");
-      // 新建表单与后端/legacy 默认对齐：会话粘合开、轮次 600（此前误用
-      // false/60，新建出来的分组偏离 failover-first 默认还得手工调）。
-      setSticky(DEFAULT_GROUP_RELAY_CONFIG.session_sticky_enabled);
-      setPreferPassthrough(DEFAULT_GROUP_RELAY_CONFIG.prefer_passthrough);
-      setMaskEnabled(false);
-      setMaxRounds(DEFAULT_GROUP_RELAY_CONFIG.max_request_rounds);
-      setCooldownSeconds(DEFAULT_GROUP_RELAY_CONFIG.member_cooldown_seconds);
+      setRelayConfig(DEFAULT_GROUP_RELAY_CONFIG);
       setActiveItemId(0);
       setOriginalItems([]);
       setDraftItems([]);
     }
+    // 切换编辑目标时回到成员页
+    setTab("members");
   }, [group]);
 
   const isNew = !group || group === "new";
@@ -567,7 +594,11 @@ function GroupEditor({
     });
   }
 
-  function addItem(it: { channel_model_id: number; ref_group_name: string }) {
+  function addItem(it: {
+    channel_model_id: number;
+    ref_group_name: string;
+    channel_model?: ChannelModel;
+  }) {
     setDraftItems((prev) => [
       ...prev,
       {
@@ -576,6 +607,9 @@ function GroupEditor({
         group_id: group && group !== "new" ? group.id : 0,
         channel_model_id: it.channel_model_id,
         ref_group_name: it.ref_group_name,
+        // 预填渠道模型快照，使新增成员在保存前就能显示「渠道 → 模型」
+        // 而不是占位的「渠道模型 #ID」；保存后由后端返回值覆盖。
+        channel_model: it.channel_model,
         priority: prev.length + 1,
       },
     ]);
@@ -588,16 +622,7 @@ function GroupEditor({
           name,
           mode,
           active_item_id: 0,
-          // 未暴露到表单的字段全部取后端 DefaultGroupRelayConfig 同款默认值
-          // （failover-first 调优版），避免新建分组继承过期的手写数值。
-          relay_config: {
-            ...DEFAULT_GROUP_RELAY_CONFIG,
-            member_cooldown_seconds: cooldownSeconds,
-            max_request_rounds: maxRounds,
-            session_sticky_enabled: sticky,
-            prefer_passthrough: preferPassthrough,
-            mask_enabled: maskEnabled,
-          },
+          relay_config: relayConfig,
           items: draftItems.map((d) => ({
             id: 0,
             group_id: 0,
@@ -622,21 +647,13 @@ function GroupEditor({
         ...DEFAULT_GROUP_RELAY_CONFIG,
         ...(group!.relay_config ?? {}),
       };
+      // 逐字段比较，只提交发生变化的字段。
       const relayUpdates: Partial<GroupRelayConfig> = {};
-      if (!!sticky !== !!previous.session_sticky_enabled) {
-        relayUpdates.session_sticky_enabled = sticky;
-      }
-      if (!!preferPassthrough !== !!previous.prefer_passthrough) {
-        relayUpdates.prefer_passthrough = preferPassthrough;
-      }
-      if (!!maskEnabled !== !!previous.mask_enabled) {
-        relayUpdates.mask_enabled = maskEnabled;
-      }
-      if (maxRounds !== previous.max_request_rounds) {
-        relayUpdates.max_request_rounds = maxRounds;
-      }
-      if (cooldownSeconds !== previous.member_cooldown_seconds) {
-        relayUpdates.member_cooldown_seconds = cooldownSeconds;
+      for (const key of Object.keys(relayConfig) as (keyof GroupRelayConfig)[]) {
+        if (relayConfig[key] !== previous[key]) {
+          // @ts-expect-error — 逐字段赋值，类型安全由循环保证
+          relayUpdates[key] = relayConfig[key];
+        }
       }
       const updated = await api.updateGroup({
         id: group!.id,
@@ -714,140 +731,89 @@ function GroupEditor({
         <DialogHeader className="pr-12">
           <DialogTitle>{isNew ? "新建分组" : `编辑：${name}`}</DialogTitle>
           <DialogDescription>
-            左侧选择渠道模型或引用其他分组加入成员，右侧配置分组参数与成员顺序
+            配置分组基本信息、成员与路由策略
           </DialogDescription>
         </DialogHeader>
 
-        {/* 全屏双栏：左 = 可用渠道/模型选择器，右 = 分组配置 + 成员列表 */}
-        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-          {/* ---------- 左栏：可用渠道与模型 ---------- */}
-          <aside className="flex h-[36vh] min-h-0 flex-col border-b border-border md:h-auto md:w-[42%] md:border-b-0 md:border-r">
-            <div className="flex items-center gap-1.5 border-b border-border px-4 py-2">
-              <span className="text-xs font-medium text-ink-muted">
-                可用渠道与模型
-              </span>
-              <span className="ml-auto text-[11px] text-ink-subtle">
-                点击添加到分组
-              </span>
-            </div>
-            <ChannelModelPicker
-              channels={channels ?? []}
-              groups={otherGroups}
-              addedModelIds={addedModelIds}
-              addedRefNames={addedRefNames}
-              onAdd={addItem}
+        {/* 基本信息：名称 + 模式，始终可见 */}
+        <div className="grid grid-cols-1 gap-3 border-b border-border px-4 py-3 md:grid-cols-2">
+          <Field
+            label="名称"
+            required
+            error={validateField(name, NAME_RULE) ?? undefined}
+          >
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="例如：gpt-4o-prod"
+              invalid={!!validateField(name, NAME_RULE)}
+              aria-invalid={!!validateField(name, NAME_RULE)}
             />
-          </aside>
-
-          {/* ---------- 右栏：分组配置 + 成员 ---------- */}
-          <section className="flex min-h-0 flex-1 flex-col">
-            <div className="flex-1 space-y-4 overflow-y-auto p-4">
-              {/* 基本信息 */}
-              <div className="space-y-3">
-                <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">
-                  基本信息
-                </p>
-                <Field
-                  label="名称"
-                  required
-                  error={validateField(name, NAME_RULE) ?? undefined}
+          </Field>
+          <Field label="模式" hint="手动固定选中成员；故障转移按成员顺序并在失败时切换">
+            <div className="flex gap-2">
+              {(["manual", "failover"] as GroupMode[]).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  className={cn(
+                    "rounded-control border px-3 py-1.5 text-sm",
+                    mode === m
+                      ? "border-primary bg-primary/10 text-primary-text"
+                      : "border-border text-ink-muted",
+                  )}
                 >
-                  <Input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="例如：gpt-4o-prod"
-                    invalid={!!validateField(name, NAME_RULE)}
-                    aria-invalid={!!validateField(name, NAME_RULE)}
-                  />
-                </Field>
-                <Field label="模式">
-                  <div className="flex gap-2">
-                    {(["manual", "failover"] as GroupMode[]).map((m) => (
-                      <button
-                        key={m}
-                        onClick={() => setMode(m)}
-                        className={cn(
-                          "rounded-control border px-3 py-1.5 text-sm",
-                          mode === m
-                            ? "border-primary bg-primary/10 text-primary-text"
-                            : "border-border text-ink-muted",
-                        )}
-                      >
-                        {MODE_LABELS[m]}
-                      </button>
-                    ))}
-                  </div>
-                </Field>
+                  {MODE_LABELS[m]}
+                </button>
+              ))}
+            </div>
+          </Field>
+        </div>
+
+        {/* Tab 切换：成员 | 路由策略 */}
+        <div className="flex gap-1 border-b border-border px-4 py-2">
+          {(["members", "relay"] as const).map((tb) => (
+            <button
+              key={tb}
+              onClick={() => setTab(tb)}
+              aria-pressed={tab === tb}
+              className={cn(
+                "rounded-control px-3 py-1.5 text-sm transition-colors",
+                tab === tb
+                  ? "bg-primary/12 font-medium text-primary-text"
+                  : "text-ink-muted hover:text-ink",
+              )}
+            >
+              {tb === "members" ? "成员" : "路由策略"}
+            </button>
+          ))}
+        </div>
+
+        {/* ---------- Tab: 成员 ---------- */}
+        {tab === "members" && (
+          <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+            {/* 左栏：可用渠道与模型 */}
+            <aside className="flex h-[36vh] min-h-0 flex-col border-b border-border md:h-auto md:w-[42%] md:border-b-0 md:border-r">
+              <div className="flex items-center gap-1.5 border-b border-border px-4 py-2">
+                <span className="text-xs font-medium text-ink-muted">
+                  可用渠道与模型
+                </span>
+                <span className="ml-auto text-[11px] text-ink-subtle">
+                  点击添加到分组
+                </span>
               </div>
+              <ChannelModelPicker
+                channels={channels ?? []}
+                groups={otherGroups}
+                addedModelIds={addedModelIds}
+                addedRefNames={addedRefNames}
+                onAdd={addItem}
+              />
+            </aside>
 
-              {/* 路由参数 */}
-              <div className="space-y-3">
-                <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">
-                  路由参数
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field
-                    label="最大轮次"
-                    error={
-                      Number.isFinite(maxRounds) && maxRounds >= 1
-                        ? undefined
-                        : "最小为 1"
-                    }
-                  >
-                    <Input
-                      type="number"
-                      min={1}
-                      value={maxRounds}
-                      onChange={(e) => setMaxRounds(Number(e.target.value))}
-                      invalid={!(Number.isFinite(maxRounds) && maxRounds >= 1)}
-                      aria-invalid={!(Number.isFinite(maxRounds) && maxRounds >= 1)}
-                    />
-                  </Field>
-                  <Field
-                    label="成员冷却（秒）"
-                    error={
-                      Number.isFinite(cooldownSeconds) && cooldownSeconds >= 1
-                        ? undefined
-                        : "最小为 1"
-                    }
-                  >
-                    <Input
-                      type="number"
-                      min={1}
-                      value={cooldownSeconds}
-                      onChange={(e) => setCooldownSeconds(Number(e.target.value))}
-                      invalid={
-                        !(Number.isFinite(cooldownSeconds) && cooldownSeconds >= 1)
-                      }
-                      aria-invalid={
-                        !(Number.isFinite(cooldownSeconds) && cooldownSeconds >= 1)
-                      }
-                    />
-                  </Field>
-                </div>
-
-                <Toggle
-                  label="会话粘合"
-                  description="同一会话的请求在粘合有效期内固定使用同一成员"
-                  checked={sticky}
-                  onChange={setSticky}
-                />
-                <Toggle
-                  label="优先透传"
-                  description="故障转移时优先选择与客户端协议相同的渠道直接透传"
-                  checked={preferPassthrough}
-                  onChange={setPreferPassthrough}
-                />
-                <Toggle
-                  label="启用脱敏"
-                  description="对本分组的请求启用脱敏（须同时全局开启才生效）"
-                  checked={maskEnabled}
-                  onChange={setMaskEnabled}
-                />
-              </div>
-
-              {/* 成员列表 */}
-              <div className="space-y-2 border-t border-border pt-4">
+            {/* 右栏：成员列表 */}
+            <section className="flex min-h-0 flex-1 flex-col">
+              <div className="flex-1 space-y-2 overflow-y-auto p-4">
                 <div className="flex items-center gap-2">
                   <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">
                     成员
@@ -950,9 +916,282 @@ function GroupEditor({
                   )}
                 </ul>
               </div>
+            </section>
+          </div>
+        )}
+
+        {/* ---------- Tab: 路由策略 ---------- */}
+        {tab === "relay" && (
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field
+                label="总尝试次数"
+                hint="单个成员包含首次请求的总尝试次数"
+              >
+                <Input
+                  type="number"
+                  min={1}
+                  value={relayConfig.member_max_attempts}
+                  onChange={(e) =>
+                    updateRelay(
+                      "member_max_attempts",
+                      Math.max(1, Number(e.target.value) || 1),
+                    )
+                  }
+                />
+              </Field>
+              <Field
+                label="网络错误重试次数"
+                hint="代理/DNS/TLS 等网络错误连续重试次数，达到后走正常冷却通道；0 表示与总尝试次数一致"
+              >
+                <Input
+                  type="number"
+                  min={0}
+                  value={relayConfig.member_infra_max_retries}
+                  onChange={(e) =>
+                    updateRelay(
+                      "member_infra_max_retries",
+                      Math.max(0, Number(e.target.value) || 0),
+                    )
+                  }
+                />
+              </Field>
+              <Field
+                label="重试间隔（秒）"
+                hint="同一成员相邻两次尝试的等待时间"
+              >
+                <Input
+                  type="number"
+                  min={1}
+                  value={relayConfig.member_retry_interval_seconds}
+                  onChange={(e) =>
+                    updateRelay(
+                      "member_retry_interval_seconds",
+                      Math.max(1, Number(e.target.value) || 1),
+                    )
+                  }
+                />
+              </Field>
+              <Field
+                label="单请求最大轮次"
+                hint="单个请求内允许的最大选路轮次，超过后请求以失败收尾，防止失控轮转"
+              >
+                <Input
+                  type="number"
+                  min={1}
+                  value={relayConfig.max_request_rounds}
+                  onChange={(e) =>
+                    updateRelay(
+                      "max_request_rounds",
+                      Math.max(1, Number(e.target.value) || 1),
+                    )
+                  }
+                />
+              </Field>
+              <Field
+                label="单请求截止时间（秒，0 为不限）"
+                hint="单个请求的整体安全截止秒数，超过后不再发起新一轮尝试；填 0 表示不限时"
+              >
+                <Input
+                  type="number"
+                  min={0}
+                  max={86400}
+                  placeholder="0 (不限)"
+                  value={relayConfig.max_request_seconds}
+                  onChange={(e) =>
+                    updateRelay(
+                      "max_request_seconds",
+                      Math.max(0, Number(e.target.value) || 0),
+                    )
+                  }
+                />
+              </Field>
+              <Field
+                label="非流式超时（秒）"
+                hint="等待完整非流式响应的最长时间"
+              >
+                <Input
+                  type="number"
+                  min={1}
+                  value={relayConfig.member_non_stream_response_timeout_seconds}
+                  onChange={(e) =>
+                    updateRelay(
+                      "member_non_stream_response_timeout_seconds",
+                      Math.max(1, Number(e.target.value) || 1),
+                    )
+                  }
+                />
+              </Field>
+              <Field
+                label="流式首事件超时（秒）"
+                hint="等待首个有效流事件的最长时间"
+              >
+                <Input
+                  type="number"
+                  min={1}
+                  value={relayConfig.member_stream_first_event_timeout_seconds}
+                  onChange={(e) =>
+                    updateRelay(
+                      "member_stream_first_event_timeout_seconds",
+                      Math.max(1, Number(e.target.value) || 1),
+                    )
+                  }
+                />
+              </Field>
+              <Field
+                label="冷却时间（秒）"
+                hint="成员重试耗尽后暂停使用的时间"
+              >
+                <Input
+                  type="number"
+                  min={1}
+                  value={relayConfig.member_cooldown_seconds}
+                  onChange={(e) =>
+                    updateRelay(
+                      "member_cooldown_seconds",
+                      Math.max(1, Number(e.target.value) || 1),
+                    )
+                  }
+                />
+              </Field>
+              <Field
+                label="冷却退避倍数"
+                hint="半开探测失败后冷却时间乘以该倍数，最小为 1 表示不退避"
+              >
+                <Input
+                  type="number"
+                  min={1}
+                  step={0.5}
+                  value={relayConfig.cooldown_backoff_multiplier}
+                  onChange={(e) =>
+                    updateRelay(
+                      "cooldown_backoff_multiplier",
+                      Math.max(1, Number(e.target.value) || 1),
+                    )
+                  }
+                />
+              </Field>
+              <Field
+                label="冷却上限（秒）"
+                hint="退避后的冷却时间不超过该值"
+              >
+                <Input
+                  type="number"
+                  min={1}
+                  value={relayConfig.cooldown_max_seconds}
+                  onChange={(e) =>
+                    updateRelay(
+                      "cooldown_max_seconds",
+                      Math.max(1, Number(e.target.value) || 1),
+                    )
+                  }
+                />
+              </Field>
+              <Field
+                label="故障切换亲和时间（秒）"
+                hint="备用成员首次请求成功后继续使用该成员的时间"
+              >
+                <Input
+                  type="number"
+                  min={0}
+                  value={relayConfig.member_affinity_seconds}
+                  onChange={(e) =>
+                    updateRelay(
+                      "member_affinity_seconds",
+                      Math.max(0, Number(e.target.value) || 0),
+                    )
+                  }
+                />
+              </Field>
+              <Field
+                label="会话粘合时长（秒）"
+                hint="粘合成员每次业务成功后滑动续期的时长"
+              >
+                <Input
+                  type="number"
+                  min={0}
+                  value={relayConfig.session_sticky_seconds}
+                  onChange={(e) =>
+                    updateRelay(
+                      "session_sticky_seconds",
+                      Math.max(0, Number(e.target.value) || 0),
+                    )
+                  }
+                />
+              </Field>
+              <Field
+                label="后台探测间隔（秒）"
+                hint="两次后台探测之间的间隔时间"
+              >
+                <Input
+                  type="number"
+                  min={1}
+                  value={relayConfig.background_probe_interval_seconds}
+                  onChange={(e) =>
+                    updateRelay(
+                      "background_probe_interval_seconds",
+                      Math.max(1, Number(e.target.value) || 1),
+                    )
+                  }
+                />
+              </Field>
+              <Field
+                label="紧急兜底成员"
+                hint="全部成员不可用时的最后放行成员（仅故障转移模式生效），业务失败照常计入冷却"
+              >
+                <select
+                  className="h-9 w-full rounded-control border border-border bg-card px-3 text-sm"
+                  value={relayConfig.emergency_item_id}
+                  onChange={(e) =>
+                    updateRelay(
+                      "emergency_item_id",
+                      Number(e.target.value) || 0,
+                    )
+                  }
+                >
+                  <option value={0}>关闭</option>
+                  {draftItems
+                    .filter((m) => m.id > 0)
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.ref_group_name
+                          ? `→ ${m.ref_group_name}`
+                          : `${m.channel_model?.name ?? `#${m.channel_model_id}`}`}
+                      </option>
+                    ))}
+                </select>
+              </Field>
             </div>
-          </section>
-        </div>
+
+            {/* 开关类配置 */}
+            <div className="mt-4 space-y-2">
+              <Toggle
+                label="会话粘合"
+                description="同一会话的请求在粘合有效期内固定使用同一成员"
+                checked={relayConfig.session_sticky_enabled}
+                onChange={(v) => updateRelay("session_sticky_enabled", v)}
+              />
+              <Toggle
+                label="后台定时探测"
+                description="对处于冷却（OPEN）状态的成员周期性发起半开测试"
+                checked={relayConfig.background_probe_enabled}
+                onChange={(v) => updateRelay("background_probe_enabled", v)}
+              />
+              <Toggle
+                label="协议透传偏好"
+                description="开启后优先将请求透传给与客户端协议相同的渠道，减少转换开销"
+                checked={relayConfig.prefer_passthrough}
+                onChange={(v) => updateRelay("prefer_passthrough", v)}
+              />
+              <Toggle
+                label="启用脱敏"
+                description="对本分组的请求启用脱敏（须同时全局开启才生效）"
+                checked={!!relayConfig.mask_enabled}
+                onChange={(v) => updateRelay("mask_enabled", v)}
+              />
+            </div>
+          </div>
+        )}
 
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -965,8 +1204,14 @@ function GroupEditor({
             disabled={
               !name ||
               !!validateField(name, NAME_RULE) ||
-              !(Number.isFinite(maxRounds) && maxRounds >= 1) ||
-              !(Number.isFinite(cooldownSeconds) && cooldownSeconds >= 1)
+              !(
+                Number.isFinite(relayConfig.max_request_rounds) &&
+                relayConfig.max_request_rounds >= 1
+              ) ||
+              !(
+                Number.isFinite(relayConfig.member_cooldown_seconds) &&
+                relayConfig.member_cooldown_seconds >= 1
+              )
             }
             onClick={() => saveMut.mutate()}
           >
@@ -982,7 +1227,7 @@ function GroupEditor({
  * 左栏选择器：列出所有渠道及其模型，点击即加入分组成员。
  *  - 顶部搜索框按渠道名 / 模型名过滤
  *  - 停用渠道保留（方便提前配置备用成员），标注「已停用」
- *  - 已在当前分组中的模型 / 引用显示 ✓ 标记（仍可重复添加）
+ *  - 已在当前分组中的模型 / 引用显示 ✓ 标记并禁用，不可重复添加
  *  - 底部「引用其他分组」区列出可被引用的分组
  */
 function ChannelModelPicker({
@@ -996,7 +1241,11 @@ function ChannelModelPicker({
   groups: Group[];
   addedModelIds: Set<number>;
   addedRefNames: Set<string>;
-  onAdd: (it: { channel_model_id: number; ref_group_name: string }) => void;
+  onAdd: (it: {
+    channel_model_id: number;
+    ref_group_name: string;
+    channel_model?: ChannelModel;
+  }) => void;
 }) {
   const [search, setSearch] = useState("");
 
@@ -1077,23 +1326,38 @@ function ChannelModelPicker({
                       <button
                         key={m.id}
                         type="button"
+                        disabled={added}
                         onClick={() =>
-                          onAdd({ channel_model_id: m.id, ref_group_name: "" })
+                          onAdd({
+                            channel_model_id: m.id,
+                            ref_group_name: "",
+                            channel_model: m,
+                          })
                         }
-                        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-primary/[0.06] active:bg-primary/[0.1]"
-                        aria-label={`添加 ${channel.name} ${m.name}`}
+                        className={cn(
+                          "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm transition-colors",
+                          added
+                            ? "cursor-not-allowed opacity-60"
+                            : "hover:bg-primary/[0.06] active:bg-primary/[0.1]",
+                        )}
+                        aria-label={
+                          added
+                            ? `${channel.name} ${m.name} 已添加`
+                            : `添加 ${channel.name} ${m.name}`
+                        }
                       >
-                        <Plus
-                          className="h-3.5 w-3.5 shrink-0 text-ink-muted"
-                          aria-hidden
-                        />
-                        <span className="mono flex-1 truncate">{m.name}</span>
-                        {added && (
+                        {added ? (
                           <Check
                             className="h-3.5 w-3.5 shrink-0 text-emerald-500"
                             aria-hidden
                           />
+                        ) : (
+                          <Plus
+                            className="h-3.5 w-3.5 shrink-0 text-ink-muted"
+                            aria-hidden
+                          />
                         )}
+                        <span className="mono flex-1 truncate">{m.name}</span>
                       </button>
                     );
                   })
@@ -1120,23 +1384,34 @@ function ChannelModelPicker({
                   <button
                     key={g.id}
                     type="button"
+                    disabled={added}
                     onClick={() =>
                       onAdd({ channel_model_id: 0, ref_group_name: g.name })
                     }
-                    className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-primary/[0.06] active:bg-primary/[0.1]"
-                    aria-label={`引用分组 ${g.name}`}
+                    className={cn(
+                      "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm transition-colors",
+                      added
+                        ? "cursor-not-allowed opacity-60"
+                        : "hover:bg-primary/[0.06] active:bg-primary/[0.1]",
+                    )}
+                    aria-label={
+                      added
+                        ? `引用分组 ${g.name} 已添加`
+                        : `引用分组 ${g.name}`
+                    }
                   >
-                    <Plus
-                      className="h-3.5 w-3.5 shrink-0 text-ink-muted"
-                      aria-hidden
-                    />
-                    <span className="mono flex-1 truncate">→ {g.name}</span>
-                    {added && (
+                    {added ? (
                       <Check
                         className="h-3.5 w-3.5 shrink-0 text-emerald-500"
                         aria-hidden
                       />
+                    ) : (
+                      <Plus
+                        className="h-3.5 w-3.5 shrink-0 text-ink-muted"
+                        aria-hidden
+                      />
                     )}
+                    <span className="mono flex-1 truncate">→ {g.name}</span>
                   </button>
                 );
               })}

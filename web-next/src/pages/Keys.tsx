@@ -419,6 +419,8 @@ function KeyEditor({
   const [rateLimitRPM, setRateLimitRPM] = useState<string>(
     String((k && k !== "new" && k.rate_limit_rpm) || 0),
   );
+  // 自定义密钥值：创建时非空则用该值(空则后端自动生成)；编辑时非空则更新(空则保留原值)。
+  const [newApiKey, setNewApiKey] = useState("");
   const {
     data: groups,
     isLoading: groupsLoading,
@@ -509,7 +511,7 @@ function KeyEditor({
       api.createKey({
         // 名称可选：留空自动生成带时间戳的名称，避免列表里多行「未命名密钥」无法区分。
         name: name.trim() || `key-${Date.now()}`,
-        api_key: "",
+        api_key: newApiKey.trim(),
         enabled,
         expire_at: expireTimestamp,
         supported_models: normalizeSupportedModels(models),
@@ -525,7 +527,7 @@ function KeyEditor({
       api.updateKey({
         id: (k as APIKeySummary).id,
         name: name.trim(),
-        api_key: "",
+        api_key: newApiKey.trim(),
         enabled,
         expire_at: expireTimestamp,
         supported_models: normalizeSupportedModels(models),
@@ -546,7 +548,7 @@ function KeyEditor({
           <DialogDescription>
             {isNew
               ? "密钥字符串留空由后端自动生成；名称可选（留空自动生成名称）；支持模型留空表示允许全部"
-              : "更新不会改变密钥值；如需重置请删除后新建"}
+              : "密钥值留空保留原值，填写则更新；名称可选；支持模型留空表示允许全部"}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-3">
@@ -563,6 +565,21 @@ function KeyEditor({
               invalid={!!nameError}
             />
           </Field>
+
+          {isNew && (
+            <Field
+              label="密钥值"
+              hint="可选；留空由后端自动生成"
+            >
+              <Input
+                value={newApiKey}
+                onChange={(e) => setNewApiKey(e.target.value)}
+                placeholder="自定义密钥字符串（可留空）"
+                className="mono"
+                aria-label="自定义密钥值"
+              />
+            </Field>
+          )}
 
           <Field label="状态">
             <div className="flex h-8 items-center">
@@ -603,6 +620,21 @@ function KeyEditor({
                   )}
                 </button>
               </div>
+            </Field>
+          )}
+
+          {!isNew && (
+            <Field
+              label="新密钥值"
+              hint="可选；留空保留原值，填写则更新为新的密钥字符串"
+            >
+              <Input
+                value={newApiKey}
+                onChange={(e) => setNewApiKey(e.target.value)}
+                placeholder="输入新密钥值以替换当前密钥（可留空）"
+                className="mono"
+                aria-label="新密钥值"
+              />
             </Field>
           )}
 

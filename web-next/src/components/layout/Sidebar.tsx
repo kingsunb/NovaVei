@@ -7,6 +7,7 @@ import {
   GaugeCircle,
   KeyRound,
   LayoutGrid,
+  MessageSquare,
   Settings as SettingsIcon,
   ShieldCheck,
   UsersRound,
@@ -26,6 +27,7 @@ const OPERATIONS: NavItem[] = [
   { to: "/custom-models", label: "自定义模型", icon: Bot },
   { to: "/groups", label: "分组", icon: UsersRound },
   { to: "/mask", label: "脱敏", icon: ShieldCheck },
+  { to: "/chat", label: "对话", icon: MessageSquare },
 ];
 
 const ACCESS: NavItem[] = [

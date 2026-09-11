@@ -76,6 +76,11 @@ export default defineConfig({
         target: "http://127.0.0.1:8080",
         changeOrigin: false,
       },
+      // 对话页直接调用 /v1/chat/completions 走完整 relay 管线, 开发态同样需要代理到后端。
+      "/v1": {
+        target: "http://127.0.0.1:8080",
+        changeOrigin: false,
+      },
     },
   },
 });

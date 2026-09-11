@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// 对话留存(审计与本地模型训练)的固定策略参数:
+// 对话留存(本地审计)的固定策略参数:
 // 体量按实测长文负载标定, 全部走顺序追加 + 跨天 gzip 压缩, 对慢速磁盘友好。
 //
 // ConversationRetentionDays 与 ConversationDirMaxBytes 即默认值, 同时也是设置项校验

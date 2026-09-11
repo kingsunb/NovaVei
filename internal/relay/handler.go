@@ -113,6 +113,7 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 			maskMapping = mapping
 			if maskMapping != nil {
 				streamRestorer = mask.NewStreamRestorer(maskMapping)
+				request.Masked = true
 			}
 			// 用脱敏后的请求体替换状态中的原始明文, 使日志/审计/对话留存只记录脱敏后内容。
 			request.updateBody(string(masked))
@@ -147,6 +148,12 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 		for {
 			if ctx.Err() != nil {
 				request.markCanceled(ctx.Err(), "", nil)
+				return
+			}
+			// 管理端 per-request 终止: stopRequested 在轮间等待中被 stopCh 唤醒后,
+			// 循环回到此处立即以取消终态收尾, 不再发起新一轮尝试。
+			if request.IsStopRequested() {
+				request.markCanceled(errAdminStopped, "", nil)
 				return
 			}
 			// 全局停止下, 在途请求立即以 503 失败收尾, 不再尝试任何成员也不消耗更多时间。
@@ -367,12 +374,16 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 			// 渠道级单 Key RPM 门禁: 选定 Key 之后、开始本轮之前按滑动窗口放行;
 			// 尚未 startRound 故这段等待不计入尝试轨迹(预期行为)。回退旧 Key 字段时
 			// selectedKey.ID 为空串, 作为该渠道单 Key 的稳定引用。等待期间客户端断开
-			// 或上下文结束时以取消终态定稿, 不发起上游请求。
-			if err := waitChannelRPM(ctx, channel.ID, selectedKey.ID, effective.RateLimitRPM); err != nil {
+			// 或管理端终止请求时以取消终态定稿, 不发起上游请求。
+			if err := waitChannelRPM(ctx, channel.ID, selectedKey.ID, effective.RateLimitRPM, request.stopCh); err != nil {
 				// 等待期间取消同样按无结论整链归还占用: 叶子可能是半开恢复候选或紧急成员,
 				// 不归还则 ProbeItemID 滞留, pickGroupItem 永久返回空, 整组钉死到重启。
 				releaseRefChainHops(hops)
-				request.markCanceled(ctx.Err(), "", nil)
+				if request.IsStopRequested() {
+					request.markCanceled(errAdminStopped, "", nil)
+				} else {
+					request.markCanceled(ctx.Err(), "", nil)
+				}
 				return
 			}
 
@@ -465,7 +476,7 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 				if request.IsStopRequested() {
 					request.releaseRoundLifecycle()
 					releaseRefChainHops(hops)
-					request.markCanceled(errors.New("管理端已停止请求"), "", nil)
+					request.markCanceled(errAdminStopped, "", nil)
 					return
 				}
 				// 父上下文结束说明客户端已经取消, 整链归还探测占用并以取消终态结束请求。
@@ -840,7 +851,7 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 				// 管理端整体终止与客户端断开同等豁免: 不计失败/连击/渠道故障。
 				if request.IsStopRequested() {
 					releaseRefChainHops(hops)
-					request.markCanceled(errors.New("管理端已停止请求"), string(responseBody), result.usage)
+					request.markCanceled(errAdminStopped, string(responseBody), result.usage)
 					return
 				}
 				// 污染流沿用 markFailed 分支语义定稿: 客户端已取消仍记取消, 否则记失败并保留聚合出的计量。
@@ -989,7 +1000,7 @@ var errNoAvailableChannels = errors.New("暂无可用渠道")
 
 // errAllRequestsStopped 在管理端「一键停止所有请求」置位期间作为入口与在途的统一终止原因;
 // 使用与 errNoAvailableChannels 相同的 rejectRequest 路径返回 503, 避免对客户端协议层的额外协议变更。
-var errAllRequestsStopped = errors.New("所有请求已被管理端停止")
+var errAllRequestsStopped = errors.New("服务器过载，请稍候")
 
 // roundProxyLabel 返回本轮出口代理地址的展示形式(经 client.MaskProxySecret 打码密码段,
 // 保留用户名中 {account} 解析出的别名): 优先取解析后的生效代理, 模板解析失败时回退原始

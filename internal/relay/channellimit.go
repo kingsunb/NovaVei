@@ -129,7 +129,8 @@ func acquireChannelConcurrency(ctx context.Context, channelID int, limit int) (f
 // waitChannelRPM 渠道级单 Key RPM 门禁: 窗口内未达上限则记录当前时刻并立即返回;
 // 已达上限时计算最近一次名额腾出的到期时刻, 以 timer 与 ctx 双路 select 阻塞等待后重试。
 // rpm 非正值表示不限制, 同时清除遗留窗口避免条目滞留。
-func waitChannelRPM(ctx context.Context, channelID int, keyID string, rpm int) error {
+// stopCh 关闭时立即返回 errAdminStopped, 供调用方以取消终态定稿而非继续等待名额。
+func waitChannelRPM(ctx context.Context, channelID int, keyID string, rpm int, stopCh <-chan struct{}) error {
 	ref := keyRef{ChannelID: channelID, KeyID: keyID}
 	if rpm <= 0 {
 		channelLimitMu.Lock()
@@ -149,6 +150,9 @@ func waitChannelRPM(ctx context.Context, channelID int, keyID string, rpm int) e
 		case <-ctx.Done():
 			timer.Stop()
 			return ctx.Err()
+		case <-stopCh:
+			timer.Stop()
+			return errAdminStopped
 		}
 	}
 }

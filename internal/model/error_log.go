@@ -23,7 +23,10 @@ const DefaultErrorRetentionMaxCount = 50
 const ErrorRetentionMaxCountMax = 1000
 
 // MaxRequestBodyLogBytes 是错误日志请求体的最大保留字节数。字段注释与实际落库行为保持一致。
-const MaxRequestBodyLogBytes = 4 * 1024
+// 64KB 与 MaxErrDetailBytes 对齐: 典型 chat 请求体(含系统提示)可完整保留, 超限时走 JSON 感知
+// 截断(缩短过长字符串值而非切断 JSON 结构), 保证前端可格式化展示。配合保留策略(默认 ≤50 条/3 天)
+// 磁盘占用有界(≤50×64KB≈3.2MB)。
+const MaxRequestBodyLogBytes = 64 * 1024
 
 // MaxErrDetailBytes 错误详情的最大保留字节数: 完整错误文本(含上游响应体)超过该上限时按 UTF-8 边界截断。
 // 真实上游错误正文几乎都在数 KB 以内, 上限仅用于拦截异常超大载荷, 兼顾慢速磁盘的写入量。
@@ -49,6 +52,6 @@ type ErrorLog struct {
 	ChannelKeyLabel string    `json:"channel_key_label,omitempty"` // 最终尝试使用的渠道 Key 标签("#序号(备注)"), 多 Key 渠道用于定位具体凭据; 旧式单 Key 为空。
 	ErrClass        string    `json:"err_class" gorm:"index:idx_error_logs_class_created,priority:1"`
 	ErrBrief        string    `json:"err_brief" gorm:"size:512"`               // ≤256 字节截断
-	RequestBody     string    `json:"request_body,omitempty" gorm:"type:text"` // 原始请求体截断(4KB)
+	RequestBody     string    `json:"request_body,omitempty" gorm:"type:text"` // 原始请求体截断(64KB, JSON 感知截断保留合法结构)
 	ErrDetail       string    `json:"err_detail,omitempty" gorm:"type:text"`   // 完整错误文本(含上游响应体), ≤64KB 截断; 面板按需展开
 }

@@ -105,21 +105,21 @@ func TestWaitChannelRPMWindowBoundary(t *testing.T) {
 	const channelID = 9100
 
 	for i := 0; i < 3; i++ {
-		if err := waitChannelRPM(context.Background(), channelID, "k1", 3); err != nil {
+		if err := waitChannelRPM(context.Background(), channelID, "k1", 3, nil); err != nil {
 			t.Fatalf("窗口内前 3 次应立即放行(第 %d 次): %v", i+1, err)
 		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
-	if werr := waitChannelRPM(ctx, channelID, "k1", 3); !errors.Is(werr, context.DeadlineExceeded) {
+	if werr := waitChannelRPM(ctx, channelID, "k1", 3, nil); !errors.Is(werr, context.DeadlineExceeded) {
 		t.Fatalf("达到上限时应阻塞并被短 ctx 打断, 实际 %v", werr)
 	}
 
 	// 窗口整体滑出后第 4 个请求应立即放行。
 	time.Sleep(600 * time.Millisecond)
 	startedAt := time.Now()
-	if werr := waitChannelRPM(context.Background(), channelID, "k1", 3); werr != nil {
+	if werr := waitChannelRPM(context.Background(), channelID, "k1", 3, nil); werr != nil {
 		t.Fatalf("窗口滑出后应立即放行: %v", werr)
 	}
 	if elapsed := time.Since(startedAt); elapsed > 300*time.Millisecond {
@@ -146,7 +146,7 @@ func TestWaitChannelRPMSlotFreesWhenOldestSlidesOut(t *testing.T) {
 	channelLimitMu.Unlock()
 
 	startedAt := time.Now()
-	if err := waitChannelRPM(context.Background(), channelID, "k1", 3); err != nil {
+	if err := waitChannelRPM(context.Background(), channelID, "k1", 3, nil); err != nil {
 		t.Fatalf("最早时间戳滑出窗口后应放行: %v", err)
 	}
 	elapsed := time.Since(startedAt)
@@ -161,23 +161,23 @@ func TestWaitChannelRPMIndependentBudgetsPerKey(t *testing.T) {
 	resetChannelLimits()
 	const channelID = 9102
 
-	if err := waitChannelRPM(context.Background(), channelID, "k1", 1); err != nil {
+	if err := waitChannelRPM(context.Background(), channelID, "k1", 1, nil); err != nil {
 		t.Fatalf("k1 首次应立即放行: %v", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
-	if werr := waitChannelRPM(ctx, channelID, "k1", 1); !errors.Is(werr, context.DeadlineExceeded) {
+	if werr := waitChannelRPM(ctx, channelID, "k1", 1, nil); !errors.Is(werr, context.DeadlineExceeded) {
 		t.Fatalf("k1 达到单次上限应阻塞, 实际 %v", werr)
 	}
-	if werr := waitChannelRPM(context.Background(), channelID, "k2", 1); werr != nil {
+	if werr := waitChannelRPM(context.Background(), channelID, "k2", 1, nil); werr != nil {
 		t.Fatalf("k2 的独立预算不应受 k1 影响: %v", werr)
 	}
 	legacyCtx, legacyCancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer legacyCancel()
-	if werr := waitChannelRPM(context.Background(), channelID, "", 1); werr != nil {
+	if werr := waitChannelRPM(context.Background(), channelID, "", 1, nil); werr != nil {
 		t.Fatalf("空串 Key 应作为稳定独立引用放行: %v", werr)
 	}
-	if werr := waitChannelRPM(legacyCtx, channelID, "", 1); !errors.Is(werr, context.DeadlineExceeded) {
+	if werr := waitChannelRPM(legacyCtx, channelID, "", 1, nil); !errors.Is(werr, context.DeadlineExceeded) {
 		t.Fatalf("空串 Key 第二次同样应被限速, 实际 %v", werr)
 	}
 }
@@ -188,7 +188,7 @@ func TestWaitChannelRPMUnlimitedClearsLeftoverWindow(t *testing.T) {
 	resetChannelLimits()
 	const channelID = 9103
 
-	if err := waitChannelRPM(context.Background(), channelID, "k1", 1); err != nil {
+	if err := waitChannelRPM(context.Background(), channelID, "k1", 1, nil); err != nil {
 		t.Fatalf("首次放行失败: %v", err)
 	}
 	ref := keyRef{ChannelID: channelID, KeyID: "k1"}
@@ -199,7 +199,7 @@ func TestWaitChannelRPMUnlimitedClearsLeftoverWindow(t *testing.T) {
 		t.Fatalf("限速生效时应保留窗口记录, 实际 %d 条", leftover)
 	}
 
-	if err := waitChannelRPM(context.Background(), channelID, "k1", 0); err != nil {
+	if err := waitChannelRPM(context.Background(), channelID, "k1", 0, nil); err != nil {
 		t.Fatalf("不限速应直接放行: %v", err)
 	}
 	channelLimitMu.Lock()
@@ -211,7 +211,7 @@ func TestWaitChannelRPMUnlimitedClearsLeftoverWindow(t *testing.T) {
 
 	negativeCtx, negativeCancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer negativeCancel()
-	if err := waitChannelRPM(negativeCtx, channelID, "k1", -5); err != nil {
+	if err := waitChannelRPM(negativeCtx, channelID, "k1", -5, nil); err != nil {
 		t.Fatalf("负值按不限速处理: %v", err)
 	}
 }
@@ -226,7 +226,7 @@ func TestCleanupChannelKeyStateClearsLimitState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("领取槽位失败: %v", err)
 	}
-	if err := waitChannelRPM(context.Background(), channelID, "k1", 1); err != nil {
+	if err := waitChannelRPM(context.Background(), channelID, "k1", 1, nil); err != nil {
 		t.Fatalf("记录 RPM 放行失败: %v", err)
 	}
 
@@ -236,7 +236,7 @@ func TestCleanupChannelKeyStateClearsLimitState(t *testing.T) {
 	held()
 
 	// RPM 窗口已清空: 同 Key 立即重新放行, 不受删除前的记录压制。
-	if werr := waitChannelRPM(context.Background(), channelID, "k1", 1); werr != nil {
+	if werr := waitChannelRPM(context.Background(), channelID, "k1", 1, nil); werr != nil {
 		t.Fatalf("清理后同 Key 应重新获得预算: %v", werr)
 	}
 	// 信号量表已重建: 清理前占用的槽位不再计入新容量。
@@ -368,7 +368,7 @@ func TestChannelUpdateRateLimitFields(t *testing.T) {
 	if derr := op.ChannelDel(channel.ID, context.Background()); derr != nil {
 		t.Fatalf("删除渠道失败: %v", derr)
 	}
-	if werr := waitChannelRPM(context.Background(), channel.ID, "anykey", 1); werr != nil {
+	if werr := waitChannelRPM(context.Background(), channel.ID, "anykey", 1, nil); werr != nil {
 		t.Fatalf("删除后限速状态应已清空: %v", werr)
 	}
 }

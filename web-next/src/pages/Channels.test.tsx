@@ -176,7 +176,7 @@ describe("<ChannelsPage />", () => {
     mockList([sampleChannel]);
     render(<ChannelsPage />, { wrapper: Wrapper });
     await waitFor(() => screen.getByText("openai-prod"));
-    const row = screen.getByText("openai-prod").closest("tr")!;
+    const row = screen.getByText("openai-prod").closest("article")!;
     const delBtn = row.querySelector('[title="删除"]') as HTMLButtonElement;
     await user.click(delBtn);
     await waitFor(() => {
@@ -330,10 +330,10 @@ describe("<ChannelsPage />", () => {
     mockList([legacyChannel]);
     render(<ChannelsPage />, { wrapper: Wrapper });
     await waitFor(() => screen.getByText("legacy-key"));
-    const row = screen.getByText("legacy-key").closest("tr");
-    expect(row).toBeTruthy();
-    // 列序：状态/渠道/类型/Base URL/Keys/模型/RPM/操作 → Keys 是 index 4
-    expect(row!.querySelectorAll("td")[4]!.textContent).toBe("1");
+    const card = screen.getByText("legacy-key").closest("article");
+    expect(card).toBeTruthy();
+    // 卡片信息面板中显示密钥数量
+    expect(card!.textContent).toContain("1 密钥");
   });
 });
 

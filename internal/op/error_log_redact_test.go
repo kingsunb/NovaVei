@@ -122,8 +122,9 @@ func TestErrorLogEnqueueRedactsSecretsEndToEnd(t *testing.T) {
 	const apiKeyPlaceholder = "PLACEHOLDER_API_KEY_VALUE_12345"
 	const passwordPlaceholder = "PLACEHOLDER_PASSWORD_VALUE_67890"
 
-	// messages 内容使整体 JSON 超过 MaxRequestBodyLogBytes(4096),
-	// 入队截断后 JSON 不完整, 走文本正则兜底脱敏; 敏感字段位于前部, 必在截断保留区内。
+	// messages 内容使整体 JSON 超过 MaxRequestBodyLogBytes(64KB),
+	// 入队走 JSON 感知截断: 缩短过长 content 字符串值但保留合法 JSON 结构,
+	// 随后写入协程走结构化脱敏路径替换敏感字段为 [REDACTED]。
 	bigContent := strings.Repeat("x", model.MaxRequestBodyLogBytes+512)
 	body := map[string]any{
 		"api_key":  apiKeyPlaceholder,

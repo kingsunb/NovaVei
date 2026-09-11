@@ -16,7 +16,7 @@ const (
 	SettingKeyProxyURL                  SettingKey = "proxy_url"                   // 全局出站代理地址
 	SettingKeySyncLLMInterval           SettingKey = "sync_llm_interval"           // LLM 同步间隔(小时)
 	SettingKeyCORSAllowOrigins          SettingKey = "cors_allow_origins"          // 跨域白名单(逗号分隔的精确 origin, 如 "https://example.com"). 为空不允许跨域, 禁止 "*" 与裸域名
-	SettingKeyConversationLog           SettingKey = "conversation_log_enabled"    // 对话留存开关: "1"记录全部终态对话到 data/conversations 供审计与训练, "0"(默认)关闭
+	SettingKeyConversationLog           SettingKey = "conversation_log_enabled"    // 对话留存开关: "1"记录全部终态对话到 data/conversations 供本地审计使用, "0"(默认)关闭
 	SettingKeyConversationRetentionDays SettingKey = "conversation_retention_days" // 对话留存归档保留天数(天), 默认 3, 受 ConversationRetentionDaysMin/Max 校验
 	SettingKeyConversationDirMaxGB      SettingKey = "conversation_dir_max_gb"     // 对话留存目录硬预算(GB), 默认 5, 受 ConversationDirMaxGBMin/Max 校验
 	SettingKeyAuthJWTSecret             SettingKey = "auth_jwt_secret"             // JWT 签名密钥(32字节随机数的hex, 64字符). 为空时首次使用自动生成并持久化; 轮换后所有已签发 token 失效. 仅内部管理, 禁止通过设置接口读写
@@ -26,6 +26,7 @@ const (
 	SettingKeyMaskConfig                SettingKey = "mask_config"                 // 脱敏功能配置(JSON): 全局开关/内置规则开关/自定义敏感词, 默认全关
 	SettingKeyModelFilter               SettingKey = "model_filter"                // 渠道获取模型时的全局过滤表达式(ECMAScript 正则); 留空表示不过滤, 与渠道级 MatchRegex 取 AND
 	SettingKeyClientStatMaxCount        SettingKey = "client_stat_max_count"       // 调用客户端统计最大保留条数, 默认 10000, 0=不限制
+	SettingKeyProxyPool                 SettingKey = "proxy_pool"                  // 代理池(JSON 数组), 供设置页管理与测试多个可选代理
 )
 
 // 用量数据保留时间设置项的默认值与下限。
@@ -122,6 +123,7 @@ func DefaultSettings() []Setting {
 		{Key: SettingKeyMaskConfig, Value: defaultMaskConfigJSON()},                                       // 脱敏配置默认全关(全局关/规则全关/无自定义词)
 		{Key: SettingKeyModelFilter, Value: ""},                                                           // 全局模型过滤默认为空, 表示不过滤
 		{Key: SettingKeyClientStatMaxCount, Value: strconv.Itoa(DefaultClientStatMaxCount)},               // 调用客户端统计默认保留 1 万条
+		{Key: SettingKeyProxyPool, Value: "[]"},                                                              // 代理池默认为空
 	}
 }
 
@@ -232,6 +234,8 @@ func (s *Setting) Validate() error {
 			return fmt.Errorf("调用客户端最大保留条数不能超过 %d", ClientStatMaxCountMax)
 		}
 		return nil
+	case SettingKeyProxyPool:
+		return validateProxyPool(s.Value)
 	case SettingKeyProxyURL:
 		if s.Value == "" {
 			return nil
@@ -240,14 +244,7 @@ func (s *Setting) Validate() error {
 		if err != nil {
 			return fmt.Errorf("proxy URL is invalid: %w", err)
 		}
-		validSchemes := map[string]bool{
-			"http":    true,
-			"https":   true,
-			"socks":   true,
-			"socks5":  true,
-			"socks5h": true,
-		}
-		if !validSchemes[parsedURL.Scheme] {
+		if !validProxySchemes[parsedURL.Scheme] {
 			return fmt.Errorf("proxy URL scheme must be http, https, socks, socks5, or socks5h")
 		}
 		if parsedURL.Host == "" {
@@ -328,4 +325,62 @@ func isValidHeaderFieldName(name string) bool {
 		}
 	}
 	return true
+}
+
+// validProxySchemes 代理地址允许的协议集, 与 client.newHTTPClientCustomProxy 保持一致。
+var validProxySchemes = map[string]bool{
+	"http":    true,
+	"https":   true,
+	"socks":   true,
+	"socks5":  true,
+	"socks5h": true,
+}
+
+// validateProxyPool 校验代理池 JSON: 允许空数组(含空字符串), 其余必须是合法且不超限的代理条目数组。
+func validateProxyPool(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	var entries []ProxyEntry
+	if err := json.Unmarshal([]byte(value), &entries); err != nil {
+		return fmt.Errorf("代理池必须是合法的 JSON 数组")
+	}
+	if len(entries) > MaxProxyPoolCount {
+		return fmt.Errorf("代理池条目数量不能超过 %d 个", MaxProxyPoolCount)
+	}
+	seenIDs := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		if entry.ID == "" {
+			return fmt.Errorf("代理条目 ID 不能为空")
+		}
+		if seenIDs[entry.ID] {
+			return fmt.Errorf("代理条目 ID 重复: %s", entry.ID)
+		}
+		seenIDs[entry.ID] = true
+		name := strings.TrimSpace(entry.Name)
+		if name == "" {
+			return fmt.Errorf("代理条目名称不能为空")
+		}
+		if len(name) > MaxProxyNameLen {
+			return fmt.Errorf("代理条目名称过长(最多 %d 字符)", MaxProxyNameLen)
+		}
+		if entry.URL == "" {
+			return fmt.Errorf("代理条目 %s 的地址不能为空", name)
+		}
+		if len(entry.URL) > MaxProxyURLLen {
+			return fmt.Errorf("代理条目 %s 的地址过长(最多 %d 字符)", name, MaxProxyURLLen)
+		}
+		parsedURL, err := url.Parse(entry.URL)
+		if err != nil {
+			return fmt.Errorf("代理条目 %s 的地址无效: %w", name, err)
+		}
+		if !validProxySchemes[parsedURL.Scheme] {
+			return fmt.Errorf("代理条目 %s 的协议必须为 http/https/socks/socks5/socks5h", name)
+		}
+		if parsedURL.Host == "" {
+			return fmt.Errorf("代理条目 %s 的地址缺少主机", name)
+		}
+	}
+	return nil
 }

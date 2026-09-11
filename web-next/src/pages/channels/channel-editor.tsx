@@ -17,6 +17,7 @@ import {
   Eye,
   EyeOff,
   WandSparkles,
+  Search,
 } from "lucide-react";
 
 import { api, APIError, parseHeaderTemplates } from "@/lib/api";
@@ -26,6 +27,7 @@ import type {
   ChannelKeyTestResult,
   ChannelModelLimit,
   ChannelUpdateRequest,
+  ProxyEntry,
 } from "@/lib/types";
 import { HEADER_TEMPLATES_SETTING_KEY } from "@/lib/types";
 import { DEFAULT_TEST_MESSAGE } from "@/lib/constants";
@@ -58,7 +60,9 @@ function emptyDraft(): Draft {
     enabled: true,
     base_url: "",
     key: "",
-    keys: [],
+    // 新建渠道默认展示一个空 Key 输入行：用户可直接填写，也可留空提交
+    // （后端 normalizeChannelKeys 会自动跳过空 Key 行，不会报错）。
+    keys: [{ id: "", original_id: "", key: "", remark: "" }],
     models: [],
     fixed_reply: "",
     proxy: false,
@@ -321,6 +325,65 @@ export function ChannelEditor({
   function toggleFetchAll(checked: boolean) {
     if (!fetchedForSelect) return;
     setFetchChecked(checked ? new Set(fetchedForSelect) : new Set());
+  }
+
+  // 批量勾选指定子集（搜索过滤后「全选」只作用于可见项）。
+  function toggleFetchMany(names: string[], checked: boolean) {
+    setFetchChecked((prev) => {
+      const next = new Set(prev);
+      for (const n of names) {
+        if (checked) next.add(n);
+        else next.delete(n);
+      }
+      return next;
+    });
+  }
+
+  // 首次保存（新建渠道）且用户未手动拉取/添加任何模型时，后台自动拉取上游
+  // 全部模型一并入库；拉取失败或上游为空时不阻塞保存，仅提示，渠道照常创建。
+  const [autoFetching, setAutoFetching] = useState(false);
+  async function handleSave() {
+    if (isNew && draft.models.length === 0 && draft.base_url.trim()) {
+      setAutoFetching(true);
+      let enriched = draft;
+      try {
+        const models = await api.fetchModels({
+          id: undefined,
+          type: draft.type,
+          base_url: draft.base_url.trim(),
+          key: draft.key.trim(),
+          keys: draft.keys,
+          proxy: draft.proxy,
+          channel_proxy: draft.channel_proxy ?? "",
+          match_regex: draft.match_regex ?? "",
+          custom_header: draft.custom_header,
+        });
+        if (models.length > 0) {
+          // 去重：上游偶发返回重复模型名时，Set 保证唯一。
+          const names = Array.from(new Set(models.map((m) => m.name)));
+          enriched = {
+            ...draft,
+            models: names.map((name) => ({
+              id: 0,
+              channel_id: 0,
+              name,
+              source: "auto" as const,
+            })),
+          };
+        } else {
+          toast.info("上游未返回任何模型");
+        }
+      } catch (e) {
+        toast.error(
+          `自动拉取模型失败：${e instanceof Error ? e.message : "未知错误"}`,
+        );
+      } finally {
+        setAutoFetching(false);
+      }
+      saveMut.mutate(enriched);
+      return;
+    }
+    saveMut.mutate(draft);
   }
 
   // 单模型测试：逐个模型发起测试，结果按模型名写入 map，行内即时展示状态。
@@ -613,6 +676,7 @@ export function ChannelEditor({
                   existing={new Set(draft.models.map((m) => m.name))}
                   onToggle={toggleFetchChecked}
                   onToggleAll={toggleFetchAll}
+                  onToggleMany={toggleFetchMany}
                   onConfirm={confirmFetchSelection}
                   onCancel={cancelFetchSelection}
                 />
@@ -696,8 +760,8 @@ export function ChannelEditor({
             <Button
               variant="primary"
               size="sm"
-              loading={saveMut.isPending}
-              onClick={() => saveMut.mutate(draft)}
+              loading={autoFetching || saveMut.isPending}
+              onClick={handleSave}
               disabled={!isValid}
             >
               保存
@@ -1482,6 +1546,7 @@ function FetchPicker({
   existing,
   onToggle,
   onToggleAll,
+  onToggleMany,
   onConfirm,
   onCancel,
 }: {
@@ -1490,16 +1555,37 @@ function FetchPicker({
   existing: Set<string>;
   onToggle: (name: string, checked: boolean) => void;
   onToggleAll: (checked: boolean) => void;
+  onToggleMany: (names: string[], checked: boolean) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
   // 上游返回的全部模型都列出。已存在于渠道的标灰（disabled）—— 它们已通过
   // `existing` 排除在新增集合之外，但保留展示让用户看到「上游有这个但我已经有了」。
-  const allChecked = fetched.length > 0 && fetched.every((n) => checked.has(n));
-  const someChecked = fetched.some((n) => checked.has(n));
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? fetched.filter((n) => n.toLowerCase().includes(q))
+    : fetched;
+  // 全选只作用于当前可见（过滤后）的模型。
+  const allChecked =
+    filtered.length > 0 && filtered.every((n) => checked.has(n) || existing.has(n));
+  const someChecked = filtered.some((n) => checked.has(n));
   const newCount = fetched.filter((n) => !existing.has(n)).length;
   const dupCount = fetched.length - newCount;
   const willAdd = fetched.filter((n) => checked.has(n) && !existing.has(n)).length;
+  const totalChecked = fetched.filter((n) => checked.has(n)).length;
+
+  function handleToggleAll(checked: boolean) {
+    if (q) {
+      // 过滤态：只批量勾选可见且非已存在的项。
+      onToggleMany(
+        filtered.filter((n) => !existing.has(n)),
+        checked,
+      );
+    } else {
+      onToggleAll(checked);
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -1520,6 +1606,18 @@ function FetchPicker({
         </p>
       </div>
 
+      {/* 搜索框 */}
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" aria-hidden />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="搜索模型名称…"
+          autoComplete="off"
+          className="h-8 pl-8 text-sm"
+        />
+      </div>
+
       <div className="flex items-center gap-2 border-b border-border pb-2">
         <label className="flex items-center gap-1.5 text-xs text-ink-muted">
           <input
@@ -1528,45 +1626,54 @@ function FetchPicker({
             ref={(el) => {
               if (el) el.indeterminate = !allChecked && someChecked;
             }}
-            onChange={(e) => onToggleAll(e.target.checked)}
+            onChange={(e) => handleToggleAll(e.target.checked)}
             className="h-3.5 w-3.5 rounded border-border accent-primary"
           />
-          全选
+          全选{q && filtered.length < fetched.length ? `（${filtered.length}）` : ""}
         </label>
         <span className="text-xs text-ink-muted">
-          已勾选 {fetched.filter((n) => checked.has(n)).length} / {fetched.length}
+          已勾选 {totalChecked} / {fetched.length}
+          {q && filtered.length < fetched.length && (
+            <> · 显示 {filtered.length}</>
+          )}
         </span>
       </div>
 
-      <ul className="max-h-[50vh] divide-y divide-border overflow-auto rounded-md border border-border">
-        {fetched.map((name) => {
-          const isExisting = existing.has(name);
-          return (
-            <li
-              key={name}
-              className={cn(
-                "flex items-center gap-2 px-3 py-2 text-sm",
-                isExisting && "opacity-50",
-              )}
-            >
-              <input
-                type="checkbox"
-                disabled={isExisting}
-                checked={isExisting || checked.has(name)}
-                onChange={(e) => onToggle(name, e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-border accent-primary"
-                aria-label={`保留 ${name}`}
-              />
-              <span className="mono truncate text-ink">{name}</span>
-              {isExisting && (
-                <Pill tone="neutral" className="ml-auto">
-                  已存在
-                </Pill>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      {filtered.length === 0 ? (
+        <p className="rounded-md border border-border bg-surface-subtle/60 px-3 py-6 text-center text-sm text-ink-muted">
+          没有匹配「{query}」的模型
+        </p>
+      ) : (
+        <ul className="max-h-[50vh] divide-y divide-border overflow-auto rounded-md border border-border">
+          {filtered.map((name) => {
+            const isExisting = existing.has(name);
+            return (
+              <li
+                key={name}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 text-sm",
+                  isExisting && "opacity-50",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  disabled={isExisting}
+                  checked={isExisting || checked.has(name)}
+                  onChange={(e) => onToggle(name, e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-border accent-primary"
+                  aria-label={`保留 ${name}`}
+                />
+                <span className="mono truncate text-ink">{name}</span>
+                {isExisting && (
+                  <Pill tone="neutral" className="ml-auto">
+                    已存在
+                  </Pill>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       <DialogFooter>
         <Button variant="ghost" size="sm" onClick={onCancel}>
@@ -1652,6 +1759,17 @@ function AdvancedTab({
       ),
     [settings],
   );
+  // 代理池来自设置页维护的 proxy_pool 设置项，渠道表单可下拉选择。
+  const proxyPool = useMemo<ProxyEntry[]>(() => {
+    const raw = settings?.find((s) => s.key === "proxy_pool")?.value;
+    if (!raw) return [];
+    try {
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.filter((p: ProxyEntry) => p.enabled && p.url) : [];
+    } catch {
+      return [];
+    }
+  }, [settings]);
   const [selectedTemplate, setSelectedTemplate] = useState("");
 
   /**
@@ -1678,11 +1796,29 @@ function AdvancedTab({
 
   return (
     <div className="space-y-4">
-      <Field label="渠道代理（可选）">
+      <Field label="渠道代理（可选）" hint="可从代理池下拉选择，也可手动填写；支持 http(s) 与 socks5/socks5h">
+        {proxyPool.length > 0 && (
+          <select
+            className="mb-1.5 h-7 w-full rounded-control border border-border bg-card px-2 text-xs text-ink-muted"
+            value=""
+            onChange={(e) => {
+              if (e.target.value) update("channel_proxy", e.target.value);
+            }}
+            aria-label="从代理池选择"
+          >
+            <option value="">从代理池选择…</option>
+            {proxyPool.map((p) => (
+              <option key={p.id} value={p.url}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
         <Input
           value={draft.channel_proxy ?? ""}
           onChange={(e) => update("channel_proxy", e.target.value)}
           placeholder="http://127.0.0.1:7890"
+          className="mono"
         />
       </Field>
       <Field label="参数覆盖（JSON）">
