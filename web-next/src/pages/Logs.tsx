@@ -521,7 +521,7 @@ function LiveTable({
 
       {rows.length > 0 && (
         <div className="border-t border-border bg-card/40 px-4 py-1.5 text-[11px] text-ink-muted">
-          实时渲染 · 共 {rows.length} 条 · 虚拟化窗口 {virtualizer.getVirtualItems().length} 行
+          共 {rows.length} 条
         </div>
       )}
     </Card>
@@ -530,9 +530,22 @@ function LiveTable({
 
 function ErrorRow({ e }: { e: ErrorLog }) {
   const [open, setOpen] = useState(false);
+  const hasDetail = !!(e.err_detail || e.request_body);
   return (
     <div className="px-4 py-2.5">
-      <div className="flex items-center gap-2 text-xs">
+      <div
+        className="flex items-center gap-2 text-xs cursor-pointer"
+        onClick={() => setOpen((o) => !o)}
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onKeyDown={(ev) => {
+          if (ev.key === "Enter" || ev.key === " ") {
+            ev.preventDefault();
+            setOpen((o) => !o);
+          }
+        }}
+      >
         <Pill tone="danger">{e.err_class}</Pill>
         {e.model && <span className="mono text-ink-muted">{e.model}</span>}
         {e.channel_name && (
@@ -544,17 +557,18 @@ function ErrorRow({ e }: { e: ErrorLog }) {
         <span className="ml-auto text-ink-muted">
           {new Date(e.created_at).toLocaleString("zh-CN")}
         </span>
-        {(e.err_detail || e.request_body) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-[11px]"
-            aria-expanded={open}
-            onClick={() => setOpen((o) => !o)}
-          >
-            {open ? "收起" : "展开"}
-          </Button>
-        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 text-[11px]"
+          aria-expanded={open}
+          onClick={(ev) => {
+            ev.stopPropagation();
+            setOpen((o) => !o);
+          }}
+        >
+          {open ? "收起" : "展开"}
+        </Button>
       </div>
       <p className="mt-1 text-sm text-ink">{e.err_brief}</p>
       {open && (
@@ -570,6 +584,9 @@ function ErrorRow({ e }: { e: ErrorLog }) {
               <p className="mb-1 text-[11px] font-medium text-ink-muted">错误详情</p>
               <FormattedBody content={e.err_detail} />
             </div>
+          )}
+          {!hasDetail && (
+            <p className="text-[11px] text-ink-subtle">无更多详细信息</p>
           )}
         </div>
       )}
@@ -904,9 +921,31 @@ function RouteTab({
 
   if (!group) {
     return (
-      <p className="py-6 text-center text-sm text-ink-muted">
-        未找到分组「{req.model}」，可能已被删除
-      </p>
+      <div className="space-y-3 py-4">
+        <p className="text-sm text-ink-muted">该请求未经过分组路由，直接使用以下渠道：</p>
+        <div className="rounded-lg border border-border bg-card/40 p-3 space-y-2 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-ink-muted min-w-[80px]">渠道</span>
+            <span className="mono text-ink">{req.target_channel}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-ink-muted min-w-[80px]">模型</span>
+            <span className="mono text-ink">{req.target_model}</span>
+          </div>
+          {(req.key_name || req.api_key) && (
+            <div className="flex items-center gap-2">
+              <span className="text-ink-muted min-w-[80px]">密钥</span>
+              <span className="mono text-ink">
+                {req.key_name || "—"}{req.api_key ? ` (${req.api_key})` : ""}
+              </span>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <span className="text-ink-muted min-w-[80px]">中继方式</span>
+            <Pill tone="neutral">{req.relay_mode === "passthrough" ? "透传" : "转换"}</Pill>
+          </div>
+        </div>
+      </div>
     );
   }
   if (items.length === 0) {

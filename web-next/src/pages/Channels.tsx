@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Copy,
   Pencil,
   Plus,
   Search,
@@ -92,6 +93,18 @@ export default function ChannelsPage() {
     onSuccess: () => {
       toast.success("已删除");
       setPendingDelete(null);
+      qc.invalidateQueries({ queryKey: ["channels"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // 复制渠道: 以原渠道为模板新建一条, 默认停用; 名称在原名后追加 "_copy",
+  // 若已被占用则依次尝试 "_copy1"、"_copy2" … 直至不重名。
+  const copyMut = useMutation({
+    mutationFn: (vars: { sourceId: number; body: Omit<Channel, "id"> }) =>
+      api.createChannel(vars.body),
+    onSuccess: () => {
+      toast.success("已复制");
       qc.invalidateQueries({ queryKey: ["channels"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -221,6 +234,33 @@ export default function ChannelsPage() {
     } finally {
       setImporting(false);
     }
+  }
+
+  // 复制渠道: 排除 id; keys 清空 id/original_id 让后端重新生成;
+  // models 清空 id/channel_id; 新渠道默认停用。
+  function onCopy(c: Channel) {
+    const list = data ?? [];
+    const existing = new Set(list.map((x) => x.name));
+    let newName = `${c.name}_copy`;
+    let i = 1;
+    while (existing.has(newName)) {
+      newName = `${c.name}_copy${i}`;
+      i++;
+    }
+    const { id: _id, ...rest } = c;
+    copyMut.mutate({
+      sourceId: c.id,
+      body: {
+        ...rest,
+        name: newName,
+        enabled: false,
+        keys: c.keys.map((k) => {
+          const { original_id: _oid, ...keyRest } = k;
+          return { ...keyRest, id: "" };
+        }),
+        models: c.models.map((m) => ({ ...m, id: 0, channel_id: 0 })),
+      },
+    });
   }
 
   return (
@@ -396,22 +436,8 @@ export default function ChannelsPage() {
                     <td className="whitespace-nowrap px-4 py-2.5 align-middle text-center text-ink-muted">
                       {(c.keys?.length || (c.key_masked ? 1 : 0))}
                     </td>
-                    <td className="px-4 py-2.5 align-middle">
-                      <div className="flex flex-wrap items-center gap-1">
-                        {c.models?.slice(0, 3).map((m) => (
-                          <Pill
-                            key={m.id}
-                            tone={m.source === "auto" ? "neutral" : "info"}
-                          >
-                            {m.name}
-                          </Pill>
-                        ))}
-                        {c.models && c.models.length > 3 && (
-                          <span className="text-[11px] text-ink-muted">
-                            +{c.models.length - 3}
-                          </span>
-                        )}
-                      </div>
+                    <td className="whitespace-nowrap px-4 py-2.5 align-middle text-center text-ink-muted">
+                      {c.models?.length ?? 0} 个
                     </td>
                     <td className="num whitespace-nowrap px-4 py-2.5 align-middle text-right text-ink-muted">
                       {(c.rate_limit_rpm > 0 ? formatNumber(c.rate_limit_rpm) : "∞")} / {(c.max_concurrent > 0 ? c.max_concurrent : "∞")}
@@ -466,6 +492,17 @@ export default function ChannelsPage() {
                           aria-label={`编辑 ${c.name}`}
                         >
                           <Pencil className="h-3.5 w-3.5" aria-hidden />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          loading={copyMut.isPending && copyMut.variables?.sourceId === c.id}
+                          onClick={() => onCopy(c)}
+                          title="复制"
+                          aria-label={`复制 ${c.name}`}
+                        >
+                          <Copy className="h-3.5 w-3.5" aria-hidden />
                         </Button>
                         <Button
                           variant="ghost"

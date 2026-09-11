@@ -89,8 +89,8 @@ const SECTIONS: { id: Section; label: string }[] = [
 export default function SettingsPage() {
   const [active, setActive] = useState<Section>("appearance");
   return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[180px,1fr]">
-      <aside className="space-y-0.5">
+    <div className="grid grid-cols-1 gap-5 md:grid-cols-[180px,1fr]">
+      <aside className="space-y-0.5 md:border-r md:border-border/40 md:pr-3">
         {SECTIONS.map((s) => (
           <button
             key={s.id}

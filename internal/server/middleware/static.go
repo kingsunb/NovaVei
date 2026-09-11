@@ -86,6 +86,23 @@ func static(urlPrefix string, fileSystem http.FileSystem) gin.HandlerFunc {
 			}
 			fileserver.ServeHTTP(c.Writer, c.Request)
 			c.Abort()
+			return
+		}
+
+		// SPA fallback: 文件不存在且非 API 路径，回退到 index.html，
+		// 让前端路由器接管（如 /dashboard /channels 等前端路由）。
+		// 排除有文件扩展名的路径（如 .js .css .png），那些是真正的资源 404。
+		if path.Ext(c.Request.URL.Path) == "" {
+			indexFile, indexErr := fileSystem.Open("index.html")
+			if indexErr == nil {
+				_ = indexFile.Close()
+				c.Header("Cache-Control", "no-cache")
+				// 重写请求路径为 index.html 让 fileserver 服务它
+				c.Request.URL.Path = "index.html"
+				fileserver.ServeHTTP(c.Writer, c.Request)
+				c.Abort()
+				return
+			}
 		}
 	}
 }

@@ -3,6 +3,7 @@ import {
   sampleChannel,
   sampleChannelDisabled,
 } from "@/test/fixtures/channels";
+import { DEFAULT_TEST_MESSAGE } from "@/lib/constants";
 
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -291,14 +292,14 @@ describe("<ChannelsPage />", () => {
     // 「测试连通」按钮 + 关闭确认：避免 onClose 干扰
     await user.click(screen.getByRole("button", { name: /测试连通/ }));
 
-    // 后端兜底取 channel[0]，前端只传 {id}
+    // 后端兜底取 channel[0]，前端传 {id, message}（message 来自设置项 channel_test_message）
     await waitFor(() => {
       const call = fetchMock.mock.calls.find((c) =>
         String(c[0]).includes("/channel/test"),
       );
       expect(call).toBeDefined();
       const body = JSON.parse((call![1] as RequestInit).body as string);
-      expect(body).toEqual({ id: sampleChannel.id });
+      expect(body).toEqual({ id: sampleChannel.id, message: DEFAULT_TEST_MESSAGE });
     });
   });
 

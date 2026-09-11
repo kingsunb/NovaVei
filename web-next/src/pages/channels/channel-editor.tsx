@@ -19,7 +19,7 @@ import {
   WandSparkles,
 } from "lucide-react";
 
-import { api, parseHeaderTemplates } from "@/lib/api";
+import { api, APIError, parseHeaderTemplates } from "@/lib/api";
 import type {
   Channel,
   ChannelKey,
@@ -28,6 +28,7 @@ import type {
   ChannelUpdateRequest,
 } from "@/lib/types";
 import { HEADER_TEMPLATES_SETTING_KEY } from "@/lib/types";
+import { DEFAULT_TEST_MESSAGE } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 
 
@@ -208,6 +209,17 @@ export function ChannelEditor({
   const isNew = !channel || channel === "new";
   const open = !!channel;
 
+  // 渠道模型测试使用的测试问题：取设置中 channel_test_message，缺失则回落默认。
+  const { data: msgSetting } = useQuery({
+    queryKey: ["setting", "channel_test_message"],
+    queryFn: () =>
+      api.getSetting("channel_test_message").catch((e: unknown) => {
+        if (e instanceof APIError && e.status === 404) return null;
+        throw e;
+      }),
+  });
+  const testMessage = msgSetting?.value?.trim() || DEFAULT_TEST_MESSAGE;
+
   // 实时校验（仅在用户交互后显示）
   const nameError = validateField(draft.name, NAME_RULE);
   const urlError = validateField(draft.base_url, URL_RULE);
@@ -314,7 +326,7 @@ export function ChannelEditor({
 
   // 单模型测试：逐个模型发起测试，结果按模型名写入 map，行内即时展示状态。
   const [modelTestResults, setModelTestResults] = useState<
-    Record<string, { ok: boolean; latency_ms: number; error?: string }>
+    Record<string, { ok: boolean; latency_ms: number; error?: string; content?: string }>
   >({});
   const [testingModels, setTestingModels] = useState<Set<string>>(
     () => new Set(),
@@ -430,7 +442,7 @@ export function ChannelEditor({
       const result = await api.testChannel(
         channel!.id,
         modelName,
-        undefined,
+        testMessage,
         testKeyID || undefined,
       );
       // 200 即成功：失败由后端以 5xx 表达，走下方 catch
@@ -438,6 +450,7 @@ export function ChannelEditor({
         ok: true,
         latency_ms: result.latency_ms,
         error: undefined,
+        content: result.content,
       };
       setModelTestResults((prev) => ({ ...prev, [modelName]: normalized }));
       return normalized;
@@ -465,7 +478,7 @@ export function ChannelEditor({
   // Footer「测试连通」专用：让后端按 channel[0] 兜底模型，body 不带 model 字段。
   // 结果必须反馈：后端 30s 预算内静默返回/失败都会让管理员反复点击重试。
   const testMutForFooter = useMutation({
-    mutationFn: (id: number) => api.testChannel(id),
+    mutationFn: (id: number) => api.testChannel(id, undefined, testMessage),
     onSuccess: (r) => {
       // 后端失败走 HTTP 5xx（onError），200 即成功
       toast.success(`连通 (${r.latency_ms}ms)`);
@@ -1030,7 +1043,7 @@ function ModelsTab({
   checkedTestModels: Set<string>;
   testingModels: Set<string>;
   testingAll: boolean;
-  modelTestResults: Record<string, { ok: boolean; latency_ms: number; error?: string }>;
+  modelTestResults: Record<string, { ok: boolean; latency_ms: number; error?: string; content?: string }>;
   savedKeyOptions: Array<{ id: string; label: string; index: number }>;
   testKeyID: string;
   onTestKeyChange: (value: string) => void;
@@ -1270,7 +1283,7 @@ function ModelsTab({
                     )}
                   </div>
 
-                  {/* 测试状态：进行中 / 成功延迟 / 失败原因 */}
+                  {/* 测试状态：进行中 / 成功延迟 / 失败（完整结果在下方展开行） */}
                   <div className="flex min-w-[140px] items-center justify-end gap-1.5">
                     {testing ? (
                       <span className="flex items-center gap-1.5 text-xs text-ink-muted">
@@ -1287,12 +1300,9 @@ function ModelsTab({
                           {result.latency_ms}ms
                         </span>
                       ) : (
-                        <span
-                          className="flex items-center gap-1.5 truncate text-xs text-red-600 dark:text-red-400"
-                          title={result.error}
-                        >
+                        <span className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
                           <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                          <span className="truncate">{result.error}</span>
+                          失败
                         </span>
                       )
                     ) : null}
@@ -1377,6 +1387,27 @@ function ModelsTab({
                     </Button>
                   </div>
                 </div>
+
+                {/* 测试结果展开行：成功显示延迟与回复内容，失败完整显示错误（不截断） */}
+                {result && !testing && (
+                  <div className="ml-8 border-l-2 border-border/40 pl-3 py-1.5 text-xs">
+                    {result.ok ? (
+                      <div className="space-y-1">
+                        <span className="text-emerald-600 dark:text-emerald-400">
+                          ✓ 成功 · 延迟 {result.latency_ms}ms
+                        </span>
+                        {result.content && (
+                          <p className="text-ink-muted whitespace-pre-wrap break-all">{result.content}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <span className="text-red-600 dark:text-red-400">✗ 失败</span>
+                        <p className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-all">{result.error}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* 按模型配置：max_output 限额 + thinking_level 注入 */}
                 {expanded && (

@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/kingsunb/NovaVei/internal/model"
 	"github.com/kingsunb/NovaVei/internal/op"
 	"github.com/looplj/axonhub/llm"
@@ -349,12 +350,15 @@ func sendChannelTestRequest(ctx context.Context, channel model.Channel, modelNam
 	if passthrough {
 		relayMode = "passthrough"
 	}
+	// 生成随机值以触发 injectRandomHeaders 注入动态头(含 opencode 兼容头),
+	// 与真实转发路径保持一致; 空串会让 injectRandomHeaders 提前返回而漏注这些头。
+	randomValue := uuid.NewString()
 	startedAt := time.Now()
 	var result *upstreamResponse
 	if passthrough {
-		result, err = sendPassthrough(ctx, format, raw, channel, outbound, false, "")
+		result, err = sendPassthrough(ctx, format, raw, channel, outbound, false, randomValue)
 	} else {
-		result, err = sendConverted(ctx, format, raw, channel, outbound, false, "")
+		result, err = sendConverted(ctx, format, raw, channel, outbound, false, randomValue)
 	}
 	elapsed := time.Since(startedAt)
 	clientFormat := clientFormatLabel(format)
