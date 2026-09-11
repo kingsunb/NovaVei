@@ -1,0 +1,7 @@
+{
+  "new-web": true,
+  "rollout-percent": 5,
+  "sticky-bucket": true,
+  "ab-mode": "auto",
+  "legacy-path": "/legacy"
+}

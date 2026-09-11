@@ -1,0 +1,1066 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { Pause, Play, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+
+import { api, APIError } from "@/lib/api";
+import type {
+  AttemptRecord,
+  ErrorLog,
+  GroupItem,
+  GroupRouteState,
+  RequestState,
+} from "@/lib/types";
+import { Card } from "@/components/ui/card";
+import { Pill } from "@/components/ui/pill";
+import { Button } from "@/components/ui/button";
+import { FormattedBody } from "@/components/ui/formatted-body";
+import { cn, formatNumber, formatElapsedWithFirst } from "@/lib/utils";
+import { QueryErrorBanner } from "@/components/ui/query-error";
+import { openSSE } from "@/lib/sse";
+import {
+  formatCountdown,
+  remainingSeconds,
+  useGroupRuntime,
+  useNow,
+} from "./useGroupRuntime";
+import {
+  Dialog,
+  DialogBody,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+// 命中上游缓存时, 缓存读取的输入 token 数嵌套在后端 llm.Usage 的
+// prompt_tokens_details.cached_tokens 下 (RequestState.usage 类型未声明该嵌套字段,
+// 此处用宽松结构类型读取; 缺省或 0 表示未命中缓存, 不展示)。
+function cacheTokensOf(
+  r: { usage?: { prompt_tokens_details?: { cached_tokens?: number } } },
+): number {
+  return r.usage?.prompt_tokens_details?.cached_tokens ?? 0;
+}
+
+type Tab = "live" | "err";
+
+type SSEStatus = "connecting" | "open" | "closed";
+
+const STATE_TONE: Record<string, "neutral" | "info" | "success" | "danger"> = {
+  running: "info",
+  committed: "info",
+  success: "success",
+  failed: "danger",
+  canceled: "neutral",
+};
+
+/** 后端状态 → 中文展示；未知状态回退原文。 */
+const STATE_LABEL: Record<string, string> = {
+  running: "进行中",
+  committed: "已提交",
+  success: "成功",
+  failed: "失败",
+  canceled: "已取消",
+};
+
+const ERR_CLASS_OPTIONS = [
+  "zero_output",
+  "early_eof",
+  "timeout",
+  "client_cancel",
+  "admin_abort",
+  "upstream_4xx",
+  "upstream_5xx",
+  "upstream_network",
+  "upstream_error",
+];
+
+export default function LogsPage() {
+  const qc = useQueryClient();
+  const [tab, setTab] = useState<Tab>("live");
+  const [live, setLive] = useState<RequestState[]>([]);
+  const [tracing, setTracing] = useState<RequestState | null>(null);
+  const [errClass, setErrClass] = useState("");
+  const [confirmClearErrors, setConfirmClearErrors] = useState(false);
+  const [sseStatus, setSseStatus] = useState<SSEStatus>("connecting");
+
+  // 实时 SSE 订阅
+  const sseRef = useRef<{ close: () => void } | null>(null);
+  // 每个句柄一个自增 token；异步回调（onOpen/onError 可能晚于 cleanup 触发）
+  // 只在 token 仍是最新时才允许写 sseStatus，避免快速切换 Tab 时指示灯抖动。
+  const sseTokenRef = useRef(0);
+  useEffect(() => {
+    if (tab !== "live") {
+      sseRef.current?.close();
+      sseRef.current = null;
+      setSseStatus("closed");
+      return;
+    }
+    const token = ++sseTokenRef.current;
+    setSseStatus("connecting");
+    const handle = openSSE<RequestState>("/api/v1/log/overview/stream", {
+      // 后端使用 event: log 发送命名 SSE 事件；不订阅 eventName 时，浏览器
+      // 不会把这些事件交给 onmessage，日志页会一直显示空列表。
+      eventName: "log",
+      onOpen: () => {
+        if (sseTokenRef.current === token) setSseStatus("open");
+      },
+      onError: () => {
+        if (sseTokenRef.current === token) setSseStatus("closed");
+      },
+      onMessage: (req) => {
+        setLive((prev) => {
+          // 后端快照按请求 ID 倒序（最新在前）发出，列表需与之保持一致，保持
+          // 「最新请求在顶部、依次向下为更早的日期」。命中已有记录时原地替换，
+          // 新增记录按 ID 插入到「首个更小 ID 之前」；找不到更小 ID（即 req 为最新）
+          // 时追加到末尾，避免最新请求被挤到最旧之下造成整体翻转。
+          const index = prev.findIndex((r) => r.id === req.id);
+          if (index >= 0) {
+            const next = prev.slice();
+            next[index] = req;
+            return next;
+          }
+          const position = prev.findIndex((r) => r.id < req.id);
+          if (position < 0) {
+            return [...prev, req].slice(0, 200);
+          }
+          return (
+            [...prev.slice(0, position), req, ...prev.slice(position)].slice(0, 200)
+          );
+        });
+      },
+    });
+    sseRef.current = handle;
+    return () => {
+      handle.close();
+      if (sseTokenRef.current === token) {
+        // 失效本句柄 token：晚到的 onOpen/onError 不再写状态。
+        sseTokenRef.current += 1;
+        sseRef.current = null;
+        setSseStatus("closed");
+      }
+    };
+  }, [tab]);
+
+  // 拉取错误日志（持久化）
+  const {
+    data: errors,
+    isLoading: loadingErr,
+    isError: errorsError,
+    refetch: refetchErrors,
+  } = useQuery({
+    queryKey: ["log-errors", errClass],
+    queryFn: () => api.listErrorLogs(50, errClass || undefined),
+  });
+
+  // 停止 / 恢复
+  const { data: stopState } = useQuery({
+    queryKey: ["log-stop-all-state"],
+    queryFn: api.stopAllState,
+    refetchInterval: 5000,
+  });
+
+  const stopAllMut = useMutation({
+    mutationFn: () => api.stopAll(),
+    onSuccess: (result) => {
+      toast.success(`已请求停止 ${result.stopped} 个运行中请求`);
+      qc.setQueryData(["log-stop-all-state"], { is_stopped: true });
+    },
+    onError: (e: Error) => toast.error(e.message || "停止请求失败"),
+  });
+  const resumeAllMut = useMutation({
+    mutationFn: () => api.resumeAll(),
+    onSuccess: () => {
+      toast.success("已恢复接收新请求");
+      qc.setQueryData(["log-stop-all-state"], { is_stopped: false });
+    },
+    onError: (e: Error) => toast.error(e.message || "恢复请求失败"),
+  });
+
+  const clearErrMut = useMutation({
+    mutationFn: () => api.clearErrorLogs(),
+    onSuccess: () => {
+      toast.success("已清空错误日志");
+      setConfirmClearErrors(false);
+      qc.invalidateQueries({ queryKey: ["log-errors"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "清空错误日志失败"),
+  });
+
+  const stats = useMemo(() => {
+    const running = live.filter((l) => l.status === "running" || l.status === "committed").length;
+    const success = live.filter((l) => l.status === "success").length;
+    const failed = live.filter((l) => l.status === "failed").length;
+    return { running, success, failed, total: live.length };
+  }, [live]);
+
+  return (
+    <div className="space-y-4">
+      {/* 计数条 */}
+      <div className="flex flex-wrap items-center gap-4 rounded-card border border-border bg-card/60 px-4 py-2.5 text-xs">
+        <Counter label="运行" value={stats.running} tone="info" />
+        <Counter label="成功" value={stats.success} tone="success" />
+        <Counter label="失败" value={stats.failed} tone="danger" />
+        <Counter label="总计" value={stats.total} />
+        <span
+          className={cn(
+            "ml-auto flex items-center gap-1.5",
+            sseStatus === "open" ? "text-emerald-500" : "text-ink-muted",
+            sseStatus === "closed" && "text-warning",
+          )}
+          aria-live="polite"
+        >
+          <span
+            className={cn(
+              "relative flex h-2 w-2",
+              sseStatus !== "open" && "opacity-60",
+            )}
+          >
+            {sseStatus === "open" && (
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500/60" />
+            )}
+            <span
+              className={cn(
+                "relative inline-flex h-2 w-2 rounded-full",
+                sseStatus === "open" && "bg-emerald-500",
+                sseStatus === "connecting" && "bg-info",
+                sseStatus === "closed" && "bg-warning",
+              )}
+            />
+          </span>
+          {tab !== "live"
+            ? "未订阅实时流"
+            : sseStatus === "open"
+              ? "实时流已连接"
+              : sseStatus === "connecting"
+                ? "正在连接实时流…"
+                : "实时流断开，自动重连中"}
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1.5"
+          onClick={() =>
+            stopState?.is_stopped ? resumeAllMut.mutate() : stopAllMut.mutate()
+          }
+        >
+          {stopState?.is_stopped ? (
+            <>
+              <Play className="h-3.5 w-3.5" aria-hidden />
+              恢复接收
+            </>
+          ) : (
+            <>
+              <Pause className="h-3.5 w-3.5" aria-hidden />
+              停止全部
+            </>
+          )}
+        </Button>
+      </div>
+
+      {/* Tab */}
+      <div className="flex items-center gap-1 rounded-control border border-border bg-card/60 p-0.5 text-sm">
+        {(["live", "err"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            aria-pressed={tab === t}
+            className={cn(
+              "rounded-[5px] px-3 py-1 transition-colors",
+              tab === t
+                ? "bg-primary/12 font-medium text-primary-text"
+                : "text-ink-muted hover:text-ink",
+            )}
+          >
+            {t === "live" ? "实时请求" : "错误日志"}
+          </button>
+        ))}
+      </div>
+
+      {tab === "live" ? (
+        <LiveTable rows={live} onPick={setTracing} />
+      ) : (
+        <Card>
+          <div className="flex items-center justify-between border-b border-border px-4 py-2.5 text-xs text-ink-muted">
+            <div className="flex items-center gap-2">
+              <span>类别</span>
+              <select
+                aria-label="错误类别"
+                className="h-7 rounded-control border border-border bg-card px-2 text-xs"
+                value={errClass}
+                onChange={(e) => setErrClass(e.target.value)}
+              >
+                <option value="">全部</option>
+                {ERR_CLASS_OPTIONS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              {/* errors 是「当前筛选 + limit 50」的子集，不能写成「共 N 条」误导为全量计数 */}
+              <span>· 已载入 {errors?.length ?? 0} 条</span>
+            </div>
+            <Button
+              variant="danger-outline"
+              size="sm"
+              className="h-7 gap-1"
+              onClick={() => setConfirmClearErrors(true)}
+              loading={clearErrMut.isPending}
+            >
+              <Trash2 className="h-3 w-3" aria-hidden />
+              清空错误日志
+            </Button>
+          </div>
+          <div className="divide-y divide-border">
+            {loadingErr ? (
+              <div className="flex items-center justify-center gap-2 px-4 py-8"><span className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" /><span className="text-sm text-ink-muted">加载中</span></div>
+            ) : errorsError ? (
+              <QueryErrorBanner onRetry={() => refetchErrors()} />
+            ) : (errors?.length ?? 0) === 0 ? (
+              <p className="px-4 py-8 text-center text-sm text-ink-muted">
+                暂无错误
+              </p>
+            ) : (
+              errors!.map((e) => <ErrorRow key={e.id} e={e} />)
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* 追踪 Sheet */}
+      <TraceSheet req={tracing} onClose={() => setTracing(null)} />
+
+      <Dialog
+        open={confirmClearErrors}
+        onOpenChange={(open) => !open && setConfirmClearErrors(false)}
+      >
+        <DialogContent variant="dialog" size="sm">
+          <DialogHeader>
+            <DialogTitle>清空错误日志</DialogTitle>
+            <DialogDescription>
+              将清空全部错误日志（所有类别，与当前筛选无关；后端不支持按筛选删除）。清空后不可恢复，确定继续吗？
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="ghost" size="sm">
+                取消
+              </Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              size="sm"
+              loading={clearErrMut.isPending}
+              onClick={() => clearErrMut.mutate()}
+            >
+              清空并删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+/**
+ * 虚拟化实时表 —— 长列表性能关键（DESIGN.md §4.3 表格规范）
+ *  - 行高固定 44px（与设计令牌一致）
+ *  - 容器 480px 高，超出滚动
+ *  - 渲染窗口 ≈ 12 行，200 行不卡
+ *  - sticky 表头用 grid 实现
+ */
+const ROW_HEIGHT = 44;
+const COLS =
+  "120px 90px minmax(280px,1fr) 90px 140px 160px 90px";
+
+function useElapsedTick(active: boolean) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [active]);
+  return now;
+}
+
+/**
+ * 耗时单元格：秒级计时器收敛在单元格内部，只重渲染自身，而不是整张
+ * 虚拟化表格 —— 之前 now 放在 LiveTable 顶层，每秒迫使 200 行全部重渲染。
+ * 非运行中的行不启定时器，直接展示首字耗时 · 总耗时（无首字时回退纯总耗时）。
+ */
+function ElapsedCell({ r }: { r: RequestState }) {
+  const active = r.status === "running" || r.status === "committed";
+  const now = useElapsedTick(active);
+  return <>{formatElapsedWithFirst(r, now)}</>;
+}
+
+function LiveTable({
+  rows,
+  onPick,
+}: {
+  rows: RequestState[];
+  onPick: (r: RequestState) => void;
+}) {
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 8,
+  });
+
+  return (
+    <Card className="overflow-hidden p-0">
+      {/* grid 语义包裹表头 + 主体，保证 role="row" 都有 role="grid" 祖先 */}
+      <div role="grid" aria-rowcount={rows.length + 1} aria-label="实时请求列表">
+      {/* 表头 */}
+      <div
+        className="grid border-b border-border bg-card/80 px-4 py-2.5 text-left text-xs text-ink-muted backdrop-blur"
+        style={{ gridTemplateColumns: COLS }}
+        role="row"
+        aria-rowindex={1}
+      >
+        <div role="columnheader" className="font-medium">时间</div>
+        <div role="columnheader" className="font-medium">状态</div>
+        <div role="columnheader" className="font-medium">模型 → 渠道 → 目标</div>
+        <div role="columnheader" className="font-medium">中继</div>
+        <div role="columnheader" className="font-medium">客户端</div>
+        <div role="columnheader" className="text-right font-medium">Tokens（入/出/缓存）</div>
+        <div role="columnheader" className="text-right font-medium">耗时</div>
+      </div>
+
+      {/* 虚拟化主体 */}
+      <div
+        ref={parentRef}
+        className="relative overflow-auto"
+        style={{ height: "min(480px, 60vh)" }}
+      >
+        {rows.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-ink-muted">
+            暂无实时请求；客户端首次发起后会立即出现
+          </div>
+        ) : (
+          <div
+            style={{
+              height: virtualizer.getTotalSize(),
+              position: "relative",
+              width: "100%",
+            }}
+          >
+            {virtualizer.getVirtualItems().map((vi) => {
+              const r = rows[vi.index];
+              if (!r) return null;
+              return (
+                <div
+                  key={r.id}
+                  data-index={vi.index}
+                  ref={virtualizer.measureElement}
+                  role="row"
+                  aria-rowindex={vi.index + 2}
+                  tabIndex={0}
+                  onClick={() => onPick(r)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onPick(r);
+                    }
+                  }}
+                  aria-label={`查看请求 #${r.id} 追踪`}
+                  className="absolute left-0 right-0 grid cursor-pointer items-center border-b border-border/60 px-4 hover:bg-surface-subtle/60 focus:bg-surface-subtle/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  style={{
+                    transform: `translateY(${vi.start}px)`,
+                    height: ROW_HEIGHT,
+                    gridTemplateColumns: COLS,
+                  }}
+                >
+                  <div role="gridcell" className="mono truncate text-xs text-ink-muted">
+                    {new Date(r.started_at).toLocaleTimeString("zh-CN")}
+                  </div>
+                  <div role="gridcell">
+                    <Pill tone={STATE_TONE[r.status] ?? "neutral"}>
+                      {STATE_LABEL[r.status] ?? r.status}
+                    </Pill>
+                  </div>
+                  <div role="gridcell" className="mono truncate text-xs text-ink-muted">
+                    {r.model} → {r.target_channel} → {r.target_model}
+                  </div>
+                  <div role="gridcell">
+                    <Pill
+                      tone={r.relay_mode === "passthrough" ? "success" : "warning"}
+                    >
+                      {r.relay_mode === "passthrough" ? "透传" : "转换"}
+                    </Pill>
+                  </div>
+                  <div role="gridcell" className="mono truncate text-xs text-ink-muted">
+                    {r.client_ip}
+                  </div>
+                  <div role="gridcell" className="num text-xs text-ink-muted">
+                    {formatNumber(r.usage.prompt_tokens)} /{" "}
+                    {formatNumber(r.usage.completion_tokens)}
+                    {cacheTokensOf(r) > 0 && (
+                      <>
+                        {" / 缓存"}
+                        {formatNumber(cacheTokensOf(r))}
+                      </>
+                    )}
+                  </div>
+                  <div role="gridcell" className="num text-xs text-ink-muted">
+                    <ElapsedCell r={r} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      </div>
+
+      {rows.length > 0 && (
+        <div className="border-t border-border bg-card/40 px-4 py-1.5 text-[11px] text-ink-muted">
+          实时渲染 · 共 {rows.length} 条 · 虚拟化窗口 {virtualizer.getVirtualItems().length} 行
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ErrorRow({ e }: { e: ErrorLog }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="px-4 py-2.5">
+      <div className="flex items-center gap-2 text-xs">
+        <Pill tone="danger">{e.err_class}</Pill>
+        {e.model && <span className="mono text-ink-muted">{e.model}</span>}
+        {e.channel_name && (
+          <span className="text-ink-muted">→ {e.channel_name}</span>
+        )}
+        {e.api_key_name && (
+          <span className="text-ink-muted">· {e.api_key_name}</span>
+        )}
+        <span className="ml-auto text-ink-muted">
+          {new Date(e.created_at).toLocaleString("zh-CN")}
+        </span>
+        {(e.err_detail || e.request_body) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-[11px]"
+            aria-expanded={open}
+            onClick={() => setOpen((o) => !o)}
+          >
+            {open ? "收起" : "展开"}
+          </Button>
+        )}
+      </div>
+      <p className="mt-1 text-sm text-ink">{e.err_brief}</p>
+      {open && (
+        <div className="mt-2 space-y-2">
+          {e.request_body && (
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-ink-muted">请求体</p>
+              <FormattedBody content={e.request_body} />
+            </div>
+          )}
+          {e.err_detail && (
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-ink-muted">错误详情</p>
+              <FormattedBody content={e.err_detail} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Counter({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: number;
+  tone?: "neutral" | "info" | "success" | "danger";
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span
+        className={cn(
+          "h-1.5 w-1.5 rounded-full",
+          tone === "info" && "bg-info",
+          tone === "success" && "bg-success",
+          tone === "danger" && "bg-destructive",
+          tone === "neutral" && "bg-ink-subtle",
+        )}
+      />
+      <span className="text-ink-muted">{label}</span>
+      <span className="num font-semibold text-ink">{value}</span>
+    </div>
+  );
+}
+
+// ---------------- 追踪 Sheet ----------------
+
+function TraceSheet({
+  req,
+  onClose,
+}: {
+  req: RequestState | null;
+  onClose: () => void;
+}) {
+  const [tab, setTab] = useState<"body" | "timeline" | "response" | "route">(
+    "timeline",
+  );
+  const [body, setBody] = useState<string>("");
+  const [response, setResponse] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+  const attempts = req?.attempts ?? [];
+  // 切换请求时清空上次缓存的请求体/响应体，避免切到 body/response Tab 之前
+  // 误看到上一个请求的内容；effect 依赖 req.id 重置 loading 与文案。
+  useEffect(() => {
+    setBody("");
+    setResponse("");
+    setLoading(false);
+  }, [req?.id]);
+
+  const stopMut = useMutation({
+    // 后端成功返回字符串 data；请求已结束/不存在走 404，而非 {stopped:false}。
+    mutationFn: (id: number) => api.stopRequest(id),
+    onSuccess: () => {
+      toast.success("已请求中止此请求");
+      onClose();
+    },
+    onError: (e: Error) => {
+      if (e instanceof APIError && e.status === 404) {
+        toast.info("请求已结束或不存在，无需中止");
+      } else {
+        toast.error(e.message);
+      }
+    },
+  });
+
+  const interruptMut = useMutation({
+    mutationFn: ({ id, round }: { id: number; round: number }) =>
+      api.interruptRound(id, round),
+    onSuccess: (result) => {
+      if (result?.interrupted === false) {
+        toast.info("该轮次已结束或请求已失效，无需中止");
+      } else {
+        toast.success("已请求中止当前轮次");
+      }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  useEffect(() => {
+    if (!req || tab !== "body") return;
+    const myReqId = req.id;
+    setLoading(true);
+    let cancelled = false;
+    api
+      .getRequestBody(myReqId)
+      .then((r) => {
+        if (!cancelled) setBody(r);
+      })
+      .catch(() => {
+        if (!cancelled) setBody("（拉取失败或请求体已截断）");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [req, tab]);
+
+  useEffect(() => {
+    if (!req || tab !== "response") return;
+    const myReqId = req.id;
+    setLoading(true);
+    let cancelled = false;
+    api
+      .getResponseBody(myReqId)
+      .then((r) => {
+        if (!cancelled) setResponse(r);
+      })
+      .catch(() => {
+        if (!cancelled) setResponse("（拉取失败或响应体已截断）");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [req, tab]);
+
+  if (!req) return null;
+
+  return (
+    <Dialog open={!!req} onOpenChange={(o) => !o && onClose()}>
+      {/* sheet 变体已内建 flex-col；Body flex-1 overflow-y-auto 生效 */}
+      <DialogContent variant="sheet">
+        <DialogHeader>
+          <DialogTitle>
+            追踪 #{req.id} · {req.model} → {req.target_channel} → {req.target_model}
+          </DialogTitle>
+          <DialogDescription>
+            客户端 {req.client_ip} · 密钥{" "}
+            {req.key_name ?? (req.api_key ? `尾缀 ${req.api_key}` : "—")} ·{" "}
+            {new Date(req.started_at).toLocaleString("zh-CN")}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* 关键诊断信息：状态/耗时/用量/出口/协议链路一眼可读 */}
+        <div className="flex flex-wrap items-center gap-1.5 px-4 pt-1 text-xs">
+          <Pill tone={STATE_TONE[req.status] ?? "neutral"}>
+            {STATE_LABEL[req.status] ?? req.status}
+          </Pill>
+          <Pill tone="neutral">耗时 {formatElapsedWithFirst(req)}</Pill>
+          <Pill tone="neutral">
+            tokens {formatNumber(req.usage.prompt_tokens)} /{" "}
+            {formatNumber(req.usage.completion_tokens)}
+            {cacheTokensOf(req) > 0 && (
+              <>
+                {" / 缓存"}
+                {formatNumber(cacheTokensOf(req))}
+              </>
+            )}
+            {req.usage_estimated ? "（估算）" : ""}
+          </Pill>
+          <Pill tone={req.proxy_addr ? "info" : "neutral"}>
+            {req.proxy_addr ? `出口代理 ${req.proxy_addr}` : "直连（未走代理）"}
+          </Pill>
+          <Pill tone="neutral" className="mono text-[10px]">
+            {req.client_format} → {req.upstream_type}
+          </Pill>
+          <Pill tone={req.relay_mode === "passthrough" ? "success" : "warning"}>
+            {req.relay_mode === "passthrough" ? "协议透传" : "协议转换"}
+          </Pill>
+        </div>
+
+        <div className="flex items-center gap-1 overflow-x-auto border-b border-border bg-card/30 px-4">
+          {[
+            { k: "timeline", label: `时间线 (${attempts.length})` },
+            { k: "route", label: "分组路由" },
+            { k: "body", label: "请求体" },
+            { k: "response", label: "响应体" },
+          ].map((t) => (
+            <button
+              key={t.k}
+              onClick={() => setTab(t.k as typeof tab)}
+              className={cn(
+                "border-b-2 px-3 py-2 text-sm transition-colors",
+                tab === t.k
+                  ? "border-primary font-medium text-primary-text"
+                  : "border-transparent text-ink-muted hover:text-ink",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <DialogBody className="space-y-3">
+          {tab === "timeline" && (
+            <ol className="space-y-2">
+              {attempts.length === 0 ? (
+                <p className="py-6 text-center text-sm text-ink-muted">
+                  暂无尝试记录
+                </p>
+              ) : (
+                attempts.map((a) => <AttemptLine key={a.seq} a={a} />)
+              )}
+            </ol>
+          )}
+
+          {tab === "body" && (
+            <FormattedBody content={loading ? "" : body} loading={loading} />
+          )}
+
+          {tab === "response" && (
+            <FormattedBody content={loading ? "" : response} loading={loading} />
+          )}
+
+          {tab === "route" && req && <RouteTab req={req} attempts={attempts} />}
+        </DialogBody>
+
+        <DialogFooter>
+          {req && (req.status === "running" || req.status === "committed") && (
+            <>
+              {req.round > 0 && (
+                <Button
+                  variant="danger-outline"
+                  size="sm"
+                  loading={interruptMut.isPending}
+                  onClick={() =>
+                    interruptMut.mutate({ id: req.id, round: req.round })
+                  }
+                  title="仅中止当前一轮次；不终止整个请求"
+                >
+                  中止当前轮次
+                </Button>
+              )}
+              <Button
+                variant="destructive"
+                size="sm"
+                loading={stopMut.isPending}
+                onClick={() => stopMut.mutate(req.id)}
+              >
+                终止请求
+              </Button>
+            </>
+          )}
+          <DialogClose asChild>
+            <Button variant="ghost" size="sm">
+              关闭
+            </Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AttemptLine({ a }: { a: AttemptRecord }) {
+  return (
+    <li className="flex items-center gap-3 rounded-md border border-border bg-card/60 px-3 py-2">
+      <Pill tone={a.outcome === "success" ? "success" : a.outcome === "failed" ? "danger" : "neutral"}>
+        #{a.seq}
+      </Pill>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-ink">{a.channel_name}</span>
+          <span className="text-ink-muted">→</span>
+          <span className="mono text-ink-muted">{a.model}</span>
+          {a.key_label && (
+            <Pill tone="neutral" className="text-[10px]">
+              {a.key_label}
+            </Pill>
+          )}
+          {a.err_class && <Pill tone="danger">{a.err_class}</Pill>}
+        </div>
+        {/* 出口代理只在请求级（RequestState.proxy_addr）下发；后端 AttemptRecord 无此字段，
+            曾在这里渲染的每轮「出口」chip 永远不可达，已删 */}
+        {a.err_brief && (
+          <p className="mt-0.5 truncate text-xs text-ink-muted">
+            {a.err_brief}
+          </p>
+        )}
+      </div>
+      <span
+        className="num text-xs text-ink-muted"
+        title="本轮从发起到终态的耗时"
+      >
+        {a.latency_ms > 0 ? `${a.latency_ms}ms` : "—"}
+      </span>
+    </li>
+  );
+}
+
+// ---------------- 分组路由全貌（REQ-017） ----------------
+
+/**
+ * 分组路由 Tab：展示请求所属分组的完整成员列表（按故障转移顺序），
+ * 复用 useGroupRuntime 获取实时路由状态，并与时间线 attempts 联动标注已尝试成员。
+ *
+ * 单独成组件是为了让 useQuery（groups/channels）与 useGroupRuntime 的 SSE 订阅
+ * 仅在用户切到「分组路由」Tab 时建立，避免在日志页常驻一个路由运行时流。
+ */
+function RouteTab({
+  req,
+  attempts,
+}: {
+  req: RequestState;
+  attempts: AttemptRecord[];
+}) {
+  // req.model 即客户端模型名，亦为分组名
+  const { data: groups } = useQuery({ queryKey: ["groups"], queryFn: api.listGroups });
+  const { data: channels } = useQuery({
+    queryKey: ["channels"],
+    queryFn: api.listChannels,
+  });
+  const runtime = useGroupRuntime();
+
+  const channelById = useMemo(
+    () => new Map((channels ?? []).map((c) => [c.id, c])),
+    [channels],
+  );
+
+  const group = useMemo(
+    () => (groups ?? []).find((g) => g.name === req.model),
+    [groups, req.model],
+  );
+
+  // 按优先级升序排列（故障转移顺序）
+  const items = useMemo(
+    () => (group?.items ?? []).slice().sort((a, b) => a.priority - b.priority),
+    [group],
+  );
+
+  if (!group) {
+    return (
+      <p className="py-6 text-center text-sm text-ink-muted">
+        未找到分组「{req.model}」，可能已被删除
+      </p>
+    );
+  }
+  if (items.length === 0) {
+    return (
+      <p className="py-6 text-center text-sm text-ink-muted">该分组暂无成员</p>
+    );
+  }
+
+  const routeState = runtime.get(group.id);
+
+  return (
+    <ol className="space-y-2">
+      {items.map((item, idx) => {
+        // 引用成员（ref_group_name 非空）不直接绑定渠道，渠道名/启用态均不适用
+        const channel = item.ref_group_name
+          ? undefined
+          : channelById.get(item.channel_model?.channel_id ?? 0);
+        // 用 member_id 精确匹配时间线中的尝试记录（比 channel_name 更可靠）
+        const attempt = attempts.find((a) => a.member_id === item.id);
+        return (
+          <RouteMemberRow
+            key={item.id}
+            index={idx + 1}
+            item={item}
+            channelName={channel?.name}
+            channelEnabled={channel?.enabled}
+            routeState={routeState}
+            attempt={attempt}
+          />
+        );
+      })}
+    </ol>
+  );
+}
+
+function RouteMemberRow({
+  index,
+  item,
+  channelName,
+  channelEnabled,
+  routeState,
+  attempt,
+}: {
+  index: number;
+  item: GroupItem;
+  channelName?: string;
+  channelEnabled?: boolean;
+  routeState?: GroupRouteState;
+  attempt?: AttemptRecord;
+}) {
+  // 引用成员展示「→ 引用分组名」；普通成员展示「渠道名 → 模型名」
+  const label = item.ref_group_name
+    ? `→ ${item.ref_group_name}`
+    : `${channelName ?? "?"} → ${item.channel_model?.name ?? `#${item.channel_model_id}`}`;
+
+  return (
+    <li className="flex items-center gap-3 rounded-md border border-border bg-card/60 px-3 py-2">
+      <span className="num w-6 shrink-0 text-center text-xs text-ink-muted">
+        {index}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="mono truncate text-ink">{label}</span>
+          <Pill tone="neutral" className="text-[10px]">
+            #{item.priority}
+          </Pill>
+        </div>
+        {/* 与时间线联动：已尝试过的成员标注轮次与结果 */}
+        {attempt && (
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-muted">
+            <span>轮次 #{attempt.seq}</span>
+            <Pill
+              tone={
+                attempt.outcome === "success"
+                  ? "success"
+                  : attempt.outcome === "failed"
+                    ? "danger"
+                    : "neutral"
+              }
+              className="text-[10px]"
+            >
+              {attempt.outcome === "success"
+                ? "成功"
+                : attempt.outcome === "failed"
+                  ? "失败"
+                  : "已取消"}
+            </Pill>
+            {attempt.err_class && (
+              <span className="text-ink-muted">· {attempt.err_class}</span>
+            )}
+            {attempt.latency_ms > 0 && (
+              <span className="num text-ink-muted">· {attempt.latency_ms}ms</span>
+            )}
+          </div>
+        )}
+      </div>
+      <RouteMemberStatus
+        state={routeState}
+        itemId={item.id}
+        channelEnabled={channelEnabled}
+      />
+    </li>
+  );
+}
+
+/**
+ * 成员实时状态标签：渠道已禁用 / 冷却中(含倒计时) / 半开探测中 / 当前承载 / 亲和中 / 可用。
+ * useNow 只让本组件每秒重渲染（倒计时），不拖动整页（与 Groups.tsx MemberRuntimeChips 同款约束）。
+ */
+function RouteMemberStatus({
+  state,
+  itemId,
+  channelEnabled,
+}: {
+  state?: GroupRouteState;
+  itemId: number;
+  channelEnabled?: boolean;
+}) {
+  const now = useNow();
+
+  // 渠道已禁用（仅普通成员；引用成员 channelEnabled 为 undefined，跳过）
+  if (channelEnabled === false) {
+    return <Pill tone="neutral">渠道已禁用</Pill>;
+  }
+  if (!state) {
+    return <Pill tone="neutral">可用</Pill>;
+  }
+
+  // 冷却中（含倒计时）
+  const cooldownLeft = remainingSeconds(
+    state.cooldowns?.[String(itemId)] ?? 0,
+    now,
+  );
+  if (cooldownLeft > 0) {
+    return (
+      <Pill tone="danger">冷却中 {formatCountdown(cooldownLeft)}</Pill>
+    );
+  }
+
+  // 半开探测中（probe_item_id 或 half_opens 命中）
+  if (state.probe_item_id === itemId || state.half_opens?.[String(itemId)]) {
+    return <Pill tone="warning">半开探测中</Pill>;
+  }
+
+  // 当前承载；若同时处于亲和窗口则展示「亲和中」含倒计时
+  if (state.current_item_id === itemId) {
+    const affinityLeft = remainingSeconds(state.affinity_until, now);
+    if (affinityLeft > 0) {
+      return (
+        <Pill tone="info">亲和中 {formatCountdown(affinityLeft)}</Pill>
+      );
+    }
+    return <Pill tone="success">当前承载</Pill>;
+  }
+
+  return <Pill tone="neutral">可用</Pill>;
+}

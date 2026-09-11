@@ -1,0 +1,170 @@
+package relay
+
+import (
+	"testing"
+	"time"
+
+	"github.com/kingsunb/NovaVei/internal/model"
+)
+
+// stickyTestItem 构造一个分组成员。
+func stickyTestItem(id int) model.GroupItem {
+	return model.GroupItem{ID: id, GroupID: 1, ChannelModel: &model.ChannelModel{ChannelID: 100 + id, Name: "m"}, Priority: id}
+}
+
+// resetStickyState 清空粘合与路由全局状态, 避免用例间相互污染。
+// 顺带归零顺带清理的节流时间戳: 生产上清理按 60s 间隔节流, 用例依赖
+// "bind 立即清理已删除成员残留"的语义, 归零后首次 bind 必然触发清理。
+func resetStickyState() {
+	routeMu.Lock()
+	defer routeMu.Unlock()
+	sessionStickies = make(map[int]map[string]stickyEntry)
+	routes = make(map[int]*RouteState)
+	stickyLastPrune.Store(0)
+}
+
+// stickyEntryOf 在锁内读取指定会话的粘合记录。
+func stickyEntryOf(t *testing.T, groupID int, key string) (stickyEntry, bool) {
+	t.Helper()
+	routeMu.Lock()
+	defer routeMu.Unlock()
+	entry, ok := sessionStickies[groupID][key]
+	return entry, ok
+}
+
+// stickyTestGroup 构造启用会话粘合的故障转移分组。
+func stickyTestGroup(seconds int, items ...model.GroupItem) model.Group {
+	return model.Group{
+		ID:    1,
+		Name:  "g",
+		Mode:  model.GroupModeFailover,
+		Items: items,
+		RelayConfig: model.GroupRelayConfig{
+			SessionStickyEnabled: true,
+			SessionStickySeconds: seconds,
+		},
+	}
+}
+
+func TestSessionSticky(t *testing.T) {
+	t.Run("命中", func(t *testing.T) {
+		resetStickyState()
+		group := stickyTestGroup(300, stickyTestItem(11), stickyTestItem(12))
+
+		bindSessionSticky(group, "s1", 12)
+		item := pickSessionSticky(group, "s1")
+		if item.ID != 12 {
+			t.Fatalf("粘合成员 = %d, 期望 12", item.ID)
+		}
+	})
+
+	t.Run("过期失效", func(t *testing.T) {
+		resetStickyState()
+		group := stickyTestGroup(300, stickyTestItem(11), stickyTestItem(12))
+		bindSessionSticky(group, "s1", 12)
+
+		// 直接把过期时间拨到过去, 模拟粘合超时。
+		routeMu.Lock()
+		entry := sessionStickies[1]["s1"]
+		entry.ExpireAtUnixMilli = time.Now().UnixMilli() - 1
+		sessionStickies[1]["s1"] = entry
+		routeMu.Unlock()
+
+		if item := pickSessionSticky(group, "s1"); item.ID != 0 {
+			t.Fatalf("过期后仍返回成员 %d, 期望零值", item.ID)
+		}
+		if _, ok := stickyEntryOf(t, 1, "s1"); ok {
+			t.Fatal("过期粘合未被清除")
+		}
+	})
+
+	t.Run("目标冷却中失效", func(t *testing.T) {
+		resetStickyState()
+		group := stickyTestGroup(300, stickyTestItem(11), stickyTestItem(12))
+		bindSessionSticky(group, "s1", 12)
+
+		// 目标成员进入冷却(OPEN), 粘合应失效并被清除。
+		routeMu.Lock()
+		routes[1] = &RouteState{GroupID: 1, Cooldowns: map[int]int64{12: time.Now().UnixMilli() + 60_000}}
+		routeMu.Unlock()
+
+		if item := pickSessionSticky(group, "s1"); item.ID != 0 {
+			t.Fatalf("冷却中的粘合成员 %d 未失效", item.ID)
+		}
+		if _, ok := stickyEntryOf(t, 1, "s1"); ok {
+			t.Fatal("冷却失效的粘合未被清除")
+		}
+	})
+
+	t.Run("滑动续期时间正确", func(t *testing.T) {
+		resetStickyState()
+		group := stickyTestGroup(300, stickyTestItem(11))
+		bindSessionSticky(group, "s1", 11)
+		first, _ := stickyEntryOf(t, 1, "s1")
+
+		time.Sleep(20 * time.Millisecond)
+		bindSessionSticky(group, "s1", 11)
+		renewed, _ := stickyEntryOf(t, 1, "s1")
+
+		if renewed.ExpireAtUnixMilli <= first.ExpireAtUnixMilli {
+			t.Fatalf("续期后过期时间 %d 未晚于首次 %d", renewed.ExpireAtUnixMilli, first.ExpireAtUnixMilli)
+		}
+		delta := renewed.ExpireAtUnixMilli - time.Now().UnixMilli()
+		if delta < 299_000 || delta > 300_000 {
+			t.Fatalf("续期剩余时长 = %dms, 期望约 300000ms", delta)
+		}
+	})
+
+	t.Run("clearSessionStickyByItem清除", func(t *testing.T) {
+		resetStickyState()
+		group := stickyTestGroup(300, stickyTestItem(11), stickyTestItem(12), stickyTestItem(13))
+		bindSessionSticky(group, "s-a", 12)
+		bindSessionSticky(group, "s-b", 12)
+		bindSessionSticky(group, "s-c", 13)
+
+		clearSessionStickyByItem(1, 12)
+
+		for _, key := range []string{"s-a", "s-b"} {
+			if _, ok := stickyEntryOf(t, 1, key); ok {
+				t.Fatalf("指向成员 12 的会话 %s 未被清除", key)
+			}
+		}
+		if _, ok := stickyEntryOf(t, 1, "s-c"); !ok {
+			t.Fatal("指向其他成员的会话 s-c 被误清除")
+		}
+		if item := pickSessionSticky(group, "s-c"); item.ID != 13 {
+			t.Fatalf("未受影响会话返回成员 %d, 期望 13", item.ID)
+		}
+	})
+
+	t.Run("空会话键不绑定", func(t *testing.T) {
+		resetStickyState()
+		group := stickyTestGroup(300, stickyTestItem(11))
+
+		bindSessionSticky(group, "", 11)
+
+		routeMu.Lock()
+		_, exists := sessionStickies[1]
+		routeMu.Unlock()
+		if exists {
+			t.Fatal("空会话键不应产生粘合记录")
+		}
+	})
+
+	t.Run("成员删除残留清理", func(t *testing.T) {
+		resetStickyState()
+		group := stickyTestGroup(300, stickyTestItem(11), stickyTestItem(12))
+		bindSessionSticky(group, "s1", 12)
+
+		// 成员 12 被删除后, 清理节流间隔到期时的下一次建立粘合顺带清掉指向它的残留。
+		// 生产上清理按 60s 节流, 残留在读取路径始终被即时忽略, 这里归零时间戳
+		// 覆盖"到期后必清理"的分支。
+		group.Items = []model.GroupItem{stickyTestItem(11)}
+		stickyLastPrune.Store(0)
+		bindSessionSticky(group, "s2", 11)
+
+		if _, ok := stickyEntryOf(t, 1, "s1"); ok {
+			t.Fatal("已删除成员的粘合残留未被清理")
+		}
+	})
+}

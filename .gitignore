@@ -1,0 +1,34 @@
+data
+build
+static/out/*
+.vscode
+logs/
+
+# Local Go build artifacts
+novavei
+novavei.exe
+/novavei
+.zcode/
+
+# pnpm content-addressable store (local cache; never commit)
+.pnpm-store/
+.workbuddy/
+.codeartsdoer/
+/NovaVei
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Database
+*.db
+*.db-wal
+*.db-shm

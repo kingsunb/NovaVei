@@ -1,0 +1,248 @@
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { Navigate, Route, Routes } from "react-router-dom";
+import { useAuth } from "@/store/auth";
+
+import { AppShell } from "@/components/layout/AppShell";
+import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
+import { Button } from "@/components/ui/button";
+import { PageSkeleton } from "@/components/ui/skeleton";
+import { ForceChangePassword } from "@/components/auth/ForceChangePassword";
+import { loadFlags, shouldUseNewWeb, type Flags } from "@/lib/flags";
+import { apiForbiddenEvent, apiUnauthorizedEvent } from "@/lib/api";
+
+/**
+ * 路由级代码分割 —— 每个 page 是独立 chunk
+ *  首屏只加载 AppShell + Login，其他页面按需加载
+ *  预期效果：初始 JS bundle 减 40-60%
+ */
+const LoginPage = lazy(() => import("@/pages/Login"));
+const DashboardPage = lazy(() => import("@/pages/Dashboard"));
+const ChannelsPage = lazy(() => import("@/pages/Channels"));
+const CustomModelsPage = lazy(() => import("@/pages/CustomModels"));
+const GroupsPage = lazy(() => import("@/pages/Groups"));
+const MaskPage = lazy(() => import("@/pages/Mask"));
+const KeysPage = lazy(() => import("@/pages/Keys"));
+const LogsPage = lazy(() => import("@/pages/Logs"));
+const SettingsPage = lazy(() => import("@/pages/Settings"));
+
+/**
+ * 懒加载 fallback —— 与最终页面同形状的骨架屏
+ */
+function LazyPage({ children }: { children: React.ReactNode }) {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
+    </ErrorBoundary>
+  );
+}
+
+/**
+ * 路由表 —— 与 DESIGN.md §2 信息架构完全对齐
+ *  运营 Operations: dashboard / channels / groups
+ *  接入 Access    : keys / logs / settings
+ *
+ * P3 灰度：在挂载时拉 /__flags/，按 new-web + rollout-percent + 用户 bucket
+ * 决定走新前端还是跳回旧 web 入口。flags 拉取失败时降级到默认值（不阻塞）。
+ */
+/**
+ * flags 未就绪时的回退值（模块级常量保证引用稳定，useMemo 的依赖比较才有意义）。
+ * 与 lib/flags.ts 的 DEFAULT_FLAGS 保持一致。
+ */
+const FALLBACK_FLAGS: Flags = {
+  "new-web": true,
+  "rollout-percent": 100,
+  "sticky-bucket": true,
+  "ab-mode": "auto",
+  "legacy-path": "/legacy",
+};
+
+export default function App() {
+  const { isAuthenticated, username, logout, mustChangePassword, refreshStatus } =
+    useAuth();
+  const [flags, setFlags] = useState<Flags | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    loadFlags().then((f) => {
+      if (alive) setFlags(f);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // 全局 401 监听：任何 API 返回 401（JWT 过期/被吊销）都统一登出跳登录。
+  // ref 防 listener 闭包拿到过期的 isAuthenticated。
+  const authedRef = useRef(isAuthenticated);
+  authedRef.current = isAuthenticated;
+  useEffect(() => {
+    const onUnauthorized = () => {
+      if (!authedRef.current) return;
+      authedRef.current = false;
+      void logout();
+    };
+    window.addEventListener(apiUnauthorizedEvent, onUnauthorized);
+    return () => window.removeEventListener(apiUnauthorizedEvent, onUnauthorized);
+  }, [logout]);
+
+  // 全局「必须改密」403 监听：客户端标志与后端不一致时（如会话中途被
+  // 重置为初始密码），用限频 5s 的 refreshStatus() 把标志同步回来，
+  // 下面的强制改密门随之接管整个界面。
+  const lastForbiddenSyncRef = useRef(0);
+  useEffect(() => {
+    const onForbidden = () => {
+      const now = Date.now();
+      if (now - lastForbiddenSyncRef.current >= 5000) {
+        lastForbiddenSyncRef.current = now;
+        void refreshStatus();
+      }
+    };
+    window.addEventListener(apiForbiddenEvent, onForbidden);
+    return () => window.removeEventListener(apiForbiddenEvent, onForbidden);
+  }, [refreshStatus]);
+
+  // flags 拉取中：先用默认（"新前端启用"），不阻塞首屏
+  const effective: Flags = flags ?? FALLBACK_FLAGS;
+
+  // 未启用新前端 OR 用户被分配到老桶：渲染回退页。
+  // memo 防止无关 re-render 重复掷桶：username 为空且灰度非 0/100 时
+  // shouldUseNewWeb 退化为 Math.random()，每次渲染都可能在新旧页间翻转。
+  const useNew = useMemo(
+    () => shouldUseNewWeb(effective, username),
+    [effective, username],
+  );
+  if (!useNew) {
+    return <RollbackNotice flags={effective} />;
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <Suspense fallback={<PageSkeleton />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </Suspense>
+    );
+  }
+
+  // 首登强制改密：改密前整个应用只剩改密页，其余路由全部不可达。
+  if (mustChangePassword) {
+    return <ForceChangePassword />;
+  }
+
+  return (
+    <AppShell>
+      <Routes>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+        <Route
+          path="/dashboard"
+          element={
+            <LazyPage>
+              <DashboardPage />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/channels"
+          element={
+            <LazyPage>
+              <ChannelsPage />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/custom-models"
+          element={
+            <LazyPage>
+              <CustomModelsPage />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/groups"
+          element={
+            <LazyPage>
+              <GroupsPage />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/mask"
+          element={
+            <LazyPage>
+              <MaskPage />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/keys"
+          element={
+            <LazyPage>
+              <KeysPage />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/logs"
+          element={
+            <LazyPage>
+              <LogsPage />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <LazyPage>
+              <SettingsPage />
+            </LazyPage>
+          }
+        />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </AppShell>
+  );
+}
+
+/**
+ * 灰度回退页 —— 用户被分到旧桶时的兜底
+ */
+function RollbackNotice({ flags }: { flags: Flags }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="glass-panel glass-inset-highlight w-full max-w-md rounded-card p-6">
+        <div className="mb-3 flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-gradient-to-br from-[#007AFF] to-[#5856D6] text-sm font-bold text-white">
+            N
+          </div>
+          <h1 className="text-base font-semibold tracking-tight text-ink">
+            NovaVei
+          </h1>
+        </div>
+        <h2 className="text-sm font-medium text-ink">
+          您当前使用经典版控制台
+        </h2>
+        <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+          为保证灰度期间体验稳定，您被分到了旧版控制台。如需尝试新版，请使用邀请链接或联系管理员调整灰度比例。
+        </p>
+        <div className="mt-4 flex gap-2">
+          <a href={flags["legacy-path"]}>
+            <Button variant="primary" size="sm">
+              进入旧版控制台
+            </Button>
+          </a>
+          <a href={window.location.href}>
+            <Button variant="ghost" size="sm">
+              重新尝试
+            </Button>
+          </a>
+        </div>
+        <p className="mt-3 text-[10px] text-ink-subtle">
+          灰度开关：new-web={String(flags["new-web"])} · rollout={flags["rollout-percent"]}% · sticky={String(flags["sticky-bucket"])}
+        </p>
+      </div>
+    </div>
+  );
+}

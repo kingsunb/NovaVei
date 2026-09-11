@@ -1,0 +1,223 @@
+name: build
+
+on:
+  push:
+    branches:
+      - dev
+      - master
+      - main
+  pull_request:
+    branches:
+      - dev
+      - master
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build, test, and audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+        with:
+          version: v0.70.0
+          cache: true
+
+      - name: Scan repository for secrets
+        run: |
+          trivy fs \
+            --scanners secret \
+            --exit-code 1 \
+            --no-progress \
+            --skip-dirs .git \
+            --skip-dirs web-next/node_modules \
+            --skip-dirs build \
+            --skip-dirs static/out \
+            .
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0 (peeled commit)
+        with:
+          version: '11.21.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22.19.0'
+          cache: pnpm
+          cache-dependency-path: web-next/pnpm-lock.yaml
+
+      - name: Setup Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.7'
+          cache: true
+
+      - name: Validate scripts and Compose
+        env:
+          NOVAVEI_IMAGE: ghcr.io/kingsunb/novavei-api:0.0.0-ci
+          NOVAVEI_WEB_NEXT_IMAGE: ghcr.io/kingsunb/novavei-web-next:0.0.0-ci
+        run: |
+          bash -n \
+            scripts/build.sh \
+            scripts/build-image-archives.sh \
+            scripts/verify-image-archives.sh \
+            scripts/verify-release-archive.sh
+          sh -n scripts/dockerfile/entrypoint.sh scripts/smoke-test-image.sh
+          node --check scripts/licenses/check-reports.mjs
+          node --check scripts/licenses/go-module-report.mjs
+          node --check scripts/licenses/normalize-frontend-report.mjs
+          docker compose -f docker-compose.yml config --quiet
+          docker compose -f docker-compose.local.yml config --quiet
+
+      - name: Test frontend
+        # 构建前先跑 vitest：前端回归在进入 Docker 构建前就失败（借鉴 NovaVei_api 3e4e815）。
+        working-directory: web-next
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run test
+
+      - name: Build frontend, Linux Docker matrix, and production license reports
+        run: bash scripts/build.sh --targets linux/amd64,linux/386,linux/arm64,linux/arm
+
+      - name: Test Go packages
+        run: go test -count=1 ./...
+
+      - name: Verify release archive checksums
+        run: |
+          expected=(novavei-linux-amd64.zip novavei-linux-386.zip novavei-linux-arm64.zip novavei-linux-arm.zip)
+          scripts/verify-release-archive.sh build/archives/novavei-linux-amd64.zip build/archives/SHA256SUMS
+          cd build/archives
+          for archive in "${expected[@]}"; do test -f "${archive}"; done
+          test "$(find . -maxdepth 1 -name 'novavei-linux-*.zip' -type f | wc -l)" -eq "${#expected[@]}"
+          sha256sum -c SHA256SUMS
+          for archive in "${expected[@]}"; do
+            unzip -l "$archive" | grep -q 'LICENSE'
+            unzip -l "$archive" | grep -q 'THIRD_PARTY_LICENSES.csv'
+            unzip -l "$archive" | grep -q 'THIRD_PARTY_LICENSES.frontend.json'
+          done
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Build exact platform image archives
+        run: scripts/build-image-archives.sh build/image-archives "${GITHUB_SHA}" dev
+
+      - name: Scan and smoke test exact platform images
+        run: scripts/verify-image-archives.sh build/image-archives
+
+      - name: Upload audit artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: novavei-linux-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            build/archives/*
+            build/THIRD_PARTY_LICENSES.csv
+            build/THIRD_PARTY_LICENSES.frontend.json
+            build/image-archives/ARCHIVES.sha256
+            build/image-archives/PUBLISH.sha256
+            build/image-archives/SOURCE_SHA
+            build/image-archives/IMAGE_VERSION
+            build/image-archives/IMAGES.tsv
+            build/image-archives/IMAGE_IDS.tsv
+            build/image-archives/sbom-*.cdx.json
+
+      - name: Upload scanned image archives for publication
+        # Manual validation runs may export the already-scanned bytes for an audited
+        # operator publish, but only a real dev push can enter the write-permission job.
+        if: github.ref == 'refs/heads/dev' && github.repository == 'kingsunb/NovaVei'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: novavei-images-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          path: build/image-archives/**
+
+  publish-dev:
+    name: Publish scanned multi-arch dev image
+    needs: build
+    # Only the official dev branch can publish. workflow_dispatch is permitted
+    # solely to publish the exact artifact just scanned by that same run.
+    if: github.ref == 'refs/heads/dev' && github.repository == 'kingsunb/NovaVei' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: dev-publish
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download scanned image archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: novavei-images-${{ github.sha }}
+          path: image-archives
+
+      - name: Verify scanned image archive bundle
+        run: |
+          set -euo pipefail
+          cd image-archives
+          sha256sum -c PUBLISH.sha256
+          test "$(cat SOURCE_SHA)" = "${GITHUB_SHA}"
+          test "$(cat IMAGE_VERSION)" = dev
+          test "$(wc -l <IMAGES.tsv)" -eq 4
+          test "$(wc -l <IMAGE_IDS.tsv)" -eq 4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish only scanned platform images
+        run: |
+          set -euo pipefail
+          image=ghcr.io/kingsunb/novavei-api
+          short_sha="${GITHUB_SHA::7}"
+          refs=()
+          while IFS=$'\t' read -r slug platform archive local_ref; do
+            docker load --input "image-archives/${archive}" >/dev/null
+            actual_id="$(docker image inspect "${local_ref}" --format '{{.Id}}')"
+            expected_id="$(awk -F '\t' -v slug="${slug}" '$1 == slug { print $5 }' image-archives/IMAGE_IDS.tsv)"
+            test -n "${expected_id}"
+            test "${actual_id}" = "${expected_id}"
+            remote_ref="${image}:sha-${short_sha}-${slug}"
+            docker tag "${local_ref}" "${remote_ref}"
+            docker push "${remote_ref}"
+            remote_digest="$(docker buildx imagetools inspect "${remote_ref}" --format '{{json .Manifest}}' | jq -r .digest)"
+            test "${remote_digest}" != null
+            test -n "${remote_digest}"
+            refs+=("${image}@${remote_digest}")
+          done <image-archives/IMAGES.tsv
+          test "${#refs[@]}" -eq 4
+          docker buildx imagetools create \
+            --tag "${image}:dev" \
+            --tag "${image}:latest" \
+            --tag "${image}:sha-${short_sha}" \
+            "${refs[@]}"
+          docker buildx imagetools inspect "${image}:sha-${short_sha}"

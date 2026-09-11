@@ -1,0 +1,125 @@
+package middleware
+
+import (
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/kingsunb/NovaVei/internal/conf"
+	"github.com/kingsunb/NovaVei/internal/keylimit"
+	"github.com/kingsunb/NovaVei/internal/op"
+	"github.com/kingsunb/NovaVei/internal/server/auth"
+	"github.com/kingsunb/NovaVei/internal/server/resp"
+)
+
+const (
+	// AuthCookieName 认证 cookie 名称
+	AuthCookieName = "auth"
+	// AuthCookiePath 认证 cookie 作用路径
+	AuthCookiePath = "/"
+)
+
+// mustChangePasswordWhitelist 标记未清除时(必须修改密码)仍可访问的路径
+var mustChangePasswordWhitelist = map[string]bool{
+	"/api/v1/user/change-password": true,
+	"/api/v1/user/logout":          true,
+	"/api/v1/user/status":          true,
+}
+
+func Auth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token, err := c.Cookie(AuthCookieName)
+		if err != nil || token == "" {
+			resp.Error(c, http.StatusUnauthorized, resp.ErrUnauthorized)
+			c.Abort()
+			return
+		}
+		if !auth.VerifyJWTToken(token) {
+			ClearAuthCookie(c)
+			resp.Error(c, http.StatusUnauthorized, resp.ErrUnauthorized)
+			c.Abort()
+			return
+		}
+		if op.UserGet().MustChangePassword && !mustChangePasswordWhitelist[c.Request.URL.Path] {
+			// 带机器可读标记头: 前端改密引导按头判定, 不再耦合 message 文案。
+			resp.ErrorMustChangePassword(c)
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// SetAuthCookie 设置认证 cookie, 统一 SameSite/HttpOnly/Secure 属性
+func SetAuthCookie(c *gin.Context, value string, maxAge int) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	// 请求本身走 TLS 时强制 Secure=true: 客户端已具备 HTTPS 通道, 按配置漏开
+	// Secure 会导致凭据经明文链路回传; 反代/直连均以此兜底, 只可能更安全不会更弱。
+	secure := conf.AppConfig.Security.CookieSecure || c.Request.TLS != nil
+	c.SetCookie(AuthCookieName, value, maxAge, AuthCookiePath, "", secure, true)
+}
+
+// ClearAuthCookie 清除认证 cookie
+func ClearAuthCookie(c *gin.Context) {
+	SetAuthCookie(c, "", -1)
+}
+
+func APIKeyAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var apiKey string
+
+		if key := c.Request.Header.Get("x-api-key"); key != "" {
+			apiKey = key
+		} else if authorization := c.Request.Header.Get("Authorization"); authorization != "" {
+			apiKey = strings.TrimPrefix(authorization, "Bearer ")
+		}
+
+		if apiKey == "" {
+			resp.Error(c, http.StatusUnauthorized, resp.ErrUnauthorized)
+			c.Abort()
+			return
+		}
+		apiKeyObj, err := op.APIKeyGetByAPIKey(apiKey, c.Request.Context())
+		if err != nil {
+			resp.Error(c, http.StatusUnauthorized, resp.ErrUnauthorized)
+			c.Abort()
+			return
+		}
+		if !apiKeyObj.Enabled {
+			resp.Error(c, http.StatusUnauthorized, "API key is disabled")
+			c.Abort()
+			return
+		}
+		if apiKeyObj.ExpireAt > 0 && apiKeyObj.ExpireAt < time.Now().Unix() {
+			resp.Error(c, http.StatusUnauthorized, "API key has expired")
+			c.Abort()
+			return
+		}
+		// 密钥级限速(fail-fast): 进入业务 handler 前判定, 超限立即 429 + Retry-After,
+		// 由客户端按头退避, 不做内部排队(阻塞不可信客户端只会占住资源放大压力)。
+		// 并发槽位覆盖整个请求生命周期(含流式泵送), defer 在本中间件返回时归还,
+		// panic 展开同样会归还; RPM 名额是窗口内的一次放行记录, 无需归还。
+		// 与渠道级限速(relay/channellimit)独立叠加生效, 实际吞吐取两者较小值。
+		releaseConcurrency, err := keylimit.AcquireConcurrency(apiKeyObj.ID, apiKeyObj.MaxConcurrent)
+		if err != nil {
+			resp.ErrorRateLimited(c, resp.ErrAPIKeyConcurrencyFull, 0)
+			c.Abort()
+			return
+		}
+		defer releaseConcurrency()
+		retryAfter, err := keylimit.AcquireRPMPermit(apiKeyObj.ID, apiKeyObj.RateLimitRPM)
+		if err != nil {
+			resp.ErrorRateLimited(c, resp.ErrAPIKeyRateLimited, retryAfter)
+			c.Abort()
+			return
+		}
+		c.Set("supported_models", apiKeyObj.SupportedModels)
+		c.Set("api_key_raw", apiKeyObj.APIKey)
+		c.Set("api_key_name", apiKeyObj.Name)
+		c.Set("api_key_id", apiKeyObj.ID)
+		// 异步记录最后使用时间, 不阻塞请求、不影响鉴权决策。
+		op.APIKeyTouchLastUsed(apiKeyObj.ID)
+		c.Next()
+	}
+}

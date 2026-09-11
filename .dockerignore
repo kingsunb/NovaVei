@@ -1,0 +1,32 @@
+# 默认拒绝整个构建上下文, 只放行 Dockerfile 真正需要的文件。
+# 这同时严格排除 data/.git/node_modules 以及 build 下的其它中间产物。
+**
+
+# Docker runtime inputs.
+!LICENSE
+!build/
+!build/docker/
+!build/docker/**
+!build/THIRD_PARTY_LICENSES.csv
+!build/THIRD_PARTY_LICENSES.frontend.json
+!scripts/
+!scripts/dockerfile/
+!scripts/dockerfile/Dockerfile
+!scripts/dockerfile/entrypoint.sh
+
+# Explicit deny-list for sensitive/local content (kept visible for audit).
+.git
+.git/**
+data
+data/**
+node_modules
+node_modules/**
+web/node_modules
+web/node_modules/**
+web-next
+web-next/**
+static/out
+static/out/**
+.env
+.env.*
+*.log

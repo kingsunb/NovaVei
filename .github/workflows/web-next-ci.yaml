@@ -1,0 +1,134 @@
+name: web-next CI
+
+# web-next 前端 CI —— P5.9 补
+#  对应 [PRODUCTION_CHECKLIST §1 代码质量] 全部 🤖 项
+#  触发：web-next/ 任何变更 / main + PR
+on:
+  push:
+    branches: [dev, master, main]
+    paths:
+      - "web-next/**"
+      - ".github/workflows/web-next-ci.yaml"
+  pull_request:
+    branches: [dev, master, main]
+    paths:
+      - "web-next/**"
+      - ".github/workflows/web-next-ci.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-next-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-typecheck-unit:
+    name: Lint + typecheck + unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: "11.21.0"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22.19.0"
+          cache: pnpm
+          cache-dependency-path: web-next/pnpm-lock.yaml
+
+      - name: Install
+        working-directory: web-next
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: web-next
+        run: pnpm typecheck
+
+      - name: Lint
+        working-directory: web-next
+        run: pnpm lint
+
+      - name: Unit tests
+        working-directory: web-next
+        run: pnpm test
+
+      - name: Coverage check
+        working-directory: web-next
+        run: pnpm test:cov
+        # 若 90% 阈值未达，会在 test:cov 阶段 fail（vitest threshold 已在 vitest.config.ts 配）
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: web-next-coverage-${{ github.sha }}
+          path: web-next/coverage/
+          retention-days: 14
+
+  bundle:
+    name: Bundle size check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: "11.21.0"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22.19.0"
+          cache: pnpm
+          cache-dependency-path: web-next/pnpm-lock.yaml
+      - working-directory: web-next
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        working-directory: web-next
+        run: pnpm build
+      - name: Size limit
+        working-directory: web-next
+        run: pnpm size
+      - name: Upload dist
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: web-next-dist-${{ github.sha }}
+          path: static/out/
+          retention-days: 7
+
+  e2e-a11y:
+    name: Playwright E2E + a11y
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: "11.21.0"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22.19.0"
+          cache: pnpm
+          cache-dependency-path: web-next/pnpm-lock.yaml
+      - working-directory: web-next
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        working-directory: web-next
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Build
+        working-directory: web-next
+        run: pnpm build
+      - name: E2E
+        working-directory: web-next
+        env:
+          CI: "1"
+        run: pnpm exec playwright test
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: web-next-playwright-${{ github.sha }}
+          path: web-next/playwright-report/
+          retention-days: 14

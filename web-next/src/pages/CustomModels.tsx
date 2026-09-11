@@ -1,0 +1,507 @@
+/**
+ * 自定义模型页 —— 管理固定回复渠道(type=custom)。
+ * 每个条目 = 一个自定义模型：客户端以分组/模型名命中后, 中转不做任何上游请求,
+ * 直接以「固定回复」文案合成响应(支持 OpenAI Chat/Responses/Anthropic 客户端协议,
+ * 流式与非流式)。条目本质是 type=custom 的渠道, 因此可照常加入分组参与选路。
+ */
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Bot, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+
+import { api } from "@/lib/api";
+import type { Channel } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
+import { Input, Textarea } from "@/components/ui/input";
+import { Pill } from "@/components/ui/pill";
+import { Switch } from "@/components/ui/switch";
+import { TableSkeleton } from "@/components/ui/skeleton";
+import { QueryErrorBanner } from "@/components/ui/query-error";
+import {
+  Dialog,
+  DialogBody,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cn, NAME_RULE, validateField } from "@/lib/utils";
+
+type Editing = Channel | "new" | null;
+type Sort = "custom" | "name" | "status";
+
+export default function CustomModelsPage() {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState<Editing>(null);
+  const [pendingDelete, setPendingDelete] = useState<Channel | null>(null);
+  const [testingId, setTestingId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  // 默认按自定义排序（sort 值升序、同值按名称兜底）；
+  // 排序值允许重复、零值与负值，相同数值按渠道名称字母序排列。
+  const [sort, setSort] = useState<Sort>("custom");
+  // 排序值行内编辑草稿: 仅在用户正在输入时持有该行的文本值, 提交或失焦后清除。
+  const [sortDraft, setSortDraft] = useState<Record<number, string>>({});
+
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["channels"],
+    queryFn: api.listChannels,
+  });
+  const rows = useMemo(() => {
+    const list = (data ?? []).filter((c) => c.type === "custom");
+    return list
+      .filter((c) =>
+        search
+          ? c.name.toLowerCase().includes(search.toLowerCase()) ||
+            (c.models[0]?.name ?? "").toLowerCase().includes(search.toLowerCase())
+          : true,
+      )
+      .sort((a, b) => {
+        if (sort === "custom")
+          return (a.sort ?? 0) - (b.sort ?? 0) || a.name.localeCompare(b.name);
+        if (sort === "name") return a.name.localeCompare(b.name);
+        // status: 启用优先, 同状态按名称
+        return Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name);
+      });
+  }, [data, search, sort]);
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["channels"] });
+
+  // 排序值行内编辑: 乐观更新本地缓存, 失败回滚并恢复输入框为服务端值。
+  const sortMut = useMutation({
+    mutationFn: ({ id, sort }: { id: number; sort: number }) =>
+      api.updateChannel({ id, sort }),
+    onMutate: async ({ id, sort }) => {
+      await qc.cancelQueries({ queryKey: ["channels"] });
+      const prev = qc.getQueryData<Channel[]>(["channels"]);
+      if (prev) {
+        qc.setQueryData<Channel[]>(
+          ["channels"],
+          prev.map((c) => (c.id === id ? { ...c, sort } : c)),
+        );
+      }
+      return { prev };
+    },
+    onError: (err, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["channels"], ctx.prev);
+      toast.error(err.message);
+    },
+    onSettled: (_d, _e, vars) => {
+      setSortDraft((d) => {
+        const next = { ...d };
+        delete next[vars.id];
+        return next;
+      });
+      qc.invalidateQueries({ queryKey: ["channels"] });
+    },
+  });
+
+  function commitSort(c: Channel, raw: string) {
+    const trimmed = raw.trim();
+    // 空输入或非数字: 不提交, 清除草稿回退显示服务端值。
+    if (trimmed === "" || !/^-?\d+$/.test(trimmed)) {
+      setSortDraft((d) => {
+        const next = { ...d };
+        delete next[c.id];
+        return next;
+      });
+      return;
+    }
+    const next = parseInt(trimmed, 10);
+    if (next === (c.sort ?? 0)) {
+      setSortDraft((d) => {
+        const n = { ...d };
+        delete n[c.id];
+        return n;
+      });
+      return;
+    }
+    sortMut.mutate({ id: c.id, sort: next });
+  }
+
+  const enableMut = useMutation({
+    mutationFn: (input: { id: number; enabled: boolean }) =>
+      api.updateChannel({ id: input.id, enabled: input.enabled }),
+    onSuccess: invalidate,
+    onError: (e: Error) => toast.error(e.message || "操作失败"),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => api.deleteChannel(id),
+    onSuccess: () => {
+      toast.success("已删除");
+      setPendingDelete(null);
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message || "删除失败"),
+  });
+
+  const testMut = useMutation({
+    mutationFn: (input: { id: number; model?: string }) =>
+      api.testChannel(input.id, input.model),
+    // 只清掉自己那行的 testing 态：连点两行时，先返回的请求不能清掉后一行的指示。
+    onSettled: (_data, _error, variable) => {
+      const id = (variable as { id: number }).id;
+      setTestingId((cur) => (cur === id ? null : cur));
+    },
+    onSuccess: (r) => {
+      toast.success(`连通 (${r.latency_ms}ms)`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-ink-muted">
+          自定义模型命中后不做上游请求，直接以配置的固定文案回复；可加入分组参与选路。
+        </p>
+        <div className="flex items-center gap-2">
+          <label className="relative">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="搜索名称/模型名"
+              className="h-8 w-52 pl-7"
+              aria-label="搜索自定义模型"
+            />
+          </label>
+          <select
+            className="h-8 rounded-control border border-border bg-card px-2 text-xs text-ink-muted"
+            value={sort}
+            onChange={(e) => setSort(e.target.value as Sort)}
+            aria-label="排序"
+          >
+            <option value="custom">自定义排序</option>
+            <option value="name">按名称</option>
+            <option value="status">按状态</option>
+          </select>
+          <Button
+            variant="primary"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setEditing("new")}
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            新建自定义模型
+          </Button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <TableSkeleton rows={4} />
+      ) : isError ? (
+        <QueryErrorBanner onRetry={() => refetch()} />
+      ) : rows.length === 0 ? (
+        <Card>
+          <div className="flex flex-col items-center gap-2 py-12 text-center">
+            <Bot className="h-8 w-8 text-ink-subtle" aria-hidden />
+            <p className="text-sm text-ink-muted">
+              {search
+                ? "没有匹配的自定义模型"
+                : "还没有自定义模型；点右上角创建，客户端命中即返回固定文案"}
+            </p>
+          </div>
+        </Card>
+      ) : (
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-ink-muted">
+                  <th scope="col" className="px-4 py-2.5 font-medium">名称</th>
+                  <th scope="col" className="px-4 py-2.5 font-medium">模型名</th>
+                  <th scope="col" className="px-4 py-2.5 font-medium">固定回复</th>
+                  <th scope="col" className="px-4 py-2.5 font-medium">状态</th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-medium" title="越小越靠前，允许重复和负数，相同值按名称排序">排序</th>
+                  <th scope="col" className="px-4 py-2.5 font-medium">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((c) => {
+                  const modelName = c.models[0]?.name ?? "—";
+                  const testing = testingId === c.id;
+                  return (
+                    <tr
+                      key={c.id}
+                      className="border-b border-border/60 last:border-b-0 hover:bg-surface-subtle/60"
+                    >
+                      <td className="px-4 py-2.5 font-medium text-ink">{c.name}</td>
+                      <td className="mono px-4 py-2.5 text-ink-muted">{modelName}</td>
+                      <td
+                        className="max-w-[280px] truncate px-4 py-2.5 text-ink-muted"
+                        title={c.fixed_reply}
+                      >
+                        {c.fixed_reply || <span className="text-destructive">未配置回复文案</span>}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={c.enabled}
+                            onCheckedChange={(v) =>
+                              enableMut.mutate({ id: c.id, enabled: v })
+                            }
+                          />
+                          {c.enabled ? (
+                            <Pill tone="success">启用</Pill>
+                          ) : (
+                            <Pill tone="neutral">停用</Pill>
+                          )}
+                        </div>
+                      </td>
+                      <td
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className="whitespace-nowrap px-4 py-2.5 text-right"
+                      >
+                        <input
+                          type="number"
+                          step="1"
+                          className="h-7 w-20 rounded-control border border-border bg-card px-2 text-right text-sm text-ink"
+                          value={sortDraft[c.id] ?? String(c.sort ?? 0)}
+                          disabled={sortMut.isPending && sortMut.variables?.id === c.id}
+                          onChange={(e) =>
+                            setSortDraft((d) => ({ ...d, [c.id]: e.target.value }))
+                          }
+                          onBlur={(e) => commitSort(c, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }}
+                          title="排序值：越小越靠前，允许重复和负数，相同值按名称排序"
+                          aria-label={`排序 ${c.name}`}
+                        />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 px-2 text-xs"
+                            disabled={testing || !c.enabled || !c.models[0]}
+                            loading={testing}
+                            aria-label={`测试自定义模型 ${c.name}`}
+                            onClick={() => {
+                              setTestingId(c.id);
+                              testMut.mutate({ id: c.id, model: c.models[0]?.name });
+                            }}
+                          >
+                            测试
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            aria-label={`编辑自定义模型 ${c.name}`}
+                            onClick={() => setEditing(c)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" aria-hidden />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                            aria-label={`删除自定义模型 ${c.name}`}
+                            onClick={() => setPendingDelete(c)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      <CustomModelEditor
+        channel={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          setEditing(null);
+          invalidate();
+        }}
+      />
+
+      <Dialog
+        open={!!pendingDelete}
+        onOpenChange={(o) => !o && setPendingDelete(null)}
+      >
+        <DialogContent variant="dialog" size="sm">
+          <DialogHeader>
+            <DialogTitle>删除自定义模型</DialogTitle>
+            <DialogDescription>
+              模型{" "}
+              <span className="mono text-ink">{pendingDelete?.name}</span>{" "}
+              删除后客户端将无法再命中；加入分组的引用需要先移除成员。删除后无法恢复。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="ghost" size="sm">
+                取消
+              </Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              size="sm"
+              loading={deleteMut.isPending}
+              onClick={() => pendingDelete && deleteMut.mutate(pendingDelete.id)}
+            >
+              删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function CustomModelEditor({
+  channel,
+  onClose,
+  onSaved,
+}: {
+  channel: Channel | "new" | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isNew = !channel || channel === "new";
+  const [name, setName] = useState("");
+  const [modelName, setModelName] = useState("");
+  const [reply, setReply] = useState("");
+  const [errors, setErrors] = useState<{ name?: string; model?: string; reply?: string }>({});
+
+  // 切换编辑目标时重置草稿；编辑态锁模型名——改模型名会整体替换渠道模型行,
+  // 使分组里按 channel_model_id 引用的成员失效, 需要重建分组成员, 不在编辑器里提供。
+  useEffect(() => {
+    if (channel && channel !== "new") {
+      setName(channel.name);
+      setModelName(channel.models[0]?.name ?? "");
+      setReply(channel.fixed_reply);
+    } else {
+      setName("");
+      setModelName("");
+      setReply("");
+    }
+    setErrors({});
+  }, [channel]);
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      if (isNew) {
+        return api.createChannel({
+          name: name.trim(),
+          type: "custom",
+          enabled: true,
+          base_url: "",
+          key: "",
+          keys: [],
+          models: [{ id: 0, channel_id: 0, name: modelName.trim(), source: "manual" }],
+          fixed_reply: reply,
+          proxy: false,
+          auto_sync: false,
+          opencode_compat: false,
+          custom_header: [],
+          model_limits: {},
+          tags: [],
+          sort: 0,
+          rate_limit_rpm: 0,
+          max_concurrent: 0,
+        });
+      }
+      return api.updateChannel({
+        id: channel!.id,
+        name: name.trim(),
+        fixed_reply: reply,
+      });
+    },
+    onSuccess: () => {
+      toast.success(isNew ? "已创建" : "已保存");
+      onSaved();
+    },
+    onError: (e: Error) => toast.error(e.message || "保存失败"),
+  });
+
+  const nameError = validateField(name, NAME_RULE);
+  const modelError = !modelName.trim() ? "模型名不能为空" : undefined;
+  const replyError = !reply.trim() ? "固定回复不能为空" : undefined;
+  const isValid = !nameError && !modelError && !replyError;
+
+  return (
+    <Dialog open={!!channel} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent variant="sheet">
+        <DialogHeader>
+          <DialogTitle>{isNew ? "新建自定义模型" : `编辑：${name}`}</DialogTitle>
+          <DialogDescription>
+            客户端命中模型名即返回固定文案；模型名创建后不可修改
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="space-y-3">
+          <Field label="名称" required error={nameError ?? undefined}>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="例如：客服欢迎语"
+            />
+          </Field>
+          <Field
+            label="模型名"
+            required
+            hint="客户端请求的模型名；创建后不可修改"
+            error={errors.model ?? modelError}
+          >
+            <Input
+              value={modelName}
+              onChange={(e) => setModelName(e.target.value)}
+              disabled={!isNew}
+              placeholder="例如：welcome-bot"
+              className={cn(!isNew && "opacity-70")}
+            />
+          </Field>
+          <Field label="固定回复" required error={errors.reply ?? replyError}>
+            <Textarea
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+              rows={5}
+              placeholder="命中该模型时返回的固定文案"
+            />
+          </Field>
+        </DialogBody>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              取消
+            </Button>
+          </DialogClose>
+          <Button
+            variant="primary"
+            size="sm"
+            loading={saveMut.isPending}
+            disabled={!isValid}
+            onClick={() => {
+              const next = {
+                name: validateField(name.trim(), NAME_RULE) ?? undefined,
+                model: !modelName.trim() ? "模型名不能为空" : undefined,
+                reply: !reply.trim() ? "固定回复不能为空" : undefined,
+              };
+              setErrors(next);
+              if (!next.name && !next.model && !next.reply) saveMut.mutate();
+            }}
+          >
+            保存
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

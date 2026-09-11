@@ -1,0 +1,408 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* 暗色模式：data-theme="dark" 作用于元素自身或其祖先（等价 v3 darkMode: ["class", '[data-theme="dark"]']）*/
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* =========================================================================
+   Tailwind v4 设计令牌（由 tailwind.config.ts 迁移）
+   - 颜色用 hsl(var(--token)) 形式：运行时 CSS 变量驱动主题切换，
+     透明度修饰符（bg-x/50）由 v4 经 color-mix 自动处理。
+   ========================================================================= */
+@theme {
+  /* 颜色 —— shadcn 语义令牌 */
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-hover: hsl(var(--primary-hover));
+  --color-primary-text: hsl(var(--primary-text));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
+  --color-info: hsl(var(--info));
+
+  --color-signal: hsl(var(--signal));
+  --color-signal-strong: hsl(var(--signal-strong));
+
+  --color-surface: hsl(var(--surface));
+  --color-surface-subtle: hsl(var(--surface-subtle));
+
+  --color-ink: hsl(var(--ink));
+  --color-ink-muted: hsl(var(--ink-muted));
+  --color-ink-subtle: hsl(var(--ink-subtle));
+
+  /* 字体 */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Helvetica Neue", "Segoe UI", Roboto, Inter, system-ui, sans-serif;
+  --font-mono:
+    "SF Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* 圆角 */
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --radius-lg: 12px;
+  --radius-md: 8px;
+  --radius-sm: 6px;
+
+  /* 阴影 —— Apple 三层级 */
+  --shadow-apple-sm: 0 1px 2px hsl(220 9% 30% / 0.05), 0 2px 8px hsl(220 9% 30% / 0.03);
+  --shadow-apple-md: 0 2px 4px hsl(220 9% 30% / 0.05), 0 4px 16px hsl(220 9% 30% / 0.07);
+  --shadow-apple-lg: 0 4px 8px hsl(220 9% 30% / 0.06), 0 12px 32px hsl(220 9% 30% / 0.1);
+}
+
+/* =========================================================================
+   设计令牌 —— NovaVei 科幻控制台
+   - 亮色主题：冷雾白 + 青蓝信号色
+   - 暗色主题：石墨黑 + 低亮度网格与终端青
+   - 材质：细边框、内发光、有限 blur；装饰不能盖过数据
+   ========================================================================= */
+
+:root,
+:root[data-theme="light"] {
+	/* 背景 - 冷雾白控制台 */
+	--background: 210 25% 97%;
+	--foreground: 215 35% 12%;
+
+  /* 表面层 - 玻璃（用 alpha 组合）*/
+  --surface: 0 0% 100%;
+  --surface-glass: 0 0% 100%;
+  --surface-subtle: 220 14% 94%;
+
+  /* 卡片/弹层 */
+  --card: 0 0% 100%;
+  --card-foreground: 220 9% 8%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 220 9% 8%;
+
+  /* 边框 - 更柔和 */
+  --border: 220 13% 89%;
+  --input: 220 13% 89%;
+  --ring: 211 100% 45%;
+
+  /* 主色 - Apple 蓝 */
+  --primary: 211 100% 45%;            /* #0071E3 */
+  --primary-text: 211 100% 38%;
+  --primary-hover: 211 100% 50%;
+  --primary-foreground: 0 0% 100%;
+
+  /* 次要 */
+  --secondary: 220 14% 95%;
+  --secondary-foreground: 220 9% 15%;
+
+  /* 弱化 */
+  --muted: 220 14% 95%;
+  --muted-foreground: 220 7% 42%;     /* #68686D */
+  --accent: 220 14% 95%;
+  --accent-foreground: 220 9% 8%;
+
+  /* 危险 */
+  /* 350 80% 42%：--destructive 在 bg-destructive/[0.04] 洗底上需 ≥4.5:1（WCAG AA） */
+  --destructive: 350 80% 42%;
+  --destructive-foreground: 0 0% 100%;
+
+  /* 状态语义色 - Apple system colors */
+  --success: 145 63% 42%;
+  /* 38 95% 35%：--warning 作 text-warning 时对 bg-warning/10 横幅需 ≥4.5:1 */
+  --warning: 38 95% 35%;
+  --info: 211 100% 50%;
+
+  /* 文本层级 - Apple 灰阶 */
+  --ink: 220 9% 8%;
+  --ink-muted: 220 7% 42%;
+  /* 220 9% 40%：hint 等次要文案对 --surface 需 ≥4.5:1（55% 只有 3.5:1） */
+  --ink-subtle: 220 9% 40%;
+
+  /* 玻璃 alpha */
+  --glass-bg: 0 0% 100%;
+  --glass-alpha: 0.72;
+  --glass-border: 0 0% 100%;
+  --glass-border-alpha: 0.62;
+  --signal: 188 92% 42%;
+  --signal-strong: 194 100% 50%;
+  --grid-line: 210 45% 75%;
+}
+
+:root[data-theme="dark"] {
+  --background: 220 9% 6%;            /* #0E0E10 */
+  --foreground: 220 14% 96%;
+
+  --surface: 220 9% 14%;
+  --surface-glass: 220 9% 14%;
+  --surface-subtle: 220 9% 18%;
+
+  --card: 220 9% 14%;
+  --card-foreground: 220 14% 96%;
+  --popover: 220 9% 14%;
+  --popover-foreground: 220 14% 96%;
+
+  --border: 220 9% 22%;
+  --input: 220 9% 22%;
+  --ring: 211 100% 60%;
+
+  --primary: 211 100% 45%;            /* #0071E3（暗色蓝，4.7:1 vs 白字） */
+  --primary-text: 211 100% 68%;
+  --primary-hover: 211 100% 60%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 220 9% 18%;
+  --secondary-foreground: 220 14% 96%;
+
+  --muted: 220 9% 18%;
+  --muted-foreground: 220 7% 65%;
+  --accent: 220 9% 18%;
+  --accent-foreground: 220 14% 96%;
+
+  --destructive: 350 100% 64%;
+  --destructive-foreground: 0 0% 100%;
+
+  --success: 145 63% 49%;
+  --warning: 38 100% 55%;
+  --info: 211 100% 55%;
+
+  --ink: 220 14% 96%;
+  --ink-muted: 220 7% 65%;
+  --ink-subtle: 220 7% 50%;
+
+  --glass-bg: 220 9% 14%;
+  --glass-alpha: 0.78;
+  --glass-border: 220 9% 22%;
+  --glass-border-alpha: 0.62;
+  --signal: 188 92% 52%;
+  --signal-strong: 194 100% 62%;
+  --grid-line: 188 45% 28%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family:
+      -apple-system,
+      BlinkMacSystemFont,
+      "SF Pro Text",
+      "SF Pro Display",
+      "Helvetica Neue",
+      "Segoe UI",
+      Roboto,
+      "Inter",
+      sans-serif;
+    font-feature-settings:
+      "cv02",
+      "cv03",
+      "cv04",
+      "cv11",
+      "ss01";
+    letter-spacing: 0;
+  }
+
+  h1 {
+    @apply text-2xl font-semibold leading-8 tracking-tight;
+  }
+  h2 {
+    @apply text-xl font-semibold leading-7 tracking-tight;
+  }
+  h3 {
+    @apply text-sm font-semibold leading-5;
+  }
+
+  code,
+  kbd,
+  .mono {
+    font-family:
+      "SF Mono",
+      "JetBrains Mono",
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .num {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.15);
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--ink-muted) / 0.2);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--ink-muted) / 0.35);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* ----- macOS 磨砂玻璃 ----- */
+
+  .glass-panel {
+    position: relative;
+    overflow: hidden;
+    background: hsl(var(--glass-bg) / var(--glass-alpha));
+    border: 1px solid hsl(var(--glass-border) / var(--glass-border-alpha));
+    box-shadow:
+      inset 0 1px 0 hsl(var(--signal) / 0.08),
+      0 0 0 1px hsl(0 0% 0% / 0.02),
+      0 10px 30px hsl(220 25% 12% / 0.06);
+  }
+
+  .glass-panel::before {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    content: "";
+    background: linear-gradient(90deg, transparent, hsl(var(--signal) / 0.04), transparent);
+    opacity: 0.55;
+  }
+
+  .glass-sidebar {
+    background: hsl(var(--glass-bg) / 0.88);
+    border-right: 1px solid hsl(var(--signal) / 0.16);
+    box-shadow: 8px 0 28px hsl(220 25% 12% / 0.05);
+  }
+
+  .glass-topbar {
+    background: hsl(var(--glass-bg) / 0.88);
+    border-bottom: 1px solid hsl(var(--signal) / 0.14);
+    box-shadow: 0 8px 24px hsl(220 25% 12% / 0.04);
+  }
+
+  .glass-overlay {
+    background: hsl(var(--glass-bg) / 0.82);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border: 0.5px solid hsl(var(--glass-border) / 0.6);
+    box-shadow:
+      0 0 0 0.5px hsl(0 0% 0% / 0.03),
+      0 24px 48px hsl(220 9% 20% / 0.14),
+      0 8px 16px hsl(220 9% 20% / 0.08);
+  }
+
+  .glass-inset-highlight {
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.35);
+  }
+
+  .shadow-apple-sm {
+    box-shadow:
+      0 1px 2px hsl(220 9% 30% / 0.05),
+      0 2px 8px hsl(220 9% 30% / 0.03);
+  }
+  .shadow-apple-md {
+    box-shadow:
+      0 2px 4px hsl(220 9% 30% / 0.05),
+      0 4px 16px hsl(220 9% 30% / 0.07);
+  }
+  .shadow-apple-lg {
+    box-shadow:
+      0 4px 8px hsl(220 9% 30% / 0.06),
+      0 12px 32px hsl(220 9% 30% / 0.1);
+  }
+
+  .interactive {
+    transition:
+      background-color 0.15s cubic-bezier(0.25, 0, 0, 1),
+      border-color 0.15s cubic-bezier(0.25, 0, 0, 1),
+      box-shadow 0.15s cubic-bezier(0.25, 0, 0, 1),
+      transform 0.15s cubic-bezier(0.25, 0, 0, 1);
+  }
+
+  .interactive:hover {
+    box-shadow:
+      0 2px 4px hsl(220 9% 30% / 0.04),
+      0 4px 12px hsl(220 9% 30% / 0.06);
+  }
+
+  /* 按压缩放在 reduced-motion 下同样收敛（动效守卫，与上方全局规则对齐） */
+  @media (prefers-reduced-motion: no-preference) {
+    .interactive:active {
+      transform: scale(0.98);
+    }
+  }
+
+  .bg-gradient-subtle {
+    background-color: hsl(var(--background));
+    background-image:
+      linear-gradient(hsl(var(--grid-line) / 0.07) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--grid-line) / 0.07) 1px, transparent 1px),
+      radial-gradient(circle at 16% 0%, hsl(var(--signal) / 0.08), transparent 34%),
+      radial-gradient(circle at 100% 100%, hsl(var(--info) / 0.05), transparent 30%);
+    background-size: 32px 32px, 32px 32px, auto, auto;
+  }
+
+  @supports (backdrop-filter: blur(1px)) {
+    .glass-panel,
+    .glass-sidebar,
+    .glass-topbar,
+    .glass-overlay {
+      backdrop-filter: blur(10px) saturate(130%);
+      -webkit-backdrop-filter: blur(10px) saturate(130%);
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .glass-panel,
+    .glass-sidebar,
+    .glass-topbar,
+    .glass-overlay {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      background: hsl(var(--card));
+    }
+  }
+}

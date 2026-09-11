@@ -1,0 +1,65 @@
+# 本地开发 compose: 与正式 compose 分开, 镜像坐标必须指向多架构
+# dev tag 的某个具体 digest, 防止重用陈旧单架构镜像。`image:` 字段
+# 没有默认值: 调用方必须显式指定, 例如
+#   NOVAVEI_IMAGE=ghcr.io/kingsunb/novavei-api:dev docker compose pull
+# 或
+#   NOVAVEI_IMAGE=ghcr.io/kingsunb/novavei-api:sha-877f657@sha256:<digest> docker compose up
+# 数据卷默认是 /tmp/novavei-docker-data2；部署前需把目录 owner 改为
+# 10001:10001、权限改为 0700。
+#
+# 暴露面: 默认仅绑定宿主回环地址 127.0.0.1:18088。需要从其它主机直连时
+# 显式设置 `NOVAVEI_BIND=0.0.0.0`, 并把该端口置于 TLS 反代或受控内网
+# 之后, 不得直接暴露到公网。
+
+x-image: &image
+  image: ${NOVAVEI_IMAGE:?NOVAVEI_IMAGE is required (e.g. ghcr.io/kingsunb/novavei-api:dev or :sha-<short>@sha256:<digest>)}
+
+services:
+  novavei:
+    <<: *image
+    container_name: novavei
+    restart: unless-stopped
+    # Mutable dev tags must be refreshed before create/recreate; this prevents an
+    # old single-arch or pre-hardening local cache from being started as UID 10001.
+    pull_policy: always
+    stop_grace_period: 90s
+
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777,noexec,nosuid,nodev
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    pids_limit: 512
+    mem_limit: 768m
+    cpus: "1.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+    environment:
+      TZ: Asia/Shanghai
+      NOVAVEI_SERVER_HOST: 0.0.0.0
+      NOVAVEI_SERVER_PORT: "8080"
+      NOVAVEI_LOG_LEVEL: debug
+      NOVAVEI_DISABLE_SELF_UPDATE: "true"
+
+    ports:
+      - "${NOVAVEI_BIND:-127.0.0.1}:18088:8080"
+
+    volumes:
+      # 保留当前部署的数据路径；切换前须把宿主目录 owner 改为 10001:10001、权限改为 0700。
+      - ${NOVAVEI_DATA_DIR:-/tmp/novavei-docker-data2}:/app/data
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
