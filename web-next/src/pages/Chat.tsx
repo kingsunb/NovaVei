@@ -46,51 +46,49 @@ interface TargetSelection {
 }
 
 // ============================================================
-// 对话本地持久化
+// 对话本地持久化（单会话）
 // ============================================================
 
-const CHAT_STORAGE_PREFIX = "novaveil:chat:";
+const CHAT_SESSION_KEY = "novaveil:chat:current";
 
-/** 为目标生成唯一的 localStorage 键。 */
-function chatStorageKey(target: TargetSelection | null): string | null {
-  if (!target) return null;
-  return target.kind === "group"
-    ? `${CHAT_STORAGE_PREFIX}group:${target.groupName}`
-    : `${CHAT_STORAGE_PREFIX}channel:${target.channelId}:${target.channelModelId}`;
+interface ChatSession {
+  target: TargetSelection | null;
+  selectedKeyId: number | null;
+  messages: ChatMessage[];
 }
 
-/** 从 localStorage 加载指定目标的对话消息。 */
-function loadConversation(key: string | null): ChatMessage[] {
-  if (!key) return [];
+/** 从 localStorage 加载当前会话。 */
+function loadSession(): ChatSession | null {
   try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as ChatMessage[];
-    // 过滤掉流式中的消息（页面刷新时未完成的回复）
-    return parsed.filter((m) => !m.streaming);
+    const raw = localStorage.getItem(CHAT_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ChatSession>;
+    return {
+      target: parsed.target ?? null,
+      selectedKeyId: parsed.selectedKeyId ?? null,
+      // 过滤掉流式中的消息（页面刷新时未完成的回复）
+      messages: (parsed.messages ?? []).filter((m) => !m.streaming),
+    };
   } catch {
-    return [];
+    return null;
   }
 }
 
-/** 将对话消息保存到 localStorage。 */
-function saveConversation(key: string | null, messages: ChatMessage[]): void {
-  if (!key) return;
+/** 将当前会话保存到 localStorage。 */
+function saveSession(session: ChatSession): void {
   try {
     // 不保存流式中的消息
-    const hasStreaming = messages.some((m) => m.streaming);
-    if (hasStreaming) return;
-    localStorage.setItem(key, JSON.stringify(messages));
+    if (session.messages.some((m) => m.streaming)) return;
+    localStorage.setItem(CHAT_SESSION_KEY, JSON.stringify(session));
   } catch {
     // 存储满或禁用时静默失败
   }
 }
 
-/** 删除指定目标的对话记录。 */
-function clearConversation(key: string | null): void {
-  if (!key) return;
+/** 清除当前会话记录。 */
+function clearSession(): void {
   try {
-    localStorage.removeItem(key);
+    localStorage.removeItem(CHAT_SESSION_KEY);
   } catch {
     // ignore
   }
@@ -184,46 +182,26 @@ async function streamChatCompletion(
 export default function ChatPage() {
   const qc = useQueryClient();
 
+  // --- 从 localStorage 恢复会话（仅首次渲染） ---
+  const [initialSession] = useState(loadSession);
+
   // --- 目标选择 ---
-  const [target, setTarget] = useState<TargetSelection | null>(null);
+  const [target, setTarget] = useState<TargetSelection | null>(initialSession?.target ?? null);
   const [effectiveModel, setEffectiveModel] = useState("");
   const [preparingTarget, setPreparingTarget] = useState(false);
   const tempGroupRef = useRef<{ id: number; name: string } | null>(null);
 
   // --- 密钥选择 ---
-  const [selectedKeyId, setSelectedKeyId] = useState<number | null>(null);
+  const [selectedKeyId, setSelectedKeyId] = useState<number | null>(initialSession?.selectedKeyId ?? null);
   const [keySecret, setKeySecret] = useState("");
   const [showKeyDialog, setShowKeyDialog] = useState(false);
 
   // --- 对话状态 ---
-  const currentStorageKey = chatStorageKey(target);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(initialSession?.messages ?? []);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const prevStorageKeyRef = useRef<string | null>(null);
-  // refs 供切换 effect 读取最新值而不触发重渲染
-  const messagesRef = useRef(messages);
-  messagesRef.current = messages;
-  const streamingRef = useRef(streaming);
-  streamingRef.current = streaming;
-
-  // 切换目标时：保存旧对话，加载新对话
-  useEffect(() => {
-    const prevKey = prevStorageKeyRef.current;
-    const newKey = currentStorageKey;
-
-    if (prevKey !== newKey) {
-      // 保存旧目标的对话（非流式状态才保存）
-      if (prevKey && !streamingRef.current) {
-        saveConversation(prevKey, messagesRef.current);
-      }
-      // 加载新目标的对话
-      setMessages(loadConversation(newKey));
-      prevStorageKeyRef.current = newKey;
-    }
-  }, [currentStorageKey]);
 
   // --- 数据查询 ---
   const { data: groups } = useQuery({ queryKey: ["groups"], queryFn: api.listGroups });
@@ -361,8 +339,14 @@ export default function ChatPage() {
     return () => { aborted = true; };
   }, [selectedKeyId]);
 
-  // 自动选中第一把可用密钥
+  // 密钥校验与自动选中
   useEffect(() => {
+    // 选中的密钥不存在或已禁用 → 重置
+    if (selectedKeyId && enabledKeys.length > 0 && !enabledKeys.some((k) => k.id === selectedKeyId)) {
+      setSelectedKeyId(null);
+      return;
+    }
+    // 自动选中第一把可用密钥
     if (!selectedKeyId && enabledKeys.length > 0) {
       setSelectedKeyId(enabledKeys[0].id);
     }
@@ -373,12 +357,12 @@ export default function ChatPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
-  // 对话自动保存：非流式状态下将消息持久化到 localStorage
+  // 会话自动保存：非流式状态下将整个会话持久化到 localStorage
   useEffect(() => {
     if (!streaming) {
-      saveConversation(currentStorageKey, messages);
+      saveSession({ target, selectedKeyId, messages });
     }
-  }, [currentStorageKey, messages, streaming]);
+  }, [target, selectedKeyId, messages, streaming]);
 
   // --- 目标切换 ---
   const handleTargetChange = useCallback(
@@ -476,11 +460,11 @@ export default function ChatPage() {
     });
   }, []);
 
-  // --- 清空对话（含 localStorage） ---
+  // --- 新会话：清空当前对话（保留目标和密钥选择） ---
   const handleClear = useCallback(() => {
     setMessages([]);
-    clearConversation(currentStorageKey);
-  }, [currentStorageKey]);
+    clearSession();
+  }, []);
 
   // --- 密钥创建回调 ---
   const handleKeyCreated = useCallback((created: APIKeyCreated) => {
@@ -579,7 +563,7 @@ export default function ChatPage() {
               onClick={handleClear}
             >
               <Eraser className="h-3.5 w-3.5" aria-hidden />
-              清空
+              新会话
             </Button>
           )}
         </div>

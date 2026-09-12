@@ -25,6 +25,17 @@ describe("<DialogContent> variants", () => {
     expect(screen.getByText("fullscreen content")).toBeInTheDocument();
   });
 
+  it("variant=wide 渲染", () => {
+    render(
+      <Dialog open>
+        <DialogContent variant="wide" data-testid="dc">
+          wide content
+        </DialogContent>
+      </Dialog>,
+    );
+    expect(screen.getByText("wide content")).toBeInTheDocument();
+  });
+
   it("size=sm dialog 渲染", () => {
     render(
       <Dialog open>

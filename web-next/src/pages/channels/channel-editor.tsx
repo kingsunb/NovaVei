@@ -627,7 +627,7 @@ export function ChannelEditor({
         onClose();
       }}
     >
-      <DialogContent variant="fullscreen">
+      <DialogContent variant="wide">
         <DialogHeader className="pr-12">
           <DialogTitle>{isNew ? "新建渠道" : `编辑：${draft.name}`}</DialogTitle>
           <DialogDescription>

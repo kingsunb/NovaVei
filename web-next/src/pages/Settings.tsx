@@ -68,6 +68,7 @@ type Section =
   | "proxy-pool"
   | "header-templates"
   | "conversation"
+  | "conv-trace"
   | "retention"
   | "usage-retention"
   | "tester"
@@ -82,6 +83,7 @@ const SECTIONS: { id: Section; label: string }[] = [
   { id: "proxy-pool", label: "代理池" },
   { id: "header-templates", label: "Header 模板" },
   { id: "conversation", label: "对话留存" },
+  { id: "conv-trace", label: "转换追踪" },
   { id: "retention", label: "错误日志保留" },
   { id: "usage-retention", label: "用量保留" },
   { id: "tester", label: "模型测试" },
@@ -118,6 +120,7 @@ export default function SettingsPage() {
         {active === "proxy-pool" && <ProxyPoolSection />}
         {active === "header-templates" && <HeaderTemplatesSection />}
         {active === "conversation" && <ConversationSection />}
+        {active === "conv-trace" && <ConvTraceSection />}
         {active === "retention" && <RetentionSection />}
         {active === "usage-retention" && <UsageRetentionSection />}
         {active === "tester" && <TesterSection />}
@@ -1098,6 +1101,89 @@ function ConversationSection() {
 function swallowMissingSetting(e: unknown) {
   if (e instanceof APIError && e.status === 404) return null;
   throw e;
+}
+
+// ---------------- 转换追踪 ----------------
+
+function ConvTraceSection() {
+  const qc = useQueryClient();
+  const { data: enabledSetting } = useQuery({
+    queryKey: ["settings", "conv_trace_enabled"],
+    queryFn: () =>
+      api.getSetting("conv_trace_enabled").catch(swallowMissingSetting),
+  });
+
+  const [enabled, setEnabled] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    if (hydrated) return;
+    if (enabledSetting) {
+      setEnabled(enabledSetting.value === "1");
+      setHydrated(true);
+    }
+  }, [enabledSetting, hydrated]);
+
+  const saveEnabled = useMutation({
+    mutationFn: () =>
+      api.setSetting("conv_trace_enabled", enabled ? "1" : "0"),
+    onSuccess: () => {
+      toast.success("已保存,运行时立即生效");
+      qc.invalidateQueries({ queryKey: ["settings", "list"] });
+      qc.invalidateQueries({ queryKey: ["settings", "conv_trace_enabled"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "保存失败"),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>协议转换追踪</CardTitle>
+          <CardDescription>
+            跨协议转换时记录耗时、请求体大小、字段降级诊断等 Debug 日志;
+            关闭时仅一次缓存查询, 零额外开销
+          </CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between rounded-md border border-border bg-card/60 px-3 py-2">
+          <div>
+            <p className="text-sm font-medium text-ink">启用转换追踪</p>
+            <p className="text-xs text-ink-muted">
+              开启后跨协议请求会输出 <code className="mono">conv trace</code> 级 Debug 日志,
+              包含协议对、耗时、大小变化与降级字段; 关闭时无任何 IO 与分配
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={enabled}
+              onCheckedChange={setEnabled}
+              disabled={saveEnabled.isPending}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={saveEnabled.isPending}
+              disabled={!hydrated}
+              aria-label="保存 转换追踪开关"
+              onClick={() => saveEnabled.mutate()}
+            >
+              保存
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-md border border-border bg-surface-subtle/40 p-3 text-xs text-ink-muted">
+          <p className="font-medium text-ink">性能说明</p>
+          <ul className="mt-1.5 space-y-1">
+            <li>• <b>关闭</b>(默认): 每次跨协议转换仅 1 次内存缓存查询, 无日志输出、无内存分配</li>
+            <li>• <b>开启</b>: 额外分析请求体结构 + 转换后字段对比 + Debug 日志写入, 适合调试与排障</li>
+            <li>• 日志级别为 <code className="mono">DEBUG</code>, 需 <code className="mono">NOVAEIL_DEBUG=true</code> 才会输出到控制台</li>
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 // ---------------- 日志保留 ----------------

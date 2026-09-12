@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Field } from "@/components/ui/field";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -492,6 +492,8 @@ function GroupEditor({
   const [activeItemId, setActiveItemId] = useState(0);
   // Tab 切分「成员」与「路由策略」两个独立页面，对齐 NovaVeil_api 编辑器布局。
   const [tab, setTab] = useState<"members" | "relay">("members");
+  // 自动匹配：以分组名称为关键词，自动将名称包含该关键词的渠道模型加入分组成员。
+  const [autoMatch, setAutoMatch] = useState(false);
 
   // 成员编辑需要：所有渠道（拉模型）和所有分组（用于引用）
   const { data: channels } = useQuery({
@@ -506,6 +508,9 @@ function GroupEditor({
   // 成员编辑草稿：保留 server 原始 items 引用 + 本地变更
   const [originalItems, setOriginalItems] = useState<DraftGroupItem[]>([]);
   const [draftItems, setDraftItems] = useState<DraftGroupItem[]>([]);
+  // ref 供自动匹配 effect 读取最新 draftItems 而不将其纳入依赖（避免反馈循环）
+  const draftItemsRef = useRef(draftItems);
+  draftItemsRef.current = draftItems;
 
   // updateRelay 更新 relayConfig 的单个字段，保持其余字段不变。
   function updateRelay<K extends keyof GroupRelayConfig>(
@@ -535,6 +540,7 @@ function GroupEditor({
         }));
       setOriginalItems(sorted);
       setDraftItems(sorted);
+      setAutoMatch(!!group.relay_config?.auto_match_models);
     } else {
       setName("");
       setMode("manual");
@@ -542,10 +548,66 @@ function GroupEditor({
       setActiveItemId(0);
       setOriginalItems([]);
       setDraftItems([]);
+      setAutoMatch(false);
     }
     // 切换编辑目标时回到成员页
     setTab("members");
   }, [group]);
+
+  // 自动匹配：以分组名称为关键词，扫描所有渠道模型并自动加入匹配项
+  useEffect(() => {
+    if (!autoMatch || !name.trim()) return;
+    const q = name.trim().toLowerCase();
+    const channelsData = channels ?? [];
+
+    // 收集所有名称包含关键词的渠道模型
+    const matchedModels: ChannelModel[] = [];
+    for (const ch of channelsData) {
+      for (const m of ch.models) {
+        if (m.name.toLowerCase().includes(q)) {
+          matchedModels.push(m);
+        }
+      }
+    }
+
+    // 过滤掉已在草稿中的
+    const existingIds = new Set(
+      draftItemsRef.current
+        .filter((d) => !d.ref_group_name && d.channel_model_id > 0)
+        .map((d) => d.channel_model_id),
+    );
+    const newMatches = matchedModels.filter((m) => !existingIds.has(m.id));
+    if (newMatches.length === 0) return;
+
+    setDraftItems((prev) => {
+      const next = [
+        ...prev,
+        ...newMatches.map((model) => ({
+          client_uid: nextDraftItemUid("auto"),
+          id: 0,
+          group_id: group && group !== "new" ? group.id : 0,
+          channel_model_id: model.id,
+          ref_group_name: "",
+          channel_model: model,
+          priority: 0,
+        })),
+      ];
+      return next.map((item, idx) => ({ ...item, priority: idx + 1 }));
+    });
+  }, [autoMatch, name, channels, group]);
+
+  // 自动匹配的模型总数（用于 UI 显示）
+  const autoMatchCount = useMemo(() => {
+    if (!autoMatch || !name.trim()) return 0;
+    const q = name.trim().toLowerCase();
+    let count = 0;
+    for (const ch of channels ?? []) {
+      for (const m of ch.models) {
+        if (m.name.toLowerCase().includes(q)) count++;
+      }
+    }
+    return count;
+  }, [autoMatch, name, channels]);
 
   const isNew = !group || group === "new";
   const open = !!group;
@@ -731,7 +793,7 @@ function GroupEditor({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent variant="fullscreen">
+      <DialogContent variant="wide">
         <DialogHeader className="pr-12">
           <DialogTitle>{isNew ? "新建分组" : `编辑：${name}`}</DialogTitle>
           <DialogDescription>
@@ -795,6 +857,32 @@ function GroupEditor({
 
         {/* ---------- Tab: 成员 ---------- */}
         {tab === "members" && (
+          <>
+          {/* 自动匹配开关 */}
+          <div className="border-b border-border px-4 py-2.5">
+            <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">自动匹配模型</p>
+                <p className="text-xs text-ink-muted">
+                  {name.trim()
+                    ? `以「${name.trim()}」为关键词，自动匹配所有名称包含该关键词的渠道模型`
+                    : "请先填写分组名称"}
+                </p>
+                {autoMatch && autoMatchCount > 0 && (
+                  <p className="mt-0.5 text-[11px] text-emerald-500">
+                    已匹配 {autoMatchCount} 个模型
+                  </p>
+                )}
+              </div>
+              <Switch
+                checked={autoMatch}
+                onCheckedChange={(v) => {
+                  setAutoMatch(v);
+                  updateRelay("auto_match_models", v);
+                }}
+              />
+            </div>
+          </div>
           <div className="flex min-h-0 flex-1 flex-col md:flex-row">
             {/* 左栏：可用渠道与模型 */}
             <aside className="flex h-[36vh] min-h-0 flex-col border-b border-border md:h-auto md:w-[42%] md:border-b-0 md:border-r">
@@ -922,6 +1010,7 @@ function GroupEditor({
               </div>
             </section>
           </div>
+          </>
         )}
 
         {/* ---------- Tab: 路由策略 ---------- */}
@@ -1288,17 +1377,23 @@ function ChannelModelPicker({
   // 多个渠道可同时展开；搜索时自动展开命中渠道，避免折叠态下看不到匹配模型。
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
 
+  const q = search.trim().toLowerCase();
+  const hasSearch = q.length > 0;
+
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
     if (!q) return channels;
     return channels.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.models.some((m) => m.name.toLowerCase().includes(q)),
     );
-  }, [channels, search]);
+  }, [channels, q]);
 
-  const hasSearch = search.trim().length > 0;
+  // 搜索时同步过滤引用分组，否则底部「引用其他分组」始终全量展示
+  const filteredGroups = useMemo(() => {
+    if (!q) return groups;
+    return groups.filter((g) => g.name.toLowerCase().includes(q));
+  }, [groups, q]);
   // 搜索态下强制展开所有命中渠道；非搜索态用用户手动展开集合。
   const expandedIds = hasSearch
     ? new Set(filtered.map((c) => c.id))
@@ -1349,6 +1444,12 @@ function ChannelModelPicker({
               addedModelIds.has(m.id),
             ).length;
             const available = channel.models.length - addedInChannel;
+            // 搜索时只显示匹配的模型；非搜索态显示全部
+            const visibleModels = hasSearch
+              ? channel.models.filter((m) =>
+                  m.name.toLowerCase().includes(q),
+                )
+              : channel.models;
             return (
             <div
               key={channel.id}
@@ -1392,12 +1493,12 @@ function ChannelModelPicker({
               {/* 模型行：展开后点击添加 */}
               {isOpen && (
                 <div className="border-t border-border/60">
-                  {channel.models.length === 0 ? (
+                  {visibleModels.length === 0 ? (
                     <p className="px-2.5 py-1.5 text-[11px] text-ink-subtle">
-                      无模型
+                      {hasSearch ? "无匹配模型" : "无模型"}
                     </p>
                   ) : (
-                    channel.models.map((m) => {
+                    visibleModels.map((m) => {
                       const added = addedModelIds.has(m.id);
                       return (
                         <button
@@ -1447,7 +1548,7 @@ function ChannelModelPicker({
         )}
 
         {/* 引用其他分组 */}
-        {groups.length > 0 && (
+        {filteredGroups.length > 0 && (
           <div className="mt-2 overflow-hidden rounded-md border border-border">
             <div className="flex items-center gap-1.5 bg-surface-subtle/30 px-2.5 py-1.5">
               <CornerDownLeft
@@ -1457,7 +1558,7 @@ function ChannelModelPicker({
               <span className="flex-1 text-sm font-medium">引用其他分组</span>
             </div>
             <div className="border-t border-border/60">
-              {groups.map((g) => {
+              {filteredGroups.map((g) => {
                 const added = addedRefNames.has(g.name);
                 return (
                   <button

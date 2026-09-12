@@ -34,6 +34,7 @@ type GroupRelayConfig struct {
 	EmergencyItemID                int     `json:"emergency_item_id" binding:"omitempty,min=0"`                 // 紧急兜底成员 ID:全部常规成员不可用时的最后放行目标,须指向同分组已有成员,0 表示关闭。
 	PreferPassthrough              bool    `json:"prefer_passthrough"`                                          // 故障转移时优先选择与客户端协议相同的渠道直接透传, 默认关闭。
 	MaskEnabled                    bool    `json:"mask_enabled"`                                                // 是否对本分组启用请求脱敏, 默认 false; 须同时全局 Enabled=true 才生效, 旧分组 JSON 反序列化自动得关, 无需数据迁移。
+	AutoMatchModels                bool    `json:"auto_match_models"`                                           // 是否启用自动匹配: 以分组名称为关键词, 自动将所有名称包含该关键词的渠道模型加入分组成员, 默认关闭, 旧分组 JSON 反序列化自动得关, 无需数据迁移。
 }
 
 // DefaultGroupRelayConfig 返回新分组使用的 Relay 默认配置。

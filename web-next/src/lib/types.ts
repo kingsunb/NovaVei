@@ -220,6 +220,8 @@ export interface GroupRelayConfig {
   prefer_passthrough: boolean;
   /** 是否对本分组启用请求脱敏，默认 false；须同时全局 enabled=true 才生效。 */
   mask_enabled?: boolean;
+  /** 是否启用自动匹配：以分组名称为关键词，自动将名称包含该关键词的渠道模型加入分组成员。 */
+  auto_match_models: boolean;
 }
 
 /**
@@ -248,6 +250,7 @@ export const DEFAULT_GROUP_RELAY_CONFIG: GroupRelayConfig = {
   background_probe_interval_seconds: 60,
   emergency_item_id: 0,
   prefer_passthrough: false,
+  auto_match_models: false,
 };
 
 export interface GroupItem {

@@ -514,7 +514,7 @@ export default function ChannelsPage() {
                   <input
                     type="number"
                     step="1"
-                    className="no-spin h-6 w-16 rounded-control border border-border bg-card px-1.5 text-right text-xs text-ink"
+                    className="no-spin h-6 w-16 rounded-control border border-border bg-card px-1.5 text-center text-xs text-ink"
                     value={sortDraft[c.id] ?? String(c.sort ?? 0)}
                     disabled={
                       sortMut.isPending && sortMut.variables?.id === c.id

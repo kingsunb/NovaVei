@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/kingsunb/NovaVeil/internal/helper"
 	"github.com/kingsunb/NovaVeil/internal/model"
@@ -194,6 +195,8 @@ type conversionMiddleware struct {
 	rawBody                  string        // 上游非流式响应或错误的诊断片段(已截断), 转换/校验失败时嵌入错误。
 	usage                    *llm.Usage    // 非流式统一响应中确认的用量。
 	terminal                 string        // 非流式统一响应的终止原因, 供空输出保险丝区分合法空终态。
+	traceEnabled             bool          // 是否捕获转换后请求体(供协议转换追踪); 关闭时不捕获, 零开销。
+	convertedRequestBody     []byte        // 转换后的上游请求体快照; 仅 traceEnabled=true 时填充, 供追踪诊断对比。
 }
 
 // OnOutboundRawRequest 在转换后的上游请求上应用渠道参数和自定义 Header。
@@ -203,6 +206,9 @@ type conversionMiddleware struct {
 // 此时已写成 Authorization/X-API-Key 等请求头, 只能在钩子里删除; Auth 一并置 nil,
 // 防止构建 HTTP 请求时被二次写入。之后才应用渠道配置, 显式自定义的认证头不受影响。
 func (m *conversionMiddleware) OnOutboundRawRequest(_ context.Context, request *httpclient.Request) (*httpclient.Request, error) {
+	if m.traceEnabled {
+		m.convertedRequestBody = request.Body
+	}
 	if m.channel.PrimaryKey() == "" {
 		request.Auth = nil
 		request.Headers.Del("Authorization")
@@ -431,6 +437,14 @@ func (m *conversionMiddleware) OnOutboundLlmResponse(_ context.Context, response
 // sendConverted 经 axonhub pipeline 把客户端请求转换成渠道协议后请求上游, 响应再转换回客户端协议。
 // randomValue 为请求级一次性解析的随机头值, 同一请求的所有头与所有重试复用此值。
 func sendConverted(ctx context.Context, format llm.APIFormat, raw *httpclient.Request, channel model.Channel, outbound transformer.Outbound, streaming bool, randomValue string) (*upstreamResponse, error) {
+	// 协议转换追踪: 关闭时仅一次缓存查询即短路, 不创建 ConvTrace, 不捕获转换体, 零开销。
+	traceOn := convTraceOn()
+	var ct *ConvTrace
+	if traceOn {
+		ct = beginConvTrace(format, channel, raw.Body)
+	}
+	convStart := time.Now()
+
 	// 渠道整体并发上限: 发起上游前领取槽位并把释放函数交给 upstreamResponse 持有。
 	// 流式响应必须覆盖窗口预读和剩余事件流的完整生命周期; 非流式响应在完整解析后立即释放。
 	releaseConcurrency, err := acquireChannelConcurrency(ctx, channel.ID, channel.MaxConcurrent)
@@ -453,13 +467,17 @@ func sendConverted(ctx context.Context, format llm.APIFormat, raw *httpclient.Re
 		releaseConcurrency()
 		return nil, err
 	}
-	middleware := &conversionMiddleware{channel: channel, format: outbound.APIFormat(), randomValue: randomValue}
+	middleware := &conversionMiddleware{channel: channel, format: outbound.APIFormat(), randomValue: randomValue, traceEnabled: traceOn}
 	processor := pipeline.NewFactory(httpclient.NewHttpClientWithClient(client)).Pipeline(
 		inbound,
 		outbound,
 		pipeline.WithMiddlewares(middleware),
 	)
 	result, err := processor.Process(ctx, raw)
+	if traceOn && ct != nil {
+		ct.Elapsed = time.Since(convStart)
+		finishConvTrace(ct, middleware.convertedRequestBody, err)
+	}
 	if err != nil {
 		releaseConcurrency()
 		if len(middleware.rawBody) > 0 {

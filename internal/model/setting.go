@@ -27,6 +27,7 @@ const (
 	SettingKeyModelFilter               SettingKey = "model_filter"                // 渠道获取模型时的全局过滤表达式(ECMAScript 正则); 留空表示不过滤, 与渠道级 MatchRegex 取 AND
 	SettingKeyClientStatMaxCount        SettingKey = "client_stat_max_count"       // 调用客户端统计最大保留条数, 默认 10000, 0=不限制
 	SettingKeyProxyPool                 SettingKey = "proxy_pool"                  // 代理池(JSON 数组), 供设置页管理与测试多个可选代理
+	SettingKeyConvTrace                 SettingKey = "conv_trace_enabled"          // 协议转换追踪开关: "1"开启后对跨协议转换记录耗时/大小/降级诊断等 Debug 日志, "0"(默认)关闭, 关闭时仅一次缓存查询零开销
 )
 
 // 用量数据保留时间设置项的默认值与下限。
@@ -124,6 +125,7 @@ func DefaultSettings() []Setting {
 		{Key: SettingKeyModelFilter, Value: ""},                                                           // 全局模型过滤默认为空, 表示不过滤
 		{Key: SettingKeyClientStatMaxCount, Value: strconv.Itoa(DefaultClientStatMaxCount)},               // 调用客户端统计默认保留 1 万条
 		{Key: SettingKeyProxyPool, Value: "[]"},                                                              // 代理池默认为空
+		{Key: SettingKeyConvTrace, Value: "0"},                                                               // 协议转换追踪默认关闭
 	}
 }
 
@@ -149,6 +151,11 @@ func (s *Setting) Validate() error {
 	case SettingKeyConversationLog:
 		if _, err := strconv.ParseBool(s.Value); err != nil {
 			return fmt.Errorf("conversation log switch must be a boolean")
+		}
+		return nil
+	case SettingKeyConvTrace:
+		if _, err := strconv.ParseBool(s.Value); err != nil {
+			return fmt.Errorf("conv trace switch must be a boolean")
 		}
 		return nil
 	case SettingKeyConversationRetentionDays:

@@ -28,8 +28,8 @@ DialogOverlay.displayName = "DialogOverlay";
 export const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
-    /** "dialog" 居中（默认），"sheet" 右侧滑出，"fullscreen" 全屏覆盖 */
-    variant?: "dialog" | "sheet" | "fullscreen";
+    /** "dialog" 居中（默认），"sheet" 右侧滑出，"fullscreen" 全屏覆盖，"wide" 占 80% 宽度靠右覆盖 */
+    variant?: "dialog" | "sheet" | "fullscreen" | "wide";
     size?: "sm" | "md" | "lg";
   }
 >(({ className, children, variant = "dialog", size = "md", ...props }, ref) => (
@@ -38,11 +38,13 @@ export const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        // fullscreen 覆盖整个视口, 背后是仍在 SSE 驱动下频繁重渲染的 LiveTable;
+        // fullscreen / wide 覆盖整个视口, 背后是仍在 SSE 驱动下频繁重渲染的 LiveTable;
         // 若沿用 glass-overlay 的 backdrop-filter: blur(40px), 每条 SSE 消息都
-        // 触发一次全屏 40px 模糊重合成, 导致详情页卡死。fullscreen 改用不透明
+        // 触发一次全屏 40px 模糊重合成, 导致详情页卡死。fullscreen / wide 改用不透明
         // 背景, 消除 backdrop-filter 这一 GPU 瓶颈。
-        variant === "fullscreen" ? "fixed z-50 bg-card" : "glass-overlay fixed z-50",
+        variant === "fullscreen" || variant === "wide"
+          ? "fixed z-50 bg-card"
+          : "glass-overlay fixed z-50",
         "data-[state=open]:animate-in data-[state=closed]:animate-out duration-200",
         variant === "dialog" &&
           "left-1/2 top-1/2 max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-card data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
@@ -50,6 +52,9 @@ export const DialogContent = React.forwardRef<
           "right-0 top-0 flex h-full w-full max-w-xl flex-col rounded-l-card data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-xl",
         variant === "fullscreen" &&
           "inset-0 flex h-full w-full flex-col rounded-none data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+        // wide: 占视口 80% 宽度靠右, 左侧 20% 露出遮罩层供点击关闭。
+        variant === "wide" &&
+          "right-0 top-0 flex h-full w-4/5 flex-col rounded-l-card data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
         size === "sm" && variant === "dialog" && "max-w-sm",
         size === "lg" && variant === "dialog" && "max-w-2xl",
         className,

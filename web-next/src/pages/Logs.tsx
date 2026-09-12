@@ -758,7 +758,7 @@ function TraceSheet({
 
   return (
     <Dialog open={!!req} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent variant="fullscreen">
+      <DialogContent variant="wide">
         {/* ---------- 富头部 ---------- */}
         <div className="border-b border-border px-5 py-3">
           <div className="flex items-center gap-2">

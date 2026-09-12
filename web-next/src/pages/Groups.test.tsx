@@ -468,3 +468,109 @@ describe("分组列表排序与自定义顺序", () => {
     ).toBe("priority");
   });
 });
+
+describe("ChannelModelPicker 搜索过滤", () => {
+  // 两个渠道，各自多个模型；两个可引用分组
+  const ch1: typeof sampleChannel = {
+    ...sampleChannel,
+    id: 1,
+    name: "openai-prod",
+    models: [
+      { id: 100, channel_id: 1, name: "gpt-4o", source: "auto" },
+      { id: 101, channel_id: 1, name: "gpt-4o-mini", source: "auto" },
+      { id: 102, channel_id: 1, name: "o1-preview", source: "auto" },
+    ],
+  };
+  const ch2: typeof sampleChannel = {
+    ...sampleChannel,
+    id: 2,
+    name: "anthropic-prod",
+    models: [
+      { id: 200, channel_id: 2, name: "claude-sonnet", source: "auto" },
+      { id: 201, channel_id: 2, name: "claude-haiku", source: "auto" },
+    ],
+  };
+  const refGroupA = { ...sampleGroup, id: 20, name: "ref-backup" };
+  const refGroupB = { ...sampleGroup, id: 21, name: "ref-canary" };
+
+  function setupSearchFetch() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url.includes("/group/list"))
+          return Promise.resolve(jsonOk([sampleGroup, refGroupA, refGroupB]));
+        if (url.includes("/channel/list"))
+          return Promise.resolve(jsonOk([ch1, ch2]));
+        return Promise.resolve(jsonOk(null));
+      }),
+    );
+  }
+
+  it("搜索模型名：只显示匹配的模型，非匹配模型不出现", async () => {
+    const user = userEvent.setup();
+    setupSearchFetch();
+    render(<GroupsPage />, { wrapper: Wrapper });
+    await waitFor(() => screen.getByText("gpt-4o-prod"));
+
+    await user.click(screen.getAllByRole("button", { name: /编辑/ })[0]);
+    await waitFor(() => screen.getByRole("dialog"));
+
+    const searchInput = screen.getByLabelText("搜索渠道或模型");
+    await user.type(searchInput, "gpt-4o");
+
+    // 搜索态自动展开命中渠道；gpt-4o 和 gpt-4o-mini 应出现，o1-preview 不应出现
+    await waitFor(() =>
+      expect(screen.getByText("gpt-4o")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("gpt-4o-mini")).toBeInTheDocument();
+    expect(screen.queryByText("o1-preview")).not.toBeInTheDocument();
+    // anthropic 渠道不命中，其模型也不应出现
+    expect(screen.queryByText("claude-sonnet")).not.toBeInTheDocument();
+  });
+
+  it("搜索分组名：引用分组区域只显示匹配的分组", async () => {
+    const user = userEvent.setup();
+    setupSearchFetch();
+    render(<GroupsPage />, { wrapper: Wrapper });
+    await waitFor(() => screen.getByText("gpt-4o-prod"));
+
+    await user.click(screen.getAllByRole("button", { name: /编辑/ })[0]);
+    await waitFor(() => screen.getByRole("dialog"));
+
+    const searchInput = screen.getByLabelText("搜索渠道或模型");
+    await user.type(searchInput, "canary");
+
+    // ref-canary 命中，ref-backup 不命中
+    await waitFor(() =>
+      expect(screen.getByText("→ ref-canary")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("→ ref-backup")).not.toBeInTheDocument();
+  });
+
+  it("清空搜索：恢复全量展示", async () => {
+    const user = userEvent.setup();
+    setupSearchFetch();
+    render(<GroupsPage />, { wrapper: Wrapper });
+    await waitFor(() => screen.getByText("gpt-4o-prod"));
+
+    await user.click(screen.getAllByRole("button", { name: /编辑/ })[0]);
+    await waitFor(() => screen.getByRole("dialog"));
+
+    const searchInput = screen.getByLabelText("搜索渠道或模型");
+    await user.type(searchInput, "claude");
+    await waitFor(() =>
+      expect(screen.getByText("claude-sonnet")).toBeInTheDocument(),
+    );
+    // 搜索 claude 时 openai-prod 渠道不命中，不应出现
+    expect(screen.queryByText("openai-prod")).not.toBeInTheDocument();
+
+    // 清空搜索后所有渠道恢复（渠道名始终可见）
+    await user.clear(searchInput);
+    await waitFor(() =>
+      expect(screen.getByText("openai-prod")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("anthropic-prod")).toBeInTheDocument();
+    // 「没有匹配」提示消失
+    expect(screen.queryByText("没有匹配的渠道或模型")).not.toBeInTheDocument();
+  });
+});

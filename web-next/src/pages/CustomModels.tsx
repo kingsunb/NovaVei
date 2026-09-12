@@ -548,7 +548,7 @@ function CustomModelEditor({
 
   return (
     <Dialog open={!!channel} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent variant="fullscreen">
+      <DialogContent variant="wide">
         <DialogHeader className="pr-12">
           <DialogTitle>{isNew ? "新建自定义模型" : `编辑：${name}`}</DialogTitle>
           <DialogDescription>
