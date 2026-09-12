@@ -53,7 +53,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
+import { Select } from "@/components/ui/select";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Switch } from "@/components/ui/switch";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SearchField } from "@/components/ui/search-field";
+import { PageToolbar } from "@/components/ui/page-toolbar";
 import { cn, NAME_RULE, validateField } from "@/lib/utils";
 import { PROVIDER_LABELS } from "./channels/constants";
 import { ViewToggle } from "@/components/ui/view-toggle";
@@ -208,65 +213,56 @@ export default function GroupsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 rounded-control border border-border bg-card/60 p-0.5 text-xs">
-          {(["all", "failover", "manual"] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              aria-pressed={mode === m}
-              className={cn(
-                "rounded-[5px] px-2.5 py-1 transition-colors",
-                mode === m
-                  ? "bg-primary/12 font-medium text-primary-text"
-                  : "text-ink-muted hover:text-ink",
-              )}
-            >
-              {m === "all" ? "全部" : MODE_LABELS[m]}
-            </button>
-          ))}
-        </div>
-
-        <label className="flex items-center gap-1.5 text-xs text-ink-muted">
-          排序
-          <select
-            aria-label="分组排序方式"
-            className="h-7 rounded-control border border-border bg-card px-2 text-xs"
-            value={sort}
-            onChange={(e) => changeSort(e.target.value as GroupSort)}
-          >
-            <option value="priority">按优先级</option>
-            <option value="name">按名称</option>
-            <option value="mode">按模式</option>
-            <option value="custom">自定义</option>
-          </select>
-        </label>
-
-        <div className="ml-auto flex items-center gap-2">
-          <ViewToggle value={viewMode} onChange={setViewMode} />
-          <label className="relative">
-            <Search
-              className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted"
-              aria-hidden
+      <PageToolbar
+        leading={
+          <>
+            <SegmentedControl
+              aria-label="分组模式"
+              value={mode}
+              onChange={setMode}
+              options={[
+                { value: "all", label: "全部" },
+                { value: "failover", label: MODE_LABELS.failover },
+                { value: "manual", label: MODE_LABELS.manual },
+              ]}
             />
-            <Input
+            <label className="flex items-center gap-1.5 text-xs text-ink-muted">
+              排序
+              <Select
+                className="h-8 text-xs"
+                aria-label="分组排序方式"
+                value={sort}
+                onChange={(e) => changeSort(e.target.value as GroupSort)}
+              >
+                <option value="priority">按优先级</option>
+                <option value="name">按名称</option>
+                <option value="mode">按模式</option>
+                <option value="custom">自定义</option>
+              </Select>
+            </label>
+          </>
+        }
+        trailing={
+          <>
+            <ViewToggle value={viewMode} onChange={setViewMode} />
+            <SearchField
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={setSearch}
               placeholder="搜索分组…"
-              className="h-8 w-56 pl-7"
+              aria-label="搜索分组"
             />
-          </label>
-          <Button
-            variant="primary"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setEditing("new")}
-          >
-            <Plus className="h-3.5 w-3.5" aria-hidden />
-            新建分组
-          </Button>
-        </div>
-      </div>
+            <Button
+              variant="primary"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setEditing("new")}
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              新建分组
+            </Button>
+          </>
+        }
+      />
 
       {isLoading ? (
         <CardGridSkeleton cards={6} />
@@ -274,9 +270,11 @@ export default function GroupsPage() {
         <QueryErrorBanner onRetry={() => refetch()} />
       ) : rows.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center text-sm text-ink-muted">
-            {data?.length ? "没有匹配的分组" : "还没有分组"}
-          </CardContent>
+          <EmptyState
+            icon={<Users className="h-5 w-5" aria-hidden />}
+            title={data?.length ? "没有匹配的分组" : "还没有分组"}
+            hint={data?.length ? undefined : "先在「渠道」页接入上游，再在此把它们组成故障转移分组"}
+          />
         </Card>
       ) : (
         <div className={cn("grid grid-cols-1 gap-3", viewMode === "grid" && "md:grid-cols-2 xl:grid-cols-3")}>
@@ -1264,8 +1262,8 @@ function GroupEditor({
                 label="紧急兜底成员"
                 hint="全部成员不可用时的最后放行成员（仅故障转移模式生效），业务失败照常计入冷却"
               >
-                <select
-                  className="h-9 w-full rounded-control border border-border bg-card px-3 text-sm"
+                <Select
+                  className="h-9 w-full text-sm"
                   value={relayConfig.emergency_item_id}
                   onChange={(e) =>
                     updateRelay(
@@ -1284,7 +1282,7 @@ function GroupEditor({
                           : `${m.channel_model?.name ?? `#${m.channel_model_id}`}`}
                       </option>
                     ))}
-                </select>
+                </Select>
               </Field>
             </div>
 

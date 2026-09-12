@@ -21,11 +21,11 @@ func GenerateJWTToken(expiresSec int) (string, int, error) {
 	if expiresSec > 0 {
 		maxAge = expiresSec
 	} else if expiresSec == -1 {
-		maxAge = int((30 * 24 * time.Hour).Seconds())
+		maxAge = int((24 * time.Hour).Seconds())
 	}
-	// 有效期上限 30 天: expires 由客户端提交, 不设上限等于可自签永久凭据,
-	// 而唯一的注销手段是轮换 JWT 密钥(全员下线)。
-	const maxAgeCeiling = 30 * 24 * 3600
+	// 有效期上限 24 小时: expires 由客户端提交, 不设上限等于可自签长期凭据,
+	// 被盗 cookie 的窗口与「记住我」对齐到一天。
+	const maxAgeCeiling = 24 * 3600
 	if maxAge > maxAgeCeiling {
 		maxAge = maxAgeCeiling
 	}
@@ -67,16 +67,16 @@ func VerifyJWTToken(token string) bool {
 	return true
 }
 
-func GenerateAPIKey() string {
+func GenerateAPIKey() (string, error) {
 	const keyChars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	b := make([]byte, 48)
 	maxI := big.NewInt(int64(len(keyChars)))
 	for i := range b {
 		n, err := rand.Int(rand.Reader, maxI)
 		if err != nil {
-			return ""
+			return "", err
 		}
 		b[i] = keyChars[n.Int64()]
 	}
-	return "sk-" + conf.APP_NAME + "-" + string(b)
+	return "sk-" + conf.APP_NAME + "-" + string(b), nil
 }

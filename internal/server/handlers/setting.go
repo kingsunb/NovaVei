@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/gin-gonic/gin"
 	"github.com/kingsunb/NovaVeil/internal/model"
 	"github.com/kingsunb/NovaVeil/internal/op"
@@ -37,7 +38,7 @@ func init() {
 				Handle(setSetting),
 		).
 		AddRoute(
-			router.NewRoute("/export", http.MethodGet).
+			router.NewRoute("/export", http.MethodPost).
 				Handle(exportDB),
 		).
 		AddRoute(
@@ -116,6 +117,8 @@ func setSetting(c *gin.Context) {
 }
 
 func exportDB(c *gin.Context) {
+	resp.NoStore(c)
+	log.Warnf("database export ip=%s", c.ClientIP())
 	dump, err := op.DBExportAll(c.Request.Context())
 	if err != nil {
 		resp.Error(c, http.StatusInternalServerError, err.Error())

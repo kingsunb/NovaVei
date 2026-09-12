@@ -85,14 +85,20 @@ export function formatDuration(
 }
 
 /**
- * 耗时展示：终态/已提交请求展示「首字耗时 · 总耗时」，运行中请求仅展示当前总耗时。
+ * 耗时展示的结构化形态。终态/已提交请求返回首字 + 总耗时两段，运行中请求仅返回当前总耗时。
  * 首字时点来自后端 first_token_at（首个已交付客户端事件/整响应提交时刻）。
  * 状态覆盖：
- *  - running：首字尚未到达客户端，仅展示当前总耗时。
- *  - committed：首字已交付，仍在传输，总耗时按「当前到起始」计算。
+ *  - running：首字尚未到达客户端，仅返回当前总耗时。
+ *  - committed：首字已交付，仍在传输，总耗时按「当前到首字时点」计算。
  *  - 终态（success/failed/canceled）：总耗时取定稿后 duration_ms。
  */
-export function formatElapsedWithFirst(
+export type ElapsedParts =
+  | { kind: "none" }
+  | { kind: "running"; total: string }
+  | { kind: "total"; total: string }
+  | { kind: "first-total"; first: string; total: string };
+
+export function elapsedParts(
   request: {
     status: string;
     started_at: string;
@@ -101,13 +107,13 @@ export function formatElapsedWithFirst(
     duration?: number;
   },
   now = Date.now(),
-) {
+): ElapsedParts {
   const startedAt = new Date(request.started_at).getTime();
   if (!Number.isFinite(startedAt)) {
     const ms =
       request.duration_ms ??
       (request.duration != null ? request.duration / 1_000_000 : 0);
-    return ms > 0 ? `${Math.round(ms)}ms` : "—";
+    return ms > 0 ? { kind: "total", total: `${Math.round(ms)}ms` } : { kind: "none" };
   }
 
   // 首字耗时（毫秒）：首字时点相对请求到达的差值；未提交首字时按 0 处理。
@@ -134,16 +140,33 @@ export function formatElapsedWithFirst(
   const firstStr = formatElapsed(firstElapsedMs);
   const totalStr = formatElapsed(totalMs);
 
-  // running：展示「正在请求 · 总耗时」。
   if (request.status === "running") {
-    return `正在请求 · ${totalStr}`;
+    return { kind: "running", total: totalStr };
   }
 
-  // 首字已交付时展示首字 + 总耗时；首字未到（如提交前失败）只展示纯总耗时。
+  // 首字已交付时返回首字 + 总耗时；首字未到（如提交前失败）只返回纯总耗时。
   if (firstElapsedMs > 0) {
-    return `首字 ${firstStr} · 总耗时 ${totalStr}`;
+    return { kind: "first-total", first: firstStr, total: totalStr };
   }
-  return totalMs > 0 ? `${formatElapsed(totalMs)}` : "—";
+  return totalMs > 0 ? { kind: "total", total: totalStr } : { kind: "none" };
+}
+
+/** 单行字符串形态（详情弹窗等宽裕场景使用）；表格窄列请用 elapsedParts 分两行渲染。 */
+export function formatElapsedWithFirst(
+  request: Parameters<typeof elapsedParts>[0],
+  now = Date.now(),
+) {
+  const parts = elapsedParts(request, now);
+  switch (parts.kind) {
+    case "running":
+      return `正在请求 · ${parts.total}`;
+    case "first-total":
+      return `首字 ${parts.first} · 总耗时 ${parts.total}`;
+    case "total":
+      return parts.total;
+    case "none":
+      return "—";
+  }
 }
 
 function formatElapsed(milliseconds: number) {

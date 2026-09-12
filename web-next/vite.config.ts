@@ -49,6 +49,13 @@ function novaveilGzipPrecompressPlugin(): PluginOption {
 
 export default defineConfig({
   plugins: [tailwindcss(), react(), novaveilGzipPrecompressPlugin()],
+  define: {
+    // 构建版本注入（来源：scripts/build.sh 传入的 VITE_APP_* 环境变量），
+    // 编译为全局常量 __APP_VERSION__ / __APP_COMMIT__，供版本看门狗比较。
+    // 本地 dev / 未设置时为空串，看门狗按「不可判定」静默处理。
+    __APP_VERSION__: JSON.stringify(process.env.VITE_APP_VERSION ?? ""),
+    __APP_COMMIT__: JSON.stringify(process.env.VITE_APP_COMMIT ?? ""),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

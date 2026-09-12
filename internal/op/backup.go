@@ -62,6 +62,12 @@ func DBExportAll(ctx context.Context) (*model.DBDump, error) {
 		return nil, err
 	}
 
+	for i := range d.Channels {
+		revealChannelSecrets(&d.Channels[i])
+	}
+	for i := range d.APIKeys {
+		d.APIKeys[i].APIKey = revealAPIKeySecret(d.APIKeys[i].APIKey)
+	}
 	d.Settings = filterSecretSettings(d.Settings)
 	return d, nil
 }

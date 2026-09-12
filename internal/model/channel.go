@@ -60,7 +60,7 @@ type Channel struct {
 	MatchRegex             *string                      `json:"match_regex"`                                                    // 模型同步过滤表达式。
 	ModelLimits            map[string]ChannelModelLimit `json:"model_limits" gorm:"serializer:json"`                            // 按模型名配置的限制, 仅对渠道内同名模型生效。
 	Tags                   []string                     `json:"tags" gorm:"serializer:json"`                                    // 渠道自由标签集合, 如 ["free","稳定"]; 显式输出 [] 让前端可预测（避免 omitempty 吞掉后 channel.tags === undefined 触发 .map 崩溃）。
-	Sort                   int                          `json:"sort" gorm:"default:0"`                                          // 自定义排序值, 越小越靠前。
+	Sort                   int                          `json:"sort" gorm:"default:0"`                                          // 列表优先级, 越大越靠前。
 	RateLimitRPM           int                          `json:"rate_limit_rpm,omitempty"`                                       // 单把 Key 每分钟请求上限; 0 表示不限制。
 	MaxConcurrent          int                          `json:"max_concurrent,omitempty"`                                       // 渠道整体最大并发请求数; 0 表示不限制。
 	PassThroughBodyEnabled bool                         `json:"pass_through_body_enabled" gorm:"not null;default:false"`        // 完全渠道透传: 启用后任意客户端协议均原样透传至上游, 不经协议转换。
@@ -106,7 +106,7 @@ type ChannelUpdateRequest struct {
 	MatchRegex             *string                       `json:"match_regex,omitempty"`               // 新的模型过滤表达式。
 	ModelLimits            *map[string]ChannelModelLimit `json:"model_limits,omitempty"`              // 新的按模型限制配置, 整体替换。
 	Tags                   *[]string                     `json:"tags,omitempty"`                      // 新的标签集合, 整体替换; nil 表示不修改。
-	Sort                   *int                          `json:"sort,omitempty"`                      // 新的自定义排序值, 越小越靠前。
+	Sort                   *int                          `json:"sort,omitempty"`                      // 新的列表优先级, 越大越靠前。
 	RateLimitRPM           *int                          `json:"rate_limit_rpm,omitempty"`            // 新的单把 Key 每分钟请求上限; nil 表示不修改, 负值归零。
 	MaxConcurrent          *int                          `json:"max_concurrent,omitempty"`            // 新的渠道整体最大并发请求数; nil 表示不修改, 负值归零。
 	PassThroughBodyEnabled *bool                         `json:"pass_through_body_enabled,omitempty"` // 新的完全渠道透传开关; nil 表示不修改。

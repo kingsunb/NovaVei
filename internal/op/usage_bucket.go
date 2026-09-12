@@ -269,6 +269,85 @@ func UsageTotalsByModel(ctx context.Context) ([]ModelTokenUsage, error) {
 	return byModel, nil
 }
 
+// RecordErrorBucket 把一次业务失败累加到 (小时, 模型) 桶的 error_count。
+// 与错误日志表的条数上限解耦, 供仪表盘错误 KPI 按时间窗口统计。
+func RecordErrorBucket(targetModel string) {
+	gormDB := db.GetDB()
+	if gormDB == nil || targetModel == "" {
+		return
+	}
+	bucket := model.UsageBucket{
+		BucketAt:  usageBucketNow().UTC().Truncate(UsageBucketHour),
+		ModelName: targetModel,
+		ErrorCount: 1,
+	}
+	err := gormDB.Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "bucket_at"},
+			{Name: "model_name"},
+		},
+		DoUpdates: clause.Assignments(map[string]any{
+			"error_count": gorm.Expr("error_count + ?", 1),
+		}),
+	}).Create(&bucket).Error
+	if err != nil {
+		log.Warnf("record error bucket failed: %v", err)
+	}
+}
+
+// UsageErrorCountByRange 返回时间窗口内 error_count 合计。
+func UsageErrorCountByRange(ctx context.Context, rangeKey string) (int64, error) {
+	gormDB := db.GetDB()
+	if gormDB == nil {
+		return 0, nil
+	}
+	window, ok := usageWindows[rangeKey]
+	if !ok {
+		rangeKey = "forever"
+		window = usageWindows[rangeKey]
+	}
+	var total int64
+	sql := "SELECT COALESCE(SUM(error_count), 0) FROM usage_buckets"
+	var args []any
+	if rangeKey != "forever" {
+		since := usageBucketNow().UTC().Truncate(time.Hour).Add(-window.span)
+		sql += " WHERE bucket_at >= ?"
+		args = append(args, since)
+	} else if cutoff := usageRetentionCutoff(); !cutoff.IsZero() {
+		sql += " WHERE bucket_at >= ?"
+		args = append(args, cutoff)
+	}
+	if err := gormDB.WithContext(ctx).Raw(sql, args...).Scan(&total).Error; err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
+// UsageTotalsByModelRange 按时间窗口聚合模型用量 Top, 与 KPI 档位一致。
+func UsageTotalsByModelRange(ctx context.Context, rangeKey string) ([]ModelTokenUsage, error) {
+	if rangeKey == "" || rangeKey == "forever" {
+		return UsageTotalsByModel(ctx)
+	}
+	window, ok := usageWindows[rangeKey]
+	if !ok {
+		return UsageTotalsByModel(ctx)
+	}
+	byModel := make([]ModelTokenUsage, 0)
+	gormDB := db.GetDB()
+	if gormDB == nil {
+		return byModel, nil
+	}
+	since := usageBucketNow().UTC().Truncate(time.Hour).Add(-window.span)
+	sql := "SELECT model_name AS name, COALESCE(SUM(input_tokens), 0) AS input, COALESCE(SUM(output_tokens), 0) AS output " +
+		"FROM usage_buckets WHERE bucket_at >= ? GROUP BY model_name " +
+		"ORDER BY (COALESCE(SUM(input_tokens), 0) + COALESCE(SUM(output_tokens), 0)) DESC LIMIT 10"
+	if err := gormDB.WithContext(ctx).Raw(sql, since).Scan(&byModel).Error; err != nil {
+		log.Warnf("aggregate usage by model range failed: %v", err)
+		return byModel, err
+	}
+	return byModel, nil
+}
+
 // usageRetentionDays 返回当前生效的用量分桶保留天数:
 // 设置缺失或非法时回退默认值(0=永久保留); 负值按 0 处理。0 表示永久保留,
 // 非 0 值受 model.UsageRetentionDaysMin 约束(校验在设置写入时拦截, 此处仅兜底)。

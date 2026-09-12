@@ -17,6 +17,8 @@ import { Pill } from "@/components/ui/pill";
 import { TokenTrendChart } from "@/components/charts/TokenTrendChart";
 import { Button } from "@/components/ui/button";
 import { QueryErrorBanner } from "@/components/ui/query-error";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 
 type Range = TokenTrendRange;
 
@@ -107,23 +109,17 @@ export default function DashboardPage() {
                 {formatNumber(now?.total_tokens_output ?? 0)}
               </CardDescription>
             </div>
-            <div className="flex items-center gap-1 rounded-control border border-border bg-card/60 p-0.5 text-xs">
-              {(["24h", "7d", "30d", "1y", "3y", "forever"] as Range[]).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setRange(r)}
-                  aria-pressed={range === r}
-                  className={cn(
-                    "rounded-[5px] px-2.5 py-1 transition-colors",
-                    range === r
-                      ? "bg-primary/12 font-medium text-primary-text"
-                      : "text-ink-muted hover:text-ink",
-                  )}
-                >
-                  {RANGE_LABELS[r]}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              aria-label="趋势时间范围"
+              value={range}
+              onChange={setRange}
+              options={
+                (["24h", "7d", "30d", "1y", "3y", "forever"] as Range[]).map((r) => ({
+                  value: r,
+                  label: RANGE_LABELS[r],
+                }))
+              }
+            />
           </CardHeader>
           <CardContent>
             <div className="mb-2 flex items-center gap-3 text-xs text-ink-muted">
@@ -159,9 +155,11 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               {top.length === 0 ? (
-                <p className="py-6 text-center text-xs text-ink-muted">
-                  暂无数据
-                </p>
+                <EmptyState
+                  className="py-8"
+                  title="暂无模型用量"
+                  hint="有请求经过中继后，这里会按模型汇总 token"
+                />
               ) : (
                 <ul className="space-y-2.5">
                   {top.map((m, i) => {
@@ -214,9 +212,7 @@ export default function DashboardPage() {
               ) : recentError ? (
                 <QueryErrorBanner onRetry={() => refetchRecent()} />
               ) : (recent?.length ?? 0) === 0 ? (
-                <p className="py-6 text-center text-xs text-ink-muted">
-                  暂无错误
-                </p>
+                <EmptyState className="py-8" title="暂无错误" hint="近期请求都顺利完成" />
               ) : (
                 <ul className="divide-y divide-border">
                   {recent!.map((e) => (
@@ -299,11 +295,11 @@ function buildKpis(
 }
 
 const TONE_BG: Record<NonNullable<Kpi["tone"]>, string> = {
-  neutral: "text-ink-muted",
-  success: "text-emerald-500",
-  warning: "text-amber-500",
-  danger: "text-red-500",
-  info: "text-blue-500",
+  neutral: "bg-ink/[0.05] text-ink-muted",
+  success: "bg-emerald-500/[0.10] text-emerald-600 dark:text-emerald-400",
+  warning: "bg-amber-500/[0.10] text-amber-600 dark:text-amber-400",
+  danger: "bg-red-500/[0.10] text-red-600 dark:text-red-400",
+  info: "bg-blue-500/[0.10] text-blue-600 dark:text-blue-400",
 };
 
 function KpiCard({
@@ -316,10 +312,17 @@ function KpiCard({
 }: Kpi & { loading?: boolean }) {
   return (
     <Card>
-      <CardContent className="space-y-1.5 p-4">
+      <CardContent className="space-y-2 p-4">
         <div className="flex items-center justify-between text-xs text-ink-muted">
           <span>{label}</span>
-          <span className={TONE_BG[tone]}>{icon}</span>
+          <span
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-full",
+              TONE_BG[tone],
+            )}
+          >
+            {icon}
+          </span>
         </div>
         <div className="num text-2xl font-semibold tracking-tight text-ink">
           {loading ? (
@@ -329,7 +332,7 @@ function KpiCard({
           )}
         </div>
         {hint && (
-          <div className="text-[11px] text-ink-muted">{hint}</div>
+          <div className="text-[11px] text-ink-subtle">{hint}</div>
         )}
       </CardContent>
     </Card>

@@ -27,12 +27,23 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
+import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { cn, downloadJson } from "@/lib/utils";
 
 const DEFAULT_RETENTION_DAYS = 3;
 const DEFAULT_RETENTION_MAX_COUNT = 50;
 const MAX_RETENTION_MAX_COUNT = 1000; // 错误最大条数硬上限, 超过则保存被拒绝
+
+// 编译期注入的前端构建标识（vite.config define；dev 未设置时为空串）。
+// 与后端 commit 并排展示在「关于」卡片，便于排查「页面跑的是哪份前端」。
+const FRONTEND_BUILD_LABEL = [
+  typeof __APP_VERSION__ === "string" && __APP_VERSION__ ? __APP_VERSION__ : "dev",
+  typeof __APP_COMMIT__ === "string" && __APP_COMMIT__ ? __APP_COMMIT__ : "",
+]
+  .filter(Boolean)
+  .join(" @ ");
 
 async function _settingValue(key: string, fallback: string) {
   try {
@@ -95,17 +106,17 @@ const SECTIONS: { id: Section; label: string }[] = [
 export default function SettingsPage() {
   const [active, setActive] = useState<Section>("appearance");
   return (
-    <div className="grid grid-cols-1 gap-5 md:grid-cols-[180px_1fr]">
-      <aside className="space-y-0.5 md:border-r md:border-border/40 md:pr-3">
+    <div className="grid grid-cols-1 gap-5 md:grid-cols-[196px_1fr]">
+      <aside className="space-y-0.5 md:sticky md:top-4 md:self-start md:border-r md:border-border/40 md:pr-3">
         {SECTIONS.map((s) => (
           <button
             key={s.id}
             onClick={() => setActive(s.id)}
             aria-current={active === s.id ? "page" : undefined}
             className={cn(
-              "flex h-8 w-full items-center rounded-md px-2.5 text-sm transition-colors",
+              "flex h-9 w-full items-center rounded-control px-2.5 text-[13px] transition-colors",
               active === s.id
-                ? "bg-primary/12 font-medium text-primary-text"
+                ? "bg-primary/[0.10] font-medium text-primary-text shadow-[inset_2px_0_0_hsl(var(--primary))]"
                 : "text-ink-muted hover:bg-surface-subtle hover:text-ink",
             )}
           >
@@ -147,22 +158,17 @@ function AppearanceSection() {
       <CardContent className="space-y-4">
         <div>
           <p className="mb-2 text-xs font-medium text-ink-muted">主题</p>
-          <div className="flex gap-2">
-            {(["light", "dark", "system"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTheme(t)}
-                className={cn(
-                  "rounded-control border px-3 py-1.5 text-sm transition-colors",
-                  theme === t
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-ink-muted",
-                )}
-              >
-                {t === "light" ? "浅色" : t === "dark" ? "深色" : "跟随系统"}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            aria-label="主题"
+            size="md"
+            value={theme}
+            onChange={setTheme}
+            options={[
+              { value: "light", label: "浅色" },
+              { value: "dark", label: "深色" },
+              { value: "system", label: "跟随系统" },
+            ]}
+          />
         </div>
       </CardContent>
     </Card>
@@ -571,7 +577,7 @@ function ProxyPoolSection() {
                     </p>
                   )}
                   {result && result !== "loading" && "error" in result && (
-                    <p className="text-xs text-danger break-words">
+                    <p className="break-words text-xs text-destructive">
                       {result.error}
                     </p>
                   )}
@@ -1178,7 +1184,7 @@ function ConvTraceSection() {
           <ul className="mt-1.5 space-y-1">
             <li>• <b>关闭</b>(默认): 每次跨协议转换仅 1 次内存缓存查询, 无日志输出、无内存分配</li>
             <li>• <b>开启</b>: 额外分析请求体结构 + 转换后字段对比 + Debug 日志写入, 适合调试与排障</li>
-            <li>• 日志级别为 <code className="mono">DEBUG</code>, 需 <code className="mono">NOVAEIL_DEBUG=true</code> 才会输出到控制台</li>
+            <li>• 日志级别为 <code className="mono">DEBUG</code>, 需 <code className="mono">NOVAVEIL_DEBUG=true</code> 才会输出到控制台</li>
           </ul>
         </div>
       </CardContent>
@@ -1340,8 +1346,8 @@ function UsageRetentionSection() {
           hint="永久保留不清理;选择具体天数后到期按天清理最旧分桶"
         >
           <div className="flex items-center gap-2">
-            <select
-              className="h-8 rounded-control border border-border bg-card px-2 text-sm"
+            <Select
+              className="text-sm"
               value={days}
               onChange={(e) => setDays(e.target.value)}
             >
@@ -1353,7 +1359,7 @@ function UsageRetentionSection() {
               <option value="365">1 年</option>
               <option value="1095">3 年</option>
               <option value="0">永久保留</option>
-            </select>
+            </Select>
             <Button
               variant="primary"
               size="sm"
@@ -1494,8 +1500,8 @@ function TesterSection() {
       </CardHeader>
       <CardContent className="space-y-3">
         <Field label="分组">
-          <select
-            className="h-8 w-full rounded-control border border-border bg-card px-2 text-sm"
+          <Select
+            className="w-full text-sm"
             value={groupId}
             onChange={(e) => setGroupId(e.target.value)}
           >
@@ -1505,13 +1511,13 @@ function TesterSection() {
                 {g.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
 
         <TestMessageField value={msgSetting?.value} />
 
         {error && (
-          <p className="rounded-md bg-danger/10 p-2.5 text-xs break-words text-danger">
+          <p className="rounded-md bg-destructive/10 p-2.5 text-xs break-words text-destructive">
             {error}
           </p>
         )}
@@ -1546,7 +1552,7 @@ function TesterSection() {
                         className={cn(
                           "border-b border-border/40 last:border-b-0",
                           hasDetail &&
-                            "cursor-pointer hover:bg-surface-subtle/50",
+                            "cursor-pointer transition-colors hover:bg-surface-subtle/50",
                         )}
                         onClick={hasDetail ? () => toggleRow(i) : undefined}
                       >
@@ -1599,10 +1605,10 @@ function TesterSection() {
                               )}
                               {r.error && (
                                 <div>
-                                  <p className="mb-1 text-xs font-medium text-danger">
+                                  <p className="mb-1 text-xs font-medium text-destructive">
                                     错误详情
                                   </p>
-                                  <pre className="max-h-48 overflow-auto rounded-md bg-danger/8 p-2.5 text-xs whitespace-pre-wrap break-words text-danger">
+                                  <pre className="max-h-48 overflow-auto rounded-md bg-destructive/8 p-2.5 text-xs whitespace-pre-wrap break-words text-destructive">
                                     {r.error}
                                   </pre>
                                 </div>
@@ -1891,6 +1897,8 @@ function AboutSection() {
         </CardHeader>
         <CardContent className="space-y-1.5 text-sm text-ink-muted">
           <Row k="版本" v={now?.version} mono />
+          <Row k="后端提交" v={now?.commit} mono />
+          <Row k="前端构建" v={FRONTEND_BUILD_LABEL} mono />
           <Row k="构建时间" v={now?.build_time} mono />
           <Row k="调用客户端" v={now ? `${now.client_ip_count} 个 IP` : undefined} />
         </CardContent>

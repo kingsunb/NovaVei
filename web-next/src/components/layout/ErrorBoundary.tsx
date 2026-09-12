@@ -1,6 +1,9 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-
+import {
+  isDynamicChunkError,
+  recoverFromStaleBuild,
+} from "@/lib/app-recovery";
 interface Props {
   children: ReactNode;
   /** 自定义 fallback；不传则用默认兜底 */
@@ -13,6 +16,11 @@ interface State {
   err: Error | null;
   /** React 给的 componentStack，方便定位是哪个组件抛错 */
   componentStack: string | null;
+  /**
+   * 过期 chunk 失败且本次会话已自动刷新过（未成功恢复）：不再循环刷新，
+   * 由默认 fallback 展示「版本已更新」文案 + 手动刷新按钮。
+   */
+  chunkFailure: boolean;
 }
 
 /**
@@ -28,9 +36,9 @@ interface State {
  *  - 自身抛错
  */
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { err: null, componentStack: null };
+  state: State = { err: null, componentStack: null, chunkFailure: false };
 
-  static getDerivedStateFromError(err: Error): State {
+  static getDerivedStateFromError(err: Error): Partial<State> {
     return { err, componentStack: null };
   }
 
@@ -41,19 +49,61 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error("[ErrorBoundary]", err, info.componentStack);
     // 同步存到 state，fallback UI 能直接渲染（便于调试）
     this.setState({ componentStack: info.componentStack ?? null });
+    // 服务端更新后旧 bundle 引用的 chunk 已被删除，应用在此状态下不可恢复，
+    // 直接整页刷新拉新前端（路由懒加载失败发生在页面切换时，不打断表单编辑）。
+    // recoverFromStaleBuild 带会话级一次性保护；返回 false 表示已刷新过仍失败，
+    // 置 chunkFailure 让 fallback 展示版本更新文案，由用户手动刷新。
+    if (isDynamicChunkError(err) && !recoverFromStaleBuild()) {
+      this.setState({ chunkFailure: true });
+    }
   }
 
   reset = () => {
-    this.setState({ err: null, componentStack: null });
+    this.setState({ err: null, componentStack: null, chunkFailure: false });
   };
 
   render() {
-    const { err, componentStack } = this.state;
+    const { err, componentStack, chunkFailure } = this.state;
     if (!err) return this.props.children;
     const showDiagnostics = import.meta.env.DEV;
 
     if (this.props.fallback) {
       return this.props.fallback(err, this.reset);
+    }
+
+    if (chunkFailure) {
+      return (
+        <div
+          role="alert"
+          className="flex min-h-[60vh] items-center justify-center px-6"
+        >
+          <div className="w-full max-w-md rounded-card border border-border bg-card p-6 shadow-overlay">
+            <div className="mb-3 flex items-center gap-2">
+              <span
+                aria-hidden
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-primary-text"
+              >
+                ↻
+              </span>
+              <h2 className="text-base font-semibold text-ink">
+                版本已更新
+              </h2>
+            </div>
+            <p className="text-sm text-ink-muted">
+              服务端已发布新版本，当前页面加载的组件已过期。请刷新页面获取最新前端。
+            </p>
+            <div className="mt-4 flex gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => window.location.reload()}
+              >
+                刷新页面
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
     }
 
     return (

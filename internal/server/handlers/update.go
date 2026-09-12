@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -28,12 +29,30 @@ func init() {
 				Handle(getNowVersion),
 		).
 		AddRoute(
+			router.NewRoute("/build-info", http.MethodGet).
+				Handle(getBuildInfo),
+		).
+		AddRoute(
 			router.NewRoute("/token-trends", http.MethodGet).
 				Handle(getTokenTrends),
 		).
 		AddRoute(
 			router.NewRoute("", http.MethodPost).
 				Handle(updateFunc),
+		)
+	router.NewGroupRouter("/api/v1/stats").
+		Use(middleware.Auth()).
+		AddRoute(
+			router.NewRoute("/now-version", http.MethodGet).
+				Handle(getNowVersion),
+		).
+		AddRoute(
+			router.NewRoute("/build-info", http.MethodGet).
+				Handle(getBuildInfo),
+		).
+		AddRoute(
+			router.NewRoute("/token-trends", http.MethodGet).
+				Handle(getTokenTrends),
 		)
 }
 
@@ -96,22 +115,20 @@ func getNowVersion(c *gin.Context) {
 		clientIPCount = cnt
 	}
 
-	// error_count: forever 用进程级业务错误计数(自启动累计, 不依赖日志留存/去重/丢弃);
-	// 非 forever 用 error_logs 表中 created_at >= since 的条数, 受保留上限(默认 50 条)、
-	// 按类去重与队满丢弃影响, 仅作面板近期错误趋势的近似指示。
+	// error_count: forever 用进程级业务错误计数; 非 forever 用 usage_buckets.error_count
+	// (与错误日志保留条数解耦, 按小时分桶, 随档位联动)。
 	var errorCount int64
 	if forever {
 		errorCount = int64(relay.TotalErrorCount())
 	} else {
-		cnt, err := op.ErrorLogCountSince(ctx, since)
+		cnt, err := op.UsageErrorCountByRange(ctx, rangeKey)
 		if err != nil {
-			log.Warnf("failed to count error logs: %v", err)
+			log.Warnf("failed to count errors by range: %v", err)
 		}
 		errorCount = cnt
 	}
 
-	// tokens_by_model 始终为全表按模型聚合(模型用量 Top 不随档位联动, 仅四 KPI 卡片联动)。
-	tokensByModel, byModelErr := op.UsageTotalsByModel(ctx)
+	tokensByModel, byModelErr := op.UsageTotalsByModelRange(ctx, rangeKey)
 	// stats_available 标识用量统计是否可读: KPI 聚合与按模型聚合任一失败即置 false,
 	// 让前端区分"无流量"(true 且全零)与"统计暂时不可用"(false)。
 	statsAvailable := kpiErr == nil && byModelErr == nil
@@ -129,6 +146,18 @@ func getNowVersion(c *gin.Context) {
 		"total_tokens_output": kpiOutput,
 		"tokens_by_model":     tokensByModel,
 		"stats_available":     statsAvailable,
+	})
+}
+
+// getBuildInfo 返回当前二进制的构建元信息（version/commit/build_time）。
+// 只读 ldflags 注入的 conf 常量，不做任何数据库聚合 —— 前端版本看门狗用它
+// 做高频轮询，判定浏览器里跑的旧前端与后端是否已错位（错位则提示强制刷新）；
+// 这类轮询不能复用 now-version，否则每次都会触发全表统计聚合。
+func getBuildInfo(c *gin.Context) {
+	resp.Success(c, gin.H{
+		"version":    conf.Version,
+		"commit":     conf.Commit,
+		"build_time": conf.BuildTime,
 	})
 }
 
@@ -159,6 +188,10 @@ func getTokenTrends(c *gin.Context) {
 func updateFunc(c *gin.Context) {
 	err := update.UpdateCore()
 	if err != nil {
+		if errors.Is(err, update.ErrSelfUpdateDisabled) {
+			resp.Error(c, http.StatusForbidden, err.Error())
+			return
+		}
 		resp.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}

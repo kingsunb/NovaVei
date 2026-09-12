@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/gin-gonic/gin"
 	"github.com/kingsunb/NovaVeil/internal/keylimit"
 	"github.com/kingsunb/NovaVeil/internal/model"
@@ -37,7 +38,7 @@ func init() {
 				Handle(deleteAPIKey),
 		).
 		AddRoute(
-			router.NewRoute("/secret/:id", http.MethodGet).
+			router.NewRoute("/secret/:id", http.MethodPost).
 				Handle(getAPIKeySecret),
 		)
 }
@@ -54,7 +55,12 @@ func createAPIKey(c *gin.Context) {
 	}
 	req.APIKey = strings.TrimSpace(req.APIKey)
 	if req.APIKey == "" {
-		req.APIKey = auth.GenerateAPIKey()
+		generated, genErr := auth.GenerateAPIKey()
+		if genErr != nil {
+			resp.Error(c, http.StatusInternalServerError, resp.ErrInternalServer)
+			return
+		}
+		req.APIKey = generated
 	}
 	if err := op.APIKeyCreate(&req, c.Request.Context()); err != nil {
 		switch {
@@ -169,6 +175,8 @@ func deleteAPIKey(c *gin.Context) {
 // getAPIKeySecret 返回单个 API 密钥的明文, 供管理端"编辑时查看密钥"按钮按需获取。
 // 列表接口出于安全只回掩码, 本接口与渠道密钥明文接口同级, 仅限管理员会话访问。
 func getAPIKeySecret(c *gin.Context) {
+	resp.NoStore(c)
+	log.Warnf("api key reveal id=%s ip=%s", c.Param("id"), c.ClientIP())
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		resp.Error(c, http.StatusBadRequest, resp.ErrInvalidParam)

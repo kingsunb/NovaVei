@@ -24,10 +24,13 @@ import { QueryErrorBanner } from "@/components/ui/query-error";
 import { api } from "@/lib/api";
 import type { Channel, ChannelImportResult } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-
-import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
+import { Select } from "@/components/ui/select";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Switch } from "@/components/ui/switch";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SearchField } from "@/components/ui/search-field";
+import { PageToolbar } from "@/components/ui/page-toolbar";
 import { cn, downloadText, formatNumber } from "@/lib/utils";
 import { ViewToggle } from "@/components/ui/view-toggle";
 import { useViewMode } from "@/lib/use-view-mode";
@@ -53,8 +56,8 @@ export default function ChannelsPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  // 默认按自定义排序（sort 值升序、同值按名称兜底），与渠道编辑器里的排序值联动；
-  // 排序值允许重复、零值与负值，相同数值按渠道名称字母序排列。
+  // 默认按优先级降序（同值按名称兜底），与渠道编辑器里的优先级联动；
+  // 优先级允许重复、零值与负值，相同数值按渠道名称字母序排列。
   const [sort, setSort] = useState<Sort>("custom");
   const [viewMode, setViewMode] = useViewMode("nv-channel-view", "grid");
   const [editing, setEditing] = useState<Channel | "new" | null>(null);
@@ -63,7 +66,7 @@ export default function ChannelsPage() {
   const [confirmExport, setConfirmExport] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
-  // 排序值行内编辑草稿: 仅在用户正在输入时持有该行的文本值, 提交或失焦后清除,
+  // 优先级行内编辑草稿: 仅在用户正在输入时持有该行的文本值, 提交或失焦后清除,
   // 其余时候回退显示服务端 c.sort, 避免本地态与远端长期不一致。
   const [sortDraft, setSortDraft] = useState<Record<number, string>>({});
 
@@ -131,7 +134,7 @@ export default function ChannelsPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // 排序值行内编辑: 乐观更新本地缓存, 失败回滚并恢复输入框为服务端值。
+  // 优先级行内编辑: 乐观更新本地缓存, 失败回滚并恢复输入框为服务端值。
   const sortMut = useMutation({
     mutationFn: ({ id, sort }: { id: number; sort: number }) =>
       api.updateChannel({ id, sort }),
@@ -215,7 +218,7 @@ export default function ChannelsPage() {
       )
       .sort((a, b) => {
         if (sort === "custom")
-          return (a.sort ?? 0) - (b.sort ?? 0) || a.name.localeCompare(b.name);
+          return (b.sort ?? 0) - (a.sort ?? 0) || a.name.localeCompare(b.name);
         if (sort === "name") return a.name.localeCompare(b.name);
         if (sort === "status")
           return Number(b.enabled) - Number(a.enabled) ||
@@ -245,7 +248,7 @@ export default function ChannelsPage() {
     try {
       const text = await file.text();
       const result: ChannelImportResult = await api.importChannels(text);
-      const summary = `成功 ${result.success} 个，失败 ${result.failed} 个`;
+      const summary = `成功 ${result.success} 个，失败 ${result.failed} 个。导入只恢复名称、地址与密钥，需再补模型与分组。`;
       if (result.errors && result.errors.length > 0) {
         toast.error(summary, { description: result.errors.join("\n") });
       } else {
@@ -301,77 +304,70 @@ export default function ChannelsPage() {
           e.target.value = "";
         }}
       />
-      {/* 工具栏 */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 rounded-control border border-border bg-card/60 p-0.5 text-xs">
-          {(["all", "on", "off"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                "rounded-[5px] px-2.5 py-1 transition-colors",
-                filter === f
-                  ? "bg-primary/12 font-medium text-primary-text"
-                  : "text-ink-muted hover:text-ink",
-              )}
-            >
-              {f === "all" ? "全部" : f === "on" ? "启用" : "停用"}
-            </button>
-          ))}
-        </div>
-
-        <div className="ml-auto flex items-center gap-2">
-          <ViewToggle value={viewMode} onChange={setViewMode} />
-          <label className="relative">
-            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" />
-            <Input
+      <PageToolbar
+        leading={
+          <SegmentedControl
+            aria-label="渠道状态"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: "all", label: "全部" },
+              { value: "on", label: "启用" },
+              { value: "off", label: "停用" },
+            ]}
+          />
+        }
+        trailing={
+          <>
+            <ViewToggle value={viewMode} onChange={setViewMode} />
+            <SearchField
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={setSearch}
               placeholder="搜索渠道"
-              className="h-8 w-56 pl-7"
+              aria-label="搜索渠道"
             />
-          </label>
-          <select
-            className="h-8 rounded-control border border-border bg-card px-2 text-xs text-ink-muted"
-            value={sort}
-            onChange={(e) => setSort(e.target.value as Sort)}
-            aria-label="排序"
-          >
-            <option value="custom">按优先级</option>
-            <option value="name">按名称</option>
-            <option value="status">按状态</option>
-            <option value="models">按模型数</option>
-          </select>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5"
-            onClick={onImportClick}
-            loading={importing}
-          >
-            <Upload className="h-3.5 w-3.5" aria-hidden />
-            导入
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setConfirmExport(true)}
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden />
-            导出
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setEditing("new")}
-          >
-            <Plus className="h-3.5 w-3.5" aria-hidden />
-            新建渠道
-          </Button>
-        </div>
-      </div>
+            <Select
+              className="text-xs"
+              value={sort}
+              onChange={(e) => setSort(e.target.value as Sort)}
+              aria-label="排序"
+            >
+              <option value="custom">按优先级</option>
+              <option value="name">按名称</option>
+              <option value="status">按状态</option>
+              <option value="models">按模型数</option>
+            </Select>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              onClick={onImportClick}
+              loading={importing}
+            >
+              <Upload className="h-3.5 w-3.5" aria-hidden />
+              导入
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setConfirmExport(true)}
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden />
+              导出
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setEditing("new")}
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              新建渠道
+            </Button>
+          </>
+        }
+      />
 
       {/* 标签筛选：仅当存在标签时显示 */}
       {allTags.length > 0 && (
@@ -416,11 +412,18 @@ export default function ChannelsPage() {
         <QueryErrorBanner onRetry={() => refetch()} />
       ) : rows.length === 0 ? (
         <Card>
-          <div className="py-12 text-center text-sm text-ink-muted">
-            {data?.length === 0
-              ? "还没有渠道，点右上角新建"
-              : "没有匹配的渠道"}
-          </div>
+          {data?.length === 0 ? (
+            <EmptyState
+              icon={<Plus className="h-5 w-5" aria-hidden />}
+              title="还没有渠道"
+              hint="点右上角「新建渠道」接入第一个上游"
+            />
+          ) : (
+            <EmptyState
+              icon={<Search className="h-5 w-5" aria-hidden />}
+              title="没有匹配的渠道"
+            />
+          )}
         </Card>
       ) : (
         <div className={cn("grid grid-cols-1 gap-3", viewMode === "grid" && "md:grid-cols-2 xl:grid-cols-3")}>
@@ -438,7 +441,7 @@ export default function ChannelsPage() {
               role="button"
               aria-haspopup="dialog"
               aria-label={`编辑渠道 ${c.name}`}
-              className="flex cursor-pointer flex-col gap-3 rounded-card border border-border bg-card p-4 transition-colors hover:bg-surface-subtle/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="glass-panel glass-inset-highlight flex cursor-pointer flex-col gap-3 rounded-card p-4 transition-all hover:shadow-apple-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {/* 头部：名称 + 标签 + 开关 */}
               <header className="flex items-start justify-between gap-2">
@@ -531,7 +534,7 @@ export default function ChannelsPage() {
                         (e.target as HTMLInputElement).blur();
                       }
                     }}
-                    title="优先级：越小越靠前"
+                    title="优先级：越大越靠前"
                     aria-label={`优先级 ${c.name}`}
                   />
                 </div>

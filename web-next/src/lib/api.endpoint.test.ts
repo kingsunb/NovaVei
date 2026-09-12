@@ -333,6 +333,7 @@ describe("api 关键 endpoint 路径", () => {
     vi.stubGlobal("fetch", fetch);
     await api.exportSettings();
     expect(urlOf(fetch.mock.calls[0])).toBe("/api/v1/setting/export");
+    expect(methodOf(fetch.mock.calls[0])).toBe("POST");
     await api.importSettings(dump);
     expect(urlOf(fetch.mock.calls[1])).toBe("/api/v1/setting/import");
     expect(methodOf(fetch.mock.calls[1])).toBe("POST");

@@ -22,16 +22,17 @@ export function ViewToggle({
   gridLabel = "网格",
 }: ViewToggleProps) {
   return (
-    <div className="flex items-center rounded-control border border-border bg-card p-0.5">
+    <div className="flex items-center rounded-control border border-border/60 bg-card/70 p-0.5 backdrop-blur-sm">
       <button
         type="button"
         aria-label={gridLabel}
         title={gridLabel}
+        aria-pressed={value === "grid"}
         onClick={() => onChange("grid")}
         className={cn(
-          "flex h-6 w-7 items-center justify-center rounded-[5px] transition-colors",
+          "flex h-7 w-8 items-center justify-center rounded-[6px] transition-colors",
           value === "grid"
-            ? "bg-surface-subtle text-ink"
+            ? "bg-primary/[0.12] text-primary-text shadow-apple-sm"
             : "text-ink-muted hover:text-ink",
         )}
       >
@@ -41,11 +42,12 @@ export function ViewToggle({
         type="button"
         aria-label={listLabel}
         title={listLabel}
+        aria-pressed={value === "list"}
         onClick={() => onChange("list")}
         className={cn(
-          "flex h-6 w-7 items-center justify-center rounded-[5px] transition-colors",
+          "flex h-7 w-8 items-center justify-center rounded-[6px] transition-colors",
           value === "list"
-            ? "bg-surface-subtle text-ink"
+            ? "bg-primary/[0.12] text-primary-text shadow-apple-sm"
             : "text-ink-muted hover:text-ink",
         )}
       >

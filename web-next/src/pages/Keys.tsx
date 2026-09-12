@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Field } from "@/components/ui/field";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Eye, EyeOff, Plus, Search, Trash2, Pencil } from "lucide-react";
+import { Copy, Eye, EyeOff, KeyRound, Plus, Search, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@/lib/api";
@@ -13,7 +13,10 @@ import { QueryErrorBanner } from "@/components/ui/query-error";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Switch } from "@/components/ui/switch";
+import { SearchField } from "@/components/ui/search-field";
+import { PageToolbar } from "@/components/ui/page-toolbar";
 import { cn, NAME_RULE, validateField, formatDatetimeLocal } from "@/lib/utils";
 
 import {
@@ -81,26 +84,29 @@ export default function KeysPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <label className="relative flex-1">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" />
-          <Input
+      <PageToolbar
+        leading={
+          <SearchField
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={setSearch}
             placeholder="搜索名称 / API 密钥…"
-            className="h-8 pl-7"
+            aria-label="搜索密钥"
+            className="w-full sm:w-auto"
+            inputClassName="h-8 w-full sm:w-72 pl-8"
           />
-        </label>
-        <Button
-          variant="primary"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => openEditor("new")}
-        >
-          <Plus className="h-3.5 w-3.5" aria-hidden />
-          创建密钥
-        </Button>
-      </div>
+        }
+        trailing={
+          <Button
+            variant="primary"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => openEditor("new")}
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            创建密钥
+          </Button>
+        }
+      />
 
       {isLoading ? (
         <TableSkeleton rows={5} />
@@ -126,22 +132,28 @@ export default function KeysPage() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-ink-muted">
+                  <td colSpan={9}>
                     {data?.length ? (
-                      <span className="inline-flex flex-col items-center gap-2">
-                        <span>没有匹配的密钥</span>
-                        <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setSearch("")}>
-                          清除筛选
-                        </Button>
-                      </span>
+                      <EmptyState
+                        icon={<Search className="h-5 w-5" aria-hidden />}
+                        title="没有匹配的密钥"
+                        action={
+                          <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setSearch("")}>
+                            清除筛选
+                          </Button>
+                        }
+                      />
                     ) : (
-                      <span className="inline-flex flex-col items-center gap-2">
-                        <span>还没有密钥</span>
-                        <Button variant="primary" size="sm" className="gap-1" onClick={() => openEditor("new")}>
-                          <Plus className="h-3 w-3" aria-hidden />
-                          创建第一把密钥
-                        </Button>
-                      </span>
+                      <EmptyState
+                        icon={<KeyRound className="h-5 w-5" aria-hidden />}
+                        title="还没有密钥"
+                        action={
+                          <Button variant="primary" size="sm" className="gap-1" onClick={() => openEditor("new")}>
+                            <Plus className="h-3 w-3" aria-hidden />
+                            创建第一把密钥
+                          </Button>
+                        }
+                      />
                     )}
                   </td>
                 </tr>
@@ -149,7 +161,7 @@ export default function KeysPage() {
                 filtered.map((k) => (
                   <tr
                     key={k.id}
-                    className="border-b border-border/60 last:border-b-0 hover:bg-surface-subtle/60"
+                    className="border-b border-border/60 transition-colors last:border-b-0 hover:bg-surface-subtle/60"
                   >
                     <td className="px-4 py-2.5 font-medium text-ink">
                       {k.name || "未命名密钥"}

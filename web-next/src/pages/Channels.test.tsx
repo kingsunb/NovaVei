@@ -155,6 +155,35 @@ describe("<ChannelsPage />", () => {
     expect(screen.getByText(/编辑：openai-prod/)).toBeInTheDocument();
   });
 
+  it("编辑器凭据区展示优先级，保存时提交 sort", async () => {
+    const user = userEvent.setup();
+    const ch = { ...sampleChannel, sort: 7 };
+    const fetchMock = mockFetch({ list: [ch] });
+    render(<ChannelsPage />, { wrapper: Wrapper });
+    await waitFor(() => screen.getByText("openai-prod"));
+    await user.click(screen.getByText("openai-prod"));
+    const dialog = await screen.findByRole("dialog");
+
+    const input = within(dialog).getByLabelText("优先级") as HTMLInputElement;
+    expect(input.value).toBe("7");
+    expect(within(dialog).queryByText("排序值")).not.toBeInTheDocument();
+
+    await user.clear(input);
+    await user.type(input, "12");
+    await user.click(within(dialog).getByRole("button", { name: /^保存$/ }));
+
+    await waitFor(() => {
+      const updateCalls = fetchMock.mock.calls.filter(([url]) =>
+        String(url).includes("/channel/update"),
+      );
+      expect(updateCalls.length).toBeGreaterThanOrEqual(1);
+      const body = JSON.parse(
+        updateCalls[updateCalls.length - 1][1]?.body as string,
+      ) as { sort: number };
+      expect(body.sort).toBe(12);
+    });
+  });
+
   it("搜索框过滤渠道", async () => {
     const user = userEvent.setup();
     mockList([
@@ -337,10 +366,10 @@ describe("<ChannelsPage />", () => {
   });
 });
 
-describe("<ChannelsPage /> 渠道排序值行内编辑", () => {
+describe("<ChannelsPage /> 渠道优先级行内编辑", () => {
   /**
-   * 排序值允许重复、零值与负值；同值按名称兜底。
-   * 本组验证：列表渲染同值渠道、行内编辑触发 update 请求携带正确 sort 值。
+   * 优先级允许重复、零值与负值；同值按名称兜底。
+   * 本组验证：列表按优先级降序渲染、行内编辑触发 update 请求携带正确 sort 值。
    */
   function mockSortFetch(channels: unknown[]) {
     const store = new Map<number, unknown>();
@@ -377,6 +406,27 @@ describe("<ChannelsPage /> 渠道排序值行内编辑", () => {
     return fetchMock;
   }
 
+  it("自定义排序: 按 sort 值降序, 同值按名称", async () => {
+    const highZ = { ...sampleChannel, id: 21, name: "zeta-ch", sort: 10 };
+    const highA = { ...sampleChannel, id: 22, name: "alpha-ch", sort: 10 };
+    const mid = { ...sampleChannel, id: 23, name: "mid-ch", sort: 0 };
+    const low = { ...sampleChannel, id: 24, name: "low-ch", sort: -5 };
+    mockSortFetch([mid, low, highZ, highA]);
+    render(<ChannelsPage />, { wrapper: Wrapper });
+
+    await waitFor(() => screen.getByText("alpha-ch"));
+
+    const names = screen
+      .getAllByRole("button", { name: /编辑渠道/ })
+      .map((el) => el.getAttribute("aria-label"));
+    expect(names).toEqual([
+      "编辑渠道 alpha-ch",
+      "编辑渠道 zeta-ch",
+      "编辑渠道 mid-ch",
+      "编辑渠道 low-ch",
+    ]);
+  });
+
   it("两个渠道同 sort 值均渲染，编辑后触发 update 携带新值", async () => {
     const user = userEvent.setup();
     const chA = { ...sampleChannel, id: 1, name: "sort-a", sort: 0 };
@@ -388,7 +438,7 @@ describe("<ChannelsPage /> 渠道排序值行内编辑", () => {
     await waitFor(() => screen.getByText("sort-a"));
     expect(screen.getByText("sort-b")).toBeInTheDocument();
 
-    // 找到 sort-a 的排序输入并改为 5。
+    // 找到 sort-a 的优先级输入并改为 5。
     const inputA = screen.getByLabelText("优先级 sort-a") as HTMLInputElement;
     expect(inputA.value).toBe("0");
     await user.clear(inputA);
@@ -408,7 +458,7 @@ describe("<ChannelsPage /> 渠道排序值行内编辑", () => {
     });
   });
 
-  it("排序值可设为负数", async () => {
+  it("优先级可设为负数", async () => {
     const user = userEvent.setup();
     const ch = { ...sampleChannel, id: 3, name: "sort-neg", sort: 0 };
     const fetchMock = mockSortFetch([ch]);
@@ -432,7 +482,7 @@ describe("<ChannelsPage /> 渠道排序值行内编辑", () => {
     });
   });
 
-  it("排序值可设为 0（从非零值）", async () => {
+  it("优先级可设为 0（从非零值）", async () => {
     const user = userEvent.setup();
     const ch = { ...sampleChannel, id: 4, name: "sort-to-zero", sort: 7 };
     const fetchMock = mockSortFetch([ch]);

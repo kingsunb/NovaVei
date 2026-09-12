@@ -51,6 +51,12 @@ var startCmd = &cobra.Command{
 		}
 		shutdown.Register(db.Close)
 
+		dataDir := dataDirectory()
+		if err := op.InitSecretKey(dataDir); err != nil {
+			log.Errorf("secret key init error: %v", err)
+			return fmt.Errorf("凭据加密密钥初始化失败: %w", err)
+		}
+
 		if err := op.InitCache(); err != nil {
 			log.Errorf("cache init error: %v", err)
 			return fmt.Errorf("缓存初始化失败: %w", err)
@@ -61,7 +67,6 @@ var startCmd = &cobra.Command{
 		for _, ch := range op.ChannelList() {
 			relay.CleanupChannelKeyState(ch.ID)
 		}
-		dataDir := dataDirectory()
 		op.InitConversationStore(dataDir)
 
 		if err := op.UserInit(dataDir); err != nil {

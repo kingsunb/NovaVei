@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/gin-gonic/gin"
 	"github.com/kingsunb/NovaVeil/internal/helper"
 	"github.com/kingsunb/NovaVeil/internal/model"
@@ -39,7 +40,7 @@ func init() {
 				Handle(enableChannel),
 		).
 		AddRoute(
-			router.NewRoute("/export", http.MethodGet).
+			router.NewRoute("/export", http.MethodPost).
 				Handle(exportChannel),
 		).
 		AddRoute(
@@ -69,7 +70,7 @@ func init() {
 				Handle(syncChannel),
 		).
 		AddRoute(
-			router.NewRoute("/keys/:id", http.MethodGet).
+			router.NewRoute("/keys/:id", http.MethodPost).
 				Handle(getChannelKeys),
 		).
 		AddRoute(
@@ -266,7 +267,7 @@ func testChannelKeys(c *gin.Context) {
 		resp.Error(c, http.StatusBadRequest, resp.ErrInvalidJSON)
 		return
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
 	defer cancel()
 	results, err := relay.TestChannelKeys(ctx, request.ID, request.Model, request.Message)
 	if err != nil {
@@ -313,6 +314,8 @@ func channelKeySecrets(channel model.Channel) []channelKeySecretView {
 
 // getChannelKeys 返回指定渠道的全部密钥明文, 与导出接口同级, 仅限管理员会话访问。
 func getChannelKeys(c *gin.Context) {
+	resp.NoStore(c)
+	log.Warnf("channel key reveal id=%s ip=%s", c.Param("id"), c.ClientIP())
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		resp.Error(c, http.StatusBadRequest, resp.ErrInvalidParam)
@@ -351,6 +354,8 @@ func importChannel(c *gin.Context) {
 // 每个渠道一段(首行 # 渠道名, 其次地址, 之后每行一把密钥), 渠道间空行分隔。
 // 内容含明文凭据, 仅限管理员会话访问。
 func exportChannel(c *gin.Context) {
+	resp.NoStore(c)
+	log.Warnf("channel export ip=%s", c.ClientIP())
 	channels := op.ChannelList()
 	var b strings.Builder
 	for _, ch := range channels {

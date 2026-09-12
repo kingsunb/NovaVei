@@ -3,6 +3,8 @@
 > 参考对象：[OmniRoute](https://github.com/diegosouzapw/OmniRoute)（Next.js 16 + Tailwind v4 + React 19）
 > 本项目：NovaVeil（Vite + React 18 + Tailwind v3 + Radix UI）
 > 产出位置：`docs/frontend-redesign/`（原型，不改动生产代码）
+>
+> 阶段说明（2026-09-13）：本文保留原型阶段的背景、技术栈快照与约束，不代表当前生产前端进度。`web-next/` 的已有美化实现、与原型的差异、后续优先级和验收清单见 [FOLLOW_UP.md](FOLLOW_UP.md)。
 
 ---
 

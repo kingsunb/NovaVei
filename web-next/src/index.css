@@ -68,24 +68,26 @@
   --radius-md: 8px;
   --radius-sm: 6px;
 
-  /* 阴影 —— Apple 三层级 */
+  /* 阴影 —— Apple 三层级 + 浮层 */
   --shadow-apple-sm: 0 1px 2px hsl(220 9% 30% / 0.05), 0 2px 8px hsl(220 9% 30% / 0.03);
   --shadow-apple-md: 0 2px 4px hsl(220 9% 30% / 0.05), 0 4px 16px hsl(220 9% 30% / 0.07);
   --shadow-apple-lg: 0 4px 8px hsl(220 9% 30% / 0.06), 0 12px 32px hsl(220 9% 30% / 0.1);
+  /* 命令面板 / 错误卡片 / 图表 tooltip 等悬浮层的抬升阴影 */
+  --shadow-overlay: 0 24px 48px hsl(220 9% 20% / 0.16), 0 8px 16px hsl(220 9% 20% / 0.08);
 }
 
 /* =========================================================================
-   设计令牌 —— NovaVeil 科幻控制台
-   - 亮色主题：冷雾白 + 青蓝信号色
-   - 暗色主题：石墨黑 + 低亮度网格与终端青
-   - 材质：细边框、内发光、有限 blur；装饰不能盖过数据
+   设计令牌 —— macOS 冷白磨砂 + Apple 蓝（DESIGN.md §4.1）
+   - 亮色：#F2F4F7 冷白灰 + 克制玻璃面
+   - 暗色：石墨黑 + 低对比描边
+   - 信号色只用于状态与主操作，不做装饰铺底
    ========================================================================= */
 
 :root,
 :root[data-theme="light"] {
-	/* 背景 - 冷雾白控制台 */
-	--background: 210 25% 97%;
-	--foreground: 215 35% 12%;
+	/* 背景 - 冷白灰画布 */
+	--background: 216 18% 96%;
+	--foreground: 220 9% 12%;
 
   /* 表面层 - 玻璃（用 alpha 组合）*/
   --surface: 0 0% 100%;
@@ -141,9 +143,9 @@
   --glass-alpha: 0.72;
   --glass-border: 0 0% 100%;
   --glass-border-alpha: 0.62;
-  --signal: 188 92% 42%;
-  --signal-strong: 194 100% 50%;
-  --grid-line: 210 45% 75%;
+  --signal: 211 100% 45%;
+  --signal-strong: 211 100% 50%;
+  --grid-line: 220 16% 82%;
 }
 
 :root[data-theme="dark"] {
@@ -191,9 +193,9 @@
   --glass-alpha: 0.78;
   --glass-border: 220 9% 22%;
   --glass-border-alpha: 0.62;
-  --signal: 188 92% 52%;
-  --signal-strong: 194 100% 62%;
-  --grid-line: 188 45% 28%;
+  --signal: 211 100% 60%;
+  --signal-strong: 211 100% 68%;
+  --grid-line: 220 9% 22%;
 }
 
 @layer base {
@@ -293,34 +295,29 @@
 
   .glass-panel {
     position: relative;
-    overflow: hidden;
     background: hsl(var(--glass-bg) / var(--glass-alpha));
     border: 1px solid hsl(var(--glass-border) / var(--glass-border-alpha));
     box-shadow:
-      inset 0 1px 0 hsl(var(--signal) / 0.08),
+      inset 0 1px 0 hsl(0 0% 100% / 0.45),
       0 0 0 1px hsl(0 0% 0% / 0.02),
-      0 10px 30px hsl(220 25% 12% / 0.06);
+      0 8px 24px hsl(220 12% 18% / 0.05);
   }
 
-  .glass-panel::before {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    content: "";
-    background: linear-gradient(90deg, transparent, hsl(var(--signal) / 0.04), transparent);
-    opacity: 0.55;
+  :root[data-theme="dark"] .glass-panel {
+    box-shadow:
+      inset 0 1px 0 hsl(0 0% 100% / 0.06),
+      0 0 0 1px hsl(0 0% 0% / 0.18),
+      0 10px 28px hsl(0 0% 0% / 0.28);
   }
 
   .glass-sidebar {
-    background: hsl(var(--glass-bg) / 0.88);
-    border-right: 1px solid hsl(var(--signal) / 0.16);
-    box-shadow: 8px 0 28px hsl(220 25% 12% / 0.05);
+    background: hsl(var(--glass-bg) / 0.82);
+    border-right: 1px solid hsl(var(--border) / 0.7);
   }
 
   .glass-topbar {
-    background: hsl(var(--glass-bg) / 0.88);
-    border-bottom: 1px solid hsl(var(--signal) / 0.14);
-    box-shadow: 0 8px 24px hsl(220 25% 12% / 0.04);
+    background: hsl(var(--glass-bg) / 0.78);
+    border-bottom: 1px solid hsl(var(--border) / 0.65);
   }
 
   .glass-overlay {
@@ -375,14 +372,20 @@
     }
   }
 
+  /* Select 自绘箭头（appearance-none 后用背景 SVG 画 chevron；
+     灰度取 ink-subtle 中间值，亮暗主题都可读） */
+  .select-chevron {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2398989d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 14px;
+  }
+
   .bg-gradient-subtle {
     background-color: hsl(var(--background));
     background-image:
-      linear-gradient(hsl(var(--grid-line) / 0.07) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(var(--grid-line) / 0.07) 1px, transparent 1px),
-      radial-gradient(circle at 16% 0%, hsl(var(--signal) / 0.08), transparent 34%),
-      radial-gradient(circle at 100% 100%, hsl(var(--info) / 0.05), transparent 30%);
-    background-size: 32px 32px, 32px 32px, auto, auto;
+      radial-gradient(ellipse 80% 50% at 12% -10%, hsl(var(--primary) / 0.07), transparent 55%),
+      radial-gradient(ellipse 60% 40% at 100% 0%, hsl(var(--info) / 0.04), transparent 50%);
   }
 
   @supports (backdrop-filter: blur(1px)) {
@@ -390,8 +393,8 @@
     .glass-sidebar,
     .glass-topbar,
     .glass-overlay {
-      backdrop-filter: blur(10px) saturate(130%);
-      -webkit-backdrop-filter: blur(10px) saturate(130%);
+      backdrop-filter: blur(18px) saturate(160%);
+      -webkit-backdrop-filter: blur(18px) saturate(160%);
     }
   }
 

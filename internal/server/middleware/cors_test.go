@@ -31,6 +31,31 @@ func TestOriginProtectionAcceptsTLSProxySameHost(t *testing.T) {
 	}
 }
 
+func TestOriginProtectionRejectsCookieWriteWithoutOrigin(t *testing.T) {
+	r := originTestEngine()
+	req := httptest.NewRequest(http.MethodPost, "http://console.example/api/v1/test", strings.NewReader(`{}`))
+	req.Host = "console.example"
+	req.AddCookie(&http.Cookie{Name: AuthCookieName, Value: "session"})
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("cookie POST without Origin = %d, want 403; body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestOriginProtectionAllowsCookielessWriteWithoutOrigin(t *testing.T) {
+	r := originTestEngine()
+	req := httptest.NewRequest(http.MethodPost, "http://console.example/api/v1/test", strings.NewReader(`{}`))
+	req.Host = "console.example"
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("cookieless POST without Origin = %d, want 204; body=%s", w.Code, w.Body.String())
+	}
+}
+
 func TestOriginProtectionRejectsDifferentHost(t *testing.T) {
 	r := originTestEngine()
 	req := httptest.NewRequest(http.MethodPost, "http://console.example/api/v1/test", strings.NewReader(`{}`))

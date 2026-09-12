@@ -89,6 +89,8 @@ func APIKeyCreate(key *model.APIKey, ctx context.Context) error {
 	if apiKeyValueTakenSnap(cur, key.APIKey, 0) {
 		return ErrAPIKeyValueExists
 	}
+	plain := key.APIKey
+	key.APIKey = sealAPIKeySecret(plain)
 	if err := db.GetDB().WithContext(ctx).Create(key).Error; err != nil {
 		// apikeys.api_key 的 UNIQUE 索引(迁移 013)兜底两个并发请求都过掉本地
 		// 去重的情况: 后写者命中索引, 这里把 driver 错误翻译成 sentinel,
@@ -98,6 +100,7 @@ func APIKeyCreate(key *model.APIKey, ctx context.Context) error {
 		}
 		return fmt.Errorf("failed to create API key: %w", err)
 	}
+	key.APIKey = plain
 	next := cloneAPIKeySnap(cur)
 	next.byID[key.ID] = *key
 	next.byKey[key.APIKey] = key.ID
@@ -120,12 +123,15 @@ func APIKeyUpdate(key *model.APIKey, ctx context.Context) error {
 	if apiKeyValueTakenSnap(cur, key.APIKey, key.ID) {
 		return ErrAPIKeyValueExists
 	}
+	plain := key.APIKey
+	key.APIKey = sealAPIKeySecret(plain)
 	if err := db.GetDB().WithContext(ctx).Save(key).Error; err != nil {
 		if isUniqueConstraintError(err) {
 			return ErrAPIKeyValueExists
 		}
 		return fmt.Errorf("failed to update API key: %w", err)
 	}
+	key.APIKey = plain
 	next := cloneAPIKeySnap(cur)
 	if key.APIKey != existing.APIKey {
 		delete(next.byKey, existing.APIKey)
@@ -246,6 +252,7 @@ func apiKeyRefreshCache(ctx context.Context) error {
 	byID := make(map[int]model.APIKey, len(apiKeys))
 	byKey := make(map[string]int, len(apiKeys))
 	for _, apiKey := range apiKeys {
+		apiKey.APIKey = revealAPIKeySecret(apiKey.APIKey)
 		byID[apiKey.ID] = apiKey
 		byKey[apiKey.APIKey] = apiKey.ID
 	}

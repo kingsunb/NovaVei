@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"maps"
+	"net/url"
 	"slices"
 	"sort"
 	"strings"
@@ -44,6 +45,11 @@ func ChannelCreate(channel *model.Channel, ctx context.Context) error {
 	}
 	channel.Keys = keys
 	channel.Tags = normalizeChannelTags(channel.Tags)
+	if channel.Type != model.ChannelProviderCustom {
+		if err := validateChannelBaseURL(channel.BaseURL); err != nil {
+			return err
+		}
+	}
 	for i := range channel.Models {
 		channel.Models[i].ID = 0
 		channel.Models[i].ChannelID = 0
@@ -55,9 +61,17 @@ func ChannelCreate(channel *model.Channel, ctx context.Context) error {
 			return fmt.Errorf("渠道模型名称不能为空")
 		}
 	}
-	if err := db.GetDB().WithContext(ctx).Create(channel).Error; err != nil {
+	plainKey := channel.Key
+	plainKeys := cloneChannelKeys(channel.Keys)
+	sealed := sealChannelSecrets(*channel)
+	sealed.Models = channel.Models
+	if err := db.GetDB().WithContext(ctx).Create(&sealed).Error; err != nil {
 		return err
 	}
+	channel.ID = sealed.ID
+	channel.Models = sealed.Models
+	channel.Key = plainKey
+	channel.Keys = plainKeys
 	channelCache.Set(channel.ID, cacheableChannel(*channel))
 	for _, channelModel := range channel.Models {
 		channelModelCache.Set(channelModel.ID, channelModel)
@@ -157,12 +171,21 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 		updates.Enabled = *req.Enabled
 	}
 	if req.BaseURL != nil {
+		channelType := existingChannel.Type
+		if req.Type != nil {
+			channelType = *req.Type
+		}
+		if channelType != model.ChannelProviderCustom {
+			if err := validateChannelBaseURL(*req.BaseURL); err != nil {
+				return nil, err
+			}
+		}
 		selectFields = append(selectFields, "base_url")
 		updates.BaseURL = *req.BaseURL
 	}
 	if req.Key != nil {
 		selectFields = append(selectFields, "key")
-		updates.Key = *req.Key
+		updates.Key = EncryptSecret(*req.Key)
 	}
 	if req.FixedReply != nil {
 		selectFields = append(selectFields, "fixed_reply")
@@ -197,7 +220,11 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 			return nil, err
 		}
 		selectFields = append(selectFields, "keys")
-		updates.Keys = keys
+		sealedKeys := cloneChannelKeys(keys)
+		for i := range sealedKeys {
+			sealedKeys[i].Key = EncryptSecret(sealedKeys[i].Key)
+		}
+		updates.Keys = sealedKeys
 	}
 	if req.Proxy != nil {
 		selectFields = append(selectFields, "proxy")
@@ -237,7 +264,7 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 		selectFields = append(selectFields, "tags")
 		updates.Tags = normalizeChannelTags(*req.Tags)
 	}
-	// 排序值允许重复、零值与负值; 用 map 更新(而非 struct Select)可靠写入任意
+	// 优先级允许重复、零值与负值; 用 map 更新(而非 struct Select)可靠写入任意
 	// int 值(含 0), 避免 GORM struct Updates 零值跳过的历史坑(BUG-004)。
 	if req.Sort != nil {
 		sortUpdateVal = req.Sort
@@ -264,6 +291,14 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 		updates.PassThroughBodyEnabled = *req.PassThroughBodyEnabled
 	}
 
+	// 请求未携带任何可更新字段时显式报错而非静默成功: 该形态历史上会直接返回
+	// 200 且不写任何列, 前端 toast「已保存」但读回旧值, 排查成本极高。当前前端
+	// 全量编辑器、行内优先级与模型同步任务都不会发出空更新, 此守卫为异常客户端
+	// 与未来回归兜底。
+	if len(selectFields) == 0 && sortUpdateVal == nil && req.Models == nil {
+		return nil, fmt.Errorf("请求未包含任何需要更新的字段")
+	}
+
 	var currentModels []model.ChannelModel
 	var channel model.Channel
 	err := db.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -275,7 +310,7 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 		if sortUpdateVal != nil {
 			// map 更新可靠写入任意 int(含 0 与负值), 不受 GORM struct 零值跳过影响。
 			if err := tx.Model(&model.Channel{}).Where("id = ?", req.ID).Update("sort", *sortUpdateVal).Error; err != nil {
-				return fmt.Errorf("更新排序值失败: %w", err)
+				return fmt.Errorf("更新优先级失败: %w", err)
 			}
 		}
 		if req.Models != nil {
@@ -297,6 +332,7 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 		return nil, err
 	}
 
+	revealChannelSecrets(&channel)
 	channelCache.Set(channel.ID, cacheableChannel(channel))
 	if req.Models != nil {
 		currentModelsByID := make(map[int]model.ChannelModel, len(currentModels))
@@ -424,6 +460,7 @@ func channelRefreshCache(ctx context.Context) error {
 	channelMap := make(map[int]model.Channel, len(channels))
 	for _, channel := range channels {
 		channel.Models = nil
+		revealChannelSecrets(&channel)
 		channelMap[channel.ID] = cacheableChannel(channel)
 	}
 	channelModelMap := make(map[int]model.ChannelModel, len(channelModels))
@@ -562,6 +599,21 @@ func normalizeChannelTags(tags []string) []string {
 		normalized = append(normalized, tag)
 	}
 	return normalized
+}
+
+func validateChannelBaseURL(raw string) error {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return fmt.Errorf("渠道地址不能为空")
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return fmt.Errorf("渠道地址必须以 http:// 或 https:// 开头")
+	}
+	if parsed.User != nil {
+		return fmt.Errorf("渠道地址不能包含 userinfo")
+	}
+	return nil
 }
 
 // cacheableChannel 返回可写入缓存或对外发布的渠道副本:

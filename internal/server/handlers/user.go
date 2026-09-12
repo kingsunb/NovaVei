@@ -74,6 +74,11 @@ func login(c *gin.Context) {
 
 func logout(c *gin.Context) {
 	middleware.ClearAuthCookie(c)
+	// 单管理员: 登出即轮换 JWT 密钥, 已签发 token 全部失效, 而不仅清 cookie。
+	if err := op.AuthJWTRotateSecret(); err != nil {
+		resp.Error(c, http.StatusInternalServerError, resp.ErrInternalServer)
+		return
+	}
 	resp.Success(c, nil)
 }
 

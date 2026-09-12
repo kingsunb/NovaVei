@@ -10,6 +10,7 @@ import type {
   ChannelImportResult,
   ClientStats,
   DBDump,
+  BuildInfo,
   GroupClearCooldownResult,
   LastSyncTime,
   DBImportResult,
@@ -366,6 +367,15 @@ function normalizeChannelTestResult(raw: unknown): ChannelTestResult {
   };
 }
 
+function normalizeBuildInfo(raw: unknown): BuildInfo {
+  const value = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return {
+    version: typeof value.version === "string" ? value.version : "",
+    commit: typeof value.commit === "string" ? value.commit : "",
+    build_time: typeof value.build_time === "string" ? value.build_time : "",
+  };
+}
+
 function normalizeNowVersion(raw: unknown): NowVersion {
   if (!raw || typeof raw !== "object") {
     return {
@@ -698,13 +708,21 @@ export const api = {
    */
   getNowVersion: async (range?: string) => {
     const query = range ? `?range=${encodeURIComponent(range)}` : "";
-    const raw = await http<unknown>(`/update/now-version${query}`);
+    const raw = await http<unknown>(`/stats/now-version${query}`);
     return normalizeNowVersion(raw);
+  },
+  /**
+   * 当前二进制构建元信息（version/commit/build_time）。轻量端点：只读
+   * ldflags 常量、无统计聚合，供前端版本看门狗轮询判断前后端是否错位。
+   */
+  getBuildInfo: async () => {
+    const raw = await http<unknown>(`/stats/build-info`);
+    return normalizeBuildInfo(raw);
   },
   /** Token 用量趋势（按时间分桶的真实时序，24h/7d/30d）。 */
   getTokenTrends: async (range: TokenTrendRange) => {
     const raw = await http<unknown>(
-      `/update/token-trends?range=${encodeURIComponent(range)}`,
+      `/stats/token-trends?range=${encodeURIComponent(range)}`,
     );
     return normalizeTokenTrend(raw);
   },
@@ -780,7 +798,10 @@ export const api = {
   },
   /** 渠道密钥明文：管理列表只回掩码，这里按需取回全部明文（仅管理员会话）。 */
   getChannelKeys: async (id: number) => {
-    const raw = await http<unknown>(`/channel/keys/${id}`);
+    const raw = await http<unknown>(`/channel/keys/${id}`, {
+      method: "POST",
+      body: "{}",
+    });
     if (!Array.isArray(raw)) return [];
     return raw.flatMap((item): ChannelKey[] => {
       if (!item || typeof item !== "object") return [];
@@ -796,7 +817,7 @@ export const api = {
   },
   // 后端语义是全局同步（body 可为空）。
   syncAllChannels: () => http<null>("/channel/sync", { method: "POST" }),
-  exportChannels: () => rawDownload("/channel/export"),
+  exportChannels: () => rawDownload("/channel/export", { method: "POST", body: "{}" }),
   /** 渠道导入：用导出文件内容批量创建渠道，返回成功/失败数量及原因。 */
   importChannels: (text: string) =>
     http<ChannelImportResult>("/channel/import", {
@@ -852,7 +873,10 @@ export const api = {
   listKeys: () => http<APIKeySummary[]>("/apikey/list"),
   /** API 密钥明文：编辑表单「查看密钥」按需取回（仅管理员会话）。 */
   getAPIKeySecret: async (id: number) => {
-    const raw = await http<unknown>(`/apikey/secret/${id}`);
+    const raw = await http<unknown>(`/apikey/secret/${id}`, {
+      method: "POST",
+      body: "{}",
+    });
     const v = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
     return typeof v.api_key === "string" ? v.api_key : "";
   },
@@ -931,7 +955,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ url }),
     }),
-  exportSettings: () => rawDownloadJson<DBDump>("/setting/export"),
+  exportSettings: () =>
+    rawDownloadJson<DBDump>("/setting/export", { method: "POST", body: "{}" }),
   importSettings: (data: DBDump) =>
     http<DBImportResult>("/setting/import", {
       method: "POST",

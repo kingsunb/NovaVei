@@ -315,6 +315,7 @@ func recoverExpiredItems(group model.Group, candidates []model.GroupItem) model.
 		err  error
 	}
 	results := make(chan probeResult, len(candidates))
+	var probeWG sync.WaitGroup
 	for _, item := range candidates {
 		// 引用成员不直接指向渠道模型(关联为空), 与渠道模型刚被删除的成员一样
 		// 无法发起合成探测, 按失败结论处理使成员保持原冷却等待下一批。
@@ -330,7 +331,9 @@ func recoverExpiredItems(group model.Group, candidates []model.GroupItem) model.
 			results <- probeResult{item: item, err: err}
 			continue
 		}
+		probeWG.Add(1)
 		go func(item model.GroupItem, channel model.Channel) {
+			defer probeWG.Done()
 			probeCtx, cancelProbe := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 			defer cancelProbe()
 			results <- probeResult{item: item, err: probeChannelFunc(probeCtx, channel, item.ChannelModel.Name)}
@@ -347,6 +350,7 @@ func recoverExpiredItems(group model.Group, candidates []model.GroupItem) model.
 		winner = result.item
 		cancelAll()
 	}
+	probeWG.Wait()
 
 	routeMu.Lock()
 	defer routeMu.Unlock()

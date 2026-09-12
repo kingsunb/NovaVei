@@ -79,7 +79,8 @@ export const DialogHeader = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex flex-col gap-1 border-b border-border/60 px-5 py-4",
+      // pr-12：给右上角绝对定位的关闭钮留位，长标题不压到 X
+      "flex flex-col gap-1 border-b border-border/60 px-5 py-4 pr-12",
       className,
     )}
     {...props}

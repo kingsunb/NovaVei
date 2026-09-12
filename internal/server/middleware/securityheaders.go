@@ -13,12 +13,12 @@ import (
 //   - Referrer-Policy: no-referrer 不向下游(含外链跳转目标)泄露面板来源 URL;
 //   - HSTS: 仅在 CookieSecure=true 时设置, 强制浏览器后续访问走 HTTPS。
 //
-// 不设 CSP: 前端 index.html 含内联主题脚本, 严格 CSP 需要 nonce 改造。
 func SecurityHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("Referrer-Policy", "no-referrer")
+		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 		// 仅在显式配置 HTTPS 部署时启用 HSTS, 避免直连 HTTP 形态下浏览器被永久锁死 HTTPS。
 		if conf.AppConfig.Security.CookieSecure {
 			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")

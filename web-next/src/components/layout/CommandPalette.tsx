@@ -27,10 +27,11 @@ export function CommandPalette({
       { label: "前往 渠道", hint: "导航", run: () => navigate("/channels") },
       { label: "前往 自定义模型", hint: "导航", run: () => navigate("/custom-models") },
       { label: "前往 分组", hint: "导航", run: () => navigate("/groups") },
+      { label: "前往 脱敏", hint: "导航", run: () => navigate("/mask") },
+      { label: "前往 对话", hint: "导航", run: () => navigate("/chat") },
       { label: "前往 API 密钥", hint: "导航", run: () => navigate("/keys") },
       { label: "前往 日志", hint: "导航", run: () => navigate("/logs") },
       { label: "前往 设置", hint: "导航", run: () => navigate("/settings") },
-      { label: "前往 对话", hint: "导航", run: () => navigate("/chat") },
     ],
     [navigate],
   );
@@ -86,7 +87,7 @@ export function CommandPalette({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg overflow-hidden rounded-card border border-border bg-card/95 shadow-overlay backdrop-blur-2xl"
+        className="glass-overlay w-full max-w-lg overflow-hidden rounded-card"
       >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
           <Search className="h-4 w-4 text-ink-muted" />
@@ -121,7 +122,7 @@ export function CommandPalette({
               className={cn(
                 "flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left text-sm transition-colors",
                 sel === i
-                  ? "bg-primary/12 text-primary-text"
+                  ? "bg-primary/[0.12] text-primary-text"
                   : "text-ink-muted hover:bg-surface-subtle",
               )}
             >

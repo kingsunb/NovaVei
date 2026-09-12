@@ -24,7 +24,7 @@ describe("<DashboardPage /> KPI tone", () => {
       "fetch",
       vi.fn((url: string) => {
         // 默认返空数据；now-version / recent-errors / overview stream 都兜底
-        if (url.includes("/update/now-version")) {
+        if (url.includes("/stats/now-version")) {
           return Promise.resolve(
             new Response(
               JSON.stringify({
@@ -48,7 +48,7 @@ describe("<DashboardPage /> KPI tone", () => {
           );
         }
         // Token 趋势：真实分桶时序形状 {points:[{t,in,out}]}
-        if (url.includes("/update/token-trends")) {
+        if (url.includes("/stats/token-trends")) {
           const end = Date.now();
           const points = Array.from({ length: 28 }).map((_, i) => ({
             t: end - (27 - i) * 6 * 3600_000,
@@ -104,7 +104,7 @@ describe("<DashboardPage /> Token 趋势", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string) => {
-        if (url.includes("/update/now-version")) {
+        if (url.includes("/stats/now-version")) {
           return Promise.resolve(
             new Response(
               JSON.stringify({
@@ -124,7 +124,7 @@ describe("<DashboardPage /> Token 趋势", () => {
             ),
           );
         }
-        if (url.includes("/update/token-trends")) {
+        if (url.includes("/stats/token-trends")) {
           const end = Date.now();
           const points = Array.from({ length: 28 }).map((_, i) => ({
             t: end - (27 - i) * 6 * 3600_000,
@@ -170,7 +170,7 @@ describe("<DashboardPage /> Token 趋势", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string) => {
-        if (url.includes("/update/now-version")) {
+        if (url.includes("/stats/now-version")) {
           return Promise.resolve(
             new Response(
               JSON.stringify({
@@ -190,7 +190,7 @@ describe("<DashboardPage /> Token 趋势", () => {
             ),
           );
         }
-        if (url.includes("/update/token-trends")) {
+        if (url.includes("/stats/token-trends")) {
           return Promise.resolve(
             new Response(
               JSON.stringify({

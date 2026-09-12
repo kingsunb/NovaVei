@@ -151,7 +151,7 @@ export default function MaskPage() {
                         return (
                           <tr
                             key={r.label}
-                            className="border-b border-border/60 last:border-b-0 hover:bg-surface-subtle/60"
+                            className="border-b border-border/60 transition-colors last:border-b-0 hover:bg-surface-subtle/60"
                           >
                             <td className="mono px-5 py-2.5 text-ink">{r.label}</td>
                             <td className="px-5 py-2.5 text-ink-muted">
@@ -225,7 +225,7 @@ export default function MaskPage() {
                       {terms.map((t, i) => (
                         <tr
                           key={`${t.value}-${i}`}
-                          className="border-b border-border/60 last:border-b-0 hover:bg-surface-subtle/60"
+                          className="border-b border-border/60 transition-colors last:border-b-0 hover:bg-surface-subtle/60"
                         >
                           <td className="mono px-4 py-2.5 text-ink">{t.value}</td>
                           <td className="px-4 py-2.5 text-ink-muted">

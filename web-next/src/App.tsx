@@ -9,6 +9,8 @@ import { PageSkeleton } from "@/components/ui/skeleton";
 import { ForceChangePassword } from "@/components/auth/ForceChangePassword";
 import { loadFlags, shouldUseNewWeb, type Flags } from "@/lib/flags";
 import { apiForbiddenEvent, apiUnauthorizedEvent } from "@/lib/api";
+import { useBuildVersionCheck } from "@/lib/version-check";
+import { clearStaleChunkReloadFlag } from "@/lib/app-recovery";
 
 /**
  * 路由级代码分割 —— 每个 page 是独立 chunk
@@ -70,6 +72,17 @@ export default function App() {
     return () => {
       alive = false;
     };
+  }, []);
+
+  // 前端版本看门狗：登录后轮询 /update/build-info 比对前后端构建指纹，
+  // 服务端更新而页面未刷新时弹出「立即刷新」提示（详见 lib/version-check）。
+  useBuildVersionCheck(isAuthenticated);
+
+  // 页面稳定运行 15s 后解除「本次会话已因过期 chunk 自动刷新」标记
+  // （lib/app-recovery），恢复下一次服务端更新时的自动刷新资格。
+  useEffect(() => {
+    const timer = window.setTimeout(clearStaleChunkReloadFlag, 15_000);
+    return () => window.clearTimeout(timer);
   }, []);
 
   // 全局 401 监听：任何 API 返回 401（JWT 过期/被吊销）都统一登出跳登录。

@@ -194,6 +194,28 @@ func isKeyRateLimitError(err error) bool {
 	return ok && code == http.StatusTooManyRequests
 }
 
+// PruneEphemeralState 回收进程内过期的 Key 冷却、会话粘合与脱敏映射。
+func PruneEphemeralState() {
+	PruneExpiredKeyCooldowns()
+	PruneExpiredSessionStickies()
+	pruneMaskSessions()
+}
+
+// PruneExpiredKeyCooldowns 删除已到期的 Key 冷却条目, 避免只读惰性清理漏掉不再被选中的 Key。
+func PruneExpiredKeyCooldowns() int {
+	now := time.Now()
+	keyCooldownsMu.Lock()
+	defer keyCooldownsMu.Unlock()
+	removed := 0
+	for ref, deadline := range keyCooldowns {
+		if !now.Before(deadline) {
+			delete(keyCooldowns, ref)
+			removed++
+		}
+	}
+	return removed
+}
+
 // resetChannelKeyHealth 清空轮询游标与冷却记录; 仅供测试隔离包级全局状态。
 func resetChannelKeyHealth() {
 	keyCursorMu.Lock()

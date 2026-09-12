@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
@@ -24,7 +25,9 @@ func MaskConfigGet() (model.MaskConfig, error) {
 	}
 	var cfg model.MaskConfig
 	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
-		return model.DefaultMaskConfig(), fmt.Errorf("脱敏配置解析失败: %w", err)
+		// 坏 JSON 回退全关且不视为错误: 默认本就是关闭, 不应把整条 /v1 打挂。
+		log.Warnf("mask config JSON invalid, treating as disabled: %v", err)
+		return model.DefaultMaskConfig(), nil
 	}
 	return cfg, nil
 }

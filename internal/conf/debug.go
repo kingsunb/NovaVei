@@ -1,5 +1,5 @@
 // debug.go exposes the NovaVeil debug-mode flag, controlled by the
-// NOVAEIL_DEBUG environment variable.
+// NOVAVEIL_DEBUG environment variable.
 package conf
 
 import (

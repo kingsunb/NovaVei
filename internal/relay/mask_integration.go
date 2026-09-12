@@ -3,6 +3,7 @@ package relay
 import (
 	"bytes"
 	"strings"
+	"time"
 
 	"github.com/kingsunb/NovaVeil/internal/op"
 	"github.com/kingsunb/NovaVeil/internal/relay/mask"
@@ -169,12 +170,9 @@ func flushStreamRestorer(restorer *mask.StreamRestorer, format llm.APIFormat) []
 	return nil
 }
 
-// cleanupMaskSession 回收脱敏会话映射, 防止内存泄漏。
-// 空会话键不回收(共享映射, 由全局 TTL 兜底); 非空会话键在请求结束后立即释放。
-func cleanupMaskSession(sessionKey string) {
-	if sessionKey != "" {
-		maskSessionStore.Delete(sessionKey)
-	}
+// pruneMaskSessions 回收超过 TTL 未访问的脱敏会话映射。
+func pruneMaskSessions() {
+	maskSessionStore.PruneExpired(time.Now())
 }
 
 // streamContentPath 按协议返回 SSE 事件中增量文本字段的 gjson 路径, 无匹配返回空。

@@ -36,6 +36,7 @@ import { Button } from "@/components/ui/button";
 
 import { Input, Textarea } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
+import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Field } from "@/components/ui/field";
 import { cn, NAME_RULE, URL_RULE, validateField } from "@/lib/utils";
@@ -223,9 +224,15 @@ export function ChannelEditor({
   });
   const testMessage = msgSetting?.value?.trim() || DEFAULT_TEST_MESSAGE;
 
-  // 实时校验（仅在用户交互后显示）
-  const nameError = validateField(draft.name, NAME_RULE);
-  const urlError = validateField(draft.base_url, URL_RULE);
+  // 实时校验（仅在用户交互后显示）。编辑态只校验「用户改过的」字段：存量渠道
+  // 的名称/地址可能来自导入或旧版本（如含中文括号、全角冒号等 NAME_RULE 不允许
+  // 的字符，导入接口本身不做该校验），后端对它们并无此限制；若按未变更值拦截，
+  // 保存按钮会一直禁用且点击毫无反馈，表现为「点保存没反应、改动不生效」。
+  // 新建（isNew）或修改后的值仍走完整校验。
+  const nameChanged = isNew || draft.name !== (channel as Channel).name;
+  const urlChanged = isNew || draft.base_url !== (channel as Channel).base_url;
+  const nameError = nameChanged ? validateField(draft.name, NAME_RULE) : null;
+  const urlError = urlChanged ? validateField(draft.base_url, URL_RULE) : null;
   const isValid = !nameError && !urlError;
 
   // 切换 channel 重置 draft（避免上次草稿残留）。用稳定 key 判定是否真的换了
@@ -895,8 +902,8 @@ function CredTab({
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="上游类型" required>
-          <select
-            className="h-8 w-full rounded-control border border-border bg-card px-2 text-sm"
+          <Select
+            className="w-full text-sm"
             value={draft.type}
             onChange={(e) => update("type", e.target.value as Draft["type"])}
           >
@@ -905,7 +912,7 @@ function CredTab({
                 {v}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="启用">
           <div className="flex h-8 items-center">
@@ -916,6 +923,18 @@ function CredTab({
           </div>
         </Field>
       </div>
+      <Field label="优先级" hint="越大越靠前，允许重复和负数">
+        <Input
+          type="number"
+          step={1}
+          value={draft.sort}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            update("sort", Number.isFinite(n) ? Math.trunc(n) : 0);
+          }}
+          aria-label="优先级"
+        />
+      </Field>
       <Field label="Base URL" required error={errors.base_url}>
         <Input
           value={draft.base_url}
@@ -1202,11 +1221,11 @@ function ModelsTab({
       {(savedKeyOptions.length >= 2 || testableKeyCount > 0) && (
         <div className="flex flex-wrap items-center justify-end gap-1.5">
           {savedKeyOptions.length >= 2 && (
-            <select
+            <Select
               value={testKeyID || "default"}
               onChange={(e) => onTestKeyChange(e.target.value)}
               aria-label="按模型测试使用的密钥"
-              className="h-7 rounded-control border border-border bg-card px-2 text-xs text-ink-muted"
+              className="h-7 text-xs"
             >
               <option value="default">默认（第一把健康 Key）</option>
               {savedKeyOptions.map((option) => (
@@ -1214,7 +1233,7 @@ function ModelsTab({
                   {`#${option.index + 1}(${option.label})`}
                 </option>
               ))}
-            </select>
+            </Select>
           )}
           <Button
             variant="secondary"
@@ -1508,8 +1527,8 @@ function ModelsTab({
                       label="思考等级"
                       hint="注入上游请求的 thinking level；未配置不注入"
                     >
-                      <select
-                        className="h-8 w-full rounded-control border border-border bg-card px-2 text-sm"
+                      <Select
+                        className="w-full text-sm"
                         value={limit?.thinking_level ?? ""}
                         onChange={(e) =>
                           setModelLimit(m.name, {
@@ -1523,7 +1542,7 @@ function ModelsTab({
                             {v}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </Field>
                   </div>
                 )}
@@ -1796,10 +1815,13 @@ function AdvancedTab({
 
   return (
     <div className="space-y-4">
-      <Field label="渠道代理（可选）" hint="可从代理池下拉选择，也可手动填写；支持 http(s) 与 socks5/socks5h">
+      <Field
+        label="渠道代理（可选）"
+        hint="可从代理池下拉选择，也可手动填写；支持 http(s) 与 socks5/socks5h。需开启下方「使用系统代理」开关才会生效"
+      >
         {proxyPool.length > 0 && (
-          <select
-            className="mb-1.5 h-7 w-full rounded-control border border-border bg-card px-2 text-xs text-ink-muted"
+          <Select
+            className="mb-1.5 h-7 w-full text-xs"
             value=""
             onChange={(e) => {
               if (e.target.value) update("channel_proxy", e.target.value);
@@ -1812,7 +1834,7 @@ function AdvancedTab({
                 {p.name}
               </option>
             ))}
-          </select>
+          </Select>
         )}
         <Input
           value={draft.channel_proxy ?? ""}
@@ -1837,8 +1859,8 @@ function AdvancedTab({
           <div className="flex items-center gap-1.5">
             {headerTemplates.length > 0 && (
               <>
-                <select
-                  className="h-7 rounded-control border border-border bg-card px-1.5 text-xs text-ink-muted"
+                <Select
+                  className="h-7 pl-1.5 pr-6 text-xs"
                   value={selectedTemplate}
                   onChange={(e) => setSelectedTemplate(e.target.value)}
                   aria-label="选择 Header 模板"
@@ -1849,7 +1871,7 @@ function AdvancedTab({
                       {t.name}（{t.headers.length} 项）
                     </option>
                   ))}
-                </select>
+                </Select>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1939,7 +1961,7 @@ function AdvancedTab({
         <div>
           <p className="text-sm font-medium text-ink">使用系统代理</p>
           <p className="text-xs text-ink-muted">
-            通过服务端配置的全局代理访问上游
+            开启后出站走代理：优先使用上方渠道代理，留空时走设置页的全局代理；关闭则一律直连
           </p>
         </div>
         <Switch

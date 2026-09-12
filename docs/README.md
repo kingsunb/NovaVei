@@ -28,8 +28,9 @@
 
 | 文档 | 说明 |
 |------|------|
-| [frontend-redesign/DESIGN.md](frontend-redesign/DESIGN.md) | 前端设计系统规范 |
-| [frontend-redesign/PLAN.md](frontend-redesign/PLAN.md) | 前端重设计计划 |
+| [frontend-redesign/FOLLOW_UP.md](frontend-redesign/FOLLOW_UP.md) | 生产前端美化后续计划、当前实现差异与验收清单 |
+| [frontend-redesign/DESIGN.md](frontend-redesign/DESIGN.md) | 原型 v2 设计系统规范 |
+| [frontend-redesign/PLAN.md](frontend-redesign/PLAN.md) | 前端原型阶段美化规划 |
 | [frontend-redesign/AUDIT.md](frontend-redesign/AUDIT.md) | 前端审计报告 v1 |
 | [frontend-redesign/AUDIT-v2.md](frontend-redesign/AUDIT-v2.md) | 前端审计报告 v2 |
 | [frontend-redesign/prototype/README.md](frontend-redesign/prototype/README.md) | 原型说明 |
@@ -38,6 +39,7 @@
 
 | 文档 | 说明 |
 |------|------|
+| [audits/AUDIT_ISSUES_2026-09-13.md](audits/AUDIT_ISSUES_2026-09-13.md) | 2026-09-13 静态审阅问题清单（当前代码，含未提交改动） |
 | [audits/AUDIT_BACKEND.md](audits/AUDIT_BACKEND.md) | 后端代码审计 |
 | [audits/AUDIT_REPORT.md](audits/AUDIT_REPORT.md) | 全量审计报告 |
 | [audits/AUDIT_REPORT_2026.md](audits/AUDIT_REPORT_2026.md) | 2026 年审计报告 |

@@ -235,17 +235,17 @@ describe("<CustomModelsPage /> 搜索与排序", () => {
     });
   });
 
-  it("自定义排序: 按 sort 值升序, 同值按名称", async () => {
+  it("自定义排序: 按 sort 值降序, 同值按名称", async () => {
     mockList([chA, chB, chC]);
     render(<CustomModelsPage />, { wrapper: Wrapper });
     await waitFor(() => screen.getByText("alpha-bot"));
 
-    // chB sort=-3 (最前), chA & chC sort=5 (同值, alpha < gamma 按名称)
+    // chA & chC sort=5 在前（同值 alpha < gamma 按名称）, chB sort=-3 在后
     const rows = screen.getAllByText(/-bot$/).map((el) => el.textContent);
-    expect(rows).toEqual(["beta-bot", "alpha-bot", "gamma-bot"]);
+    expect(rows).toEqual(["alpha-bot", "gamma-bot", "beta-bot"]);
   });
 
-  it("排序值行内编辑触发 update 请求", async () => {
+  it("优先级行内编辑触发 update 请求", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url.includes("/channel/list")) return Promise.resolve(jsonOk([chA, chB, chC]));

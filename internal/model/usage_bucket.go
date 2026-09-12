@@ -19,4 +19,6 @@ type UsageBucket struct {
 	// 同次 UPSERT 累加)。供仪表盘"总请求"KPI 按时间窗口联动统计; 空模型/双零用量的请求
 	// 不落桶, 因此该计数是"有用量上报的请求数"的近似, 非 relay.TotalRequestCount 的全量口径。
 	RequestCount int64 `json:"request_count"`
+	// ErrorCount 该桶覆盖的业务失败次数, 与请求日志保留上限解耦, 供仪表盘错误 KPI。
+	ErrorCount int64 `json:"error_count"`
 }

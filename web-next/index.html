@@ -9,19 +9,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>NovaVeil · 控制台</title>
-    <script>
-      (function () {
-        try {
-          var t = localStorage.getItem("nv-theme") || "system";
-          if (t === "system") {
-            t = matchMedia("(prefers-color-scheme: dark)").matches
-              ? "dark"
-              : "light";
-          }
-          document.documentElement.dataset.theme = t;
-        } catch (e) {}
-      })();
-    </script>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

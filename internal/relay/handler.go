@@ -118,8 +118,8 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 			// 用脱敏后的请求体替换状态中的原始明文, 使日志/审计/对话留存只记录脱敏后内容。
 			request.updateBody(string(masked))
 		}
-		// 脱敏会话映射回收: 请求结束后释放映射表防止内存泄漏(空会话键不回收)。
-		defer cleanupMaskSession(sessionKey)
+		// 有会话键的映射跨请求保留(多轮同一占位符), 由 SessionStore TTL 回收;
+		// 无会话键时 Apply 使用请求级 Mapping, 不入表, 请求结束即释放。
 		// 请求级随机头值: 同一请求的所有动态头与所有重试复用同一值, 仅在首次真正发起上游前解析一次。
 		// 解析按 (sessionKey, 渠道, Key) 命名空间, 命名空间隔离不同上游的会话; 空会话生成请求级独立 UUID。
 		var requestRandomValue string
@@ -1081,6 +1081,7 @@ func recordErrorLog(request *RequestState) {
 		reqBody = request.body
 	}
 
+	op.RecordErrorBucket(request.Model)
 	op.ErrorLogEnqueue(model.ErrorLog{
 		CreatedAt:       time.Now(),
 		Model:           request.Model,

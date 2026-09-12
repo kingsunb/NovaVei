@@ -1,6 +1,9 @@
 package mask
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 // Mapping 一个会话的双向映射表: forward(原文→占位符)供脱敏复用, reverse(占位符→原文)供还原。
 // 同一长对话中同一敏感值在多轮间必须映射为同一占位符, 否则大模型上下文逻辑混乱。
@@ -81,39 +84,86 @@ func (m *Mapping) Lookup(placeholder string) (string, bool) {
 	return orig, ok
 }
 
+// SessionTTL 有会话键的映射表空闲回收时长, 与随机头 UUID / 会话粘合同量级:
+// 多轮对话在 TTL 内复用同一占位符; 过期后下一请求重新分配。
+const SessionTTL = 30 * time.Minute
+
+type sessionRecord struct {
+	mapping    *Mapping
+	lastAccess time.Time
+}
+
 // SessionStore 按会话键管理各会话的映射表。会话键通常来自 X-Session-Id;
-// 无会话标识时用请求级临时键(仅本轮有效, 不复用)。
+// 无会话标识时不得写入本表(调用方使用请求级 Mapping, 见 GetOrCreate 空键分支)。
 type SessionStore struct {
 	mu       sync.RWMutex
-	sessions map[string]*Mapping
+	sessions map[string]*sessionRecord
 }
 
 // NewSessionStore 构造空会话存储。
 func NewSessionStore() *SessionStore {
-	return &SessionStore{sessions: make(map[string]*Mapping)}
+	return &SessionStore{sessions: make(map[string]*sessionRecord)}
 }
 
-// GetOrCreate 返回指定会话的映射表, 不存在则新建。返回的 *Mapping 自带锁, 可并发使用。
+// GetOrCreate 返回指定会话的映射表。
+// 空会话键返回全新的请求级 Mapping 且不入表, 避免所有无会话请求共享一张永不回收的表。
 func (s *SessionStore) GetOrCreate(sessionKey string) *Mapping {
+	if sessionKey == "" {
+		return newMapping()
+	}
+	now := time.Now()
 	s.mu.RLock()
-	m, ok := s.sessions[sessionKey]
+	rec, ok := s.sessions[sessionKey]
 	s.mu.RUnlock()
 	if ok {
-		return m
+		s.mu.Lock()
+		rec.lastAccess = now
+		s.mu.Unlock()
+		return rec.mapping
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if m, ok := s.sessions[sessionKey]; ok {
-		return m
+	if rec, ok := s.sessions[sessionKey]; ok {
+		rec.lastAccess = now
+		return rec.mapping
 	}
-	m = newMapping()
-	s.sessions[sessionKey] = m
+	s.pruneExpiredLocked(now)
+	m := newMapping()
+	s.sessions[sessionKey] = &sessionRecord{mapping: m, lastAccess: now}
 	return m
 }
 
-// Delete 回收指定会话的映射表, 防内存泄漏。随 NovaVeil 会话粘合过期一并回收。
+// Delete 回收指定会话的映射表。空键是 no-op。
 func (s *SessionStore) Delete(sessionKey string) {
+	if sessionKey == "" {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.sessions, sessionKey)
+}
+
+// Len 返回当前持久会话条目数, 供测试与指标。
+func (s *SessionStore) Len() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.sessions)
+}
+
+// PruneExpired 删除超过 SessionTTL 未访问的会话映射, 返回删除条数。
+func (s *SessionStore) PruneExpired(now time.Time) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pruneExpiredLocked(now)
+}
+
+func (s *SessionStore) pruneExpiredLocked(now time.Time) int {
+	removed := 0
+	for key, rec := range s.sessions {
+		if now.Sub(rec.lastAccess) >= SessionTTL {
+			delete(s.sessions, key)
+			removed++
+		}
+	}
+	return removed
 }

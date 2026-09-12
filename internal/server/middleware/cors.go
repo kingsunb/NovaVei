@@ -47,6 +47,14 @@ func OriginProtection() gin.HandlerFunc {
 		if source == "" {
 			source = strings.TrimSpace(c.GetHeader("Referer"))
 			if source == "" {
+				// 带登录 cookie 的写操作必须有 Origin/Referer: 否则跨站顶层
+				// 导航之外的 CSRF(缺 Origin 的旧客户端/扩展)可以打管理写接口。
+				// 无 cookie 的请求不是会话 CSRF, 仍放行给非浏览器客户端。
+				if hasAuthCookie(c) {
+					resp.Error(c, http.StatusForbidden, "cross-origin management request denied")
+					c.Abort()
+					return
+				}
 				c.Next()
 				return
 			}
@@ -63,6 +71,11 @@ func OriginProtection() gin.HandlerFunc {
 
 func isUnsafeMethod(method string) bool {
 	return method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions && method != http.MethodTrace
+}
+
+func hasAuthCookie(c *gin.Context) bool {
+	token, err := c.Cookie(AuthCookieName)
+	return err == nil && token != ""
 }
 
 func isAllowedCrossOrigin(origin string) bool {

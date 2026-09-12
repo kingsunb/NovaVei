@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/kingsunb/NovaVeil/internal/model"
 	"github.com/kingsunb/NovaVeil/internal/op"
+	"github.com/kingsunb/NovaVeil/internal/relay"
 )
 
 // cleanErrorLogsInterval 错误日志清理任务的执行周期: 每天一次。
@@ -26,6 +27,8 @@ func Init() {
 	// 每天清理一次超过保留天数的错误日志(保留天数见 error_retention_days 设置, 0=永久保留);
 	// 注册在 LLM 同步之前, 避免同步间隔读取失败提前返回时连带丢失清理任务。
 	// 客户端统计定期刷入数据库(5 分钟), 与优雅关停时的最终 flush 互补。
+	Register("prune_ephemeral_state", time.Minute, true, relay.PruneEphemeralState)
+
 	Register("client_stat_flush", 5*time.Minute, true, func() {
 		ctx, cancel := context.WithTimeout(LifecycleContext(), time.Minute)
 		defer cancel()

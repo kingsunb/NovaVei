@@ -37,12 +37,12 @@ describe("api.getNowVersion", () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("GET /api/v1/update/now-version，拆 data 信封", async () => {
+  it("GET /api/v1/stats/now-version，拆 data 信封", async () => {
     const r = await api.getNowVersion();
     expect(r.version).toBe("0.13.0");
     expect(r.client_ip_count).toBe(42);
     expect(fetch).toHaveBeenCalledWith(
-      "/api/v1/update/now-version",
+      "/api/v1/stats/now-version",
       expect.objectContaining({ credentials: "include" }),
     );
   });

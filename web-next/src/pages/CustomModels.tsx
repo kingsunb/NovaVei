@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, MessageSquare, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Bot, MessageSquare, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@/lib/api";
@@ -29,6 +29,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn, NAME_RULE, validateField } from "@/lib/utils";
+import { Select } from "@/components/ui/select";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SearchField } from "@/components/ui/search-field";
+import { PageToolbar } from "@/components/ui/page-toolbar";
 import { ViewToggle } from "@/components/ui/view-toggle";
 import { useViewMode } from "@/lib/use-view-mode";
 
@@ -41,11 +45,11 @@ export default function CustomModelsPage() {
   const [pendingDelete, setPendingDelete] = useState<Channel | null>(null);
   const [testingId, setTestingId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
-  // 默认按自定义排序（sort 值升序、同值按名称兜底）；
-  // 排序值允许重复、零值与负值，相同数值按渠道名称字母序排列。
+  // 默认按优先级降序（同值按名称兜底）；
+  // 优先级允许重复、零值与负值，相同数值按渠道名称字母序排列。
   const [sort, setSort] = useState<Sort>("custom");
   const [viewMode, setViewMode] = useViewMode("nv-custom-view", "list");
-  // 排序值行内编辑草稿: 仅在用户正在输入时持有该行的文本值, 提交或失焦后清除。
+  // 优先级行内编辑草稿: 仅在用户正在输入时持有该行的文本值, 提交或失焦后清除。
   const [sortDraft, setSortDraft] = useState<Record<number, string>>({});
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -63,7 +67,7 @@ export default function CustomModelsPage() {
       )
       .sort((a, b) => {
         if (sort === "custom")
-          return (a.sort ?? 0) - (b.sort ?? 0) || a.name.localeCompare(b.name);
+          return (b.sort ?? 0) - (a.sort ?? 0) || a.name.localeCompare(b.name);
         if (sort === "name") return a.name.localeCompare(b.name);
         // status: 启用优先, 同状态按名称
         return Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name);
@@ -72,7 +76,7 @@ export default function CustomModelsPage() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["channels"] });
 
-  // 排序值行内编辑: 乐观更新本地缓存, 失败回滚并恢复输入框为服务端值。
+  // 优先级行内编辑: 乐观更新本地缓存, 失败回滚并恢复输入框为服务端值。
   const sortMut = useMutation({
     mutationFn: ({ id, sort }: { id: number; sort: number }) =>
       api.updateChannel({ id, sort }),
@@ -157,43 +161,44 @@ export default function CustomModelsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-ink-muted">
-          自定义模型命中后不做上游请求，直接以配置的固定文案回复；可加入分组参与选路。
-        </p>
-        <div className="flex items-center gap-2">
-          <ViewToggle value={viewMode} onChange={setViewMode} />
-          <label className="relative">
-            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" />
-            <Input
+      <PageToolbar
+        leading={
+          <p className="max-w-xl text-xs leading-relaxed text-ink-muted">
+            自定义模型命中后不做上游请求，直接以配置的固定文案回复；可加入分组参与选路。
+          </p>
+        }
+        trailing={
+          <>
+            <ViewToggle value={viewMode} onChange={setViewMode} />
+            <SearchField
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={setSearch}
               placeholder="搜索名称/模型名"
-              className="h-8 w-52 pl-7"
               aria-label="搜索自定义模型"
+              inputClassName="h-8 w-52 pl-8"
             />
-          </label>
-          <select
-            className="h-8 rounded-control border border-border bg-card px-2 text-xs text-ink-muted"
-            value={sort}
-            onChange={(e) => setSort(e.target.value as Sort)}
-            aria-label="排序"
-          >
-            <option value="custom">按优先级</option>
-            <option value="name">按名称</option>
-            <option value="status">按状态</option>
-          </select>
-          <Button
-            variant="primary"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setEditing("new")}
-          >
-            <Plus className="h-3.5 w-3.5" aria-hidden />
-            新建自定义模型
-          </Button>
-        </div>
-      </div>
+            <Select
+              className="text-xs"
+              value={sort}
+              onChange={(e) => setSort(e.target.value as Sort)}
+              aria-label="排序"
+            >
+              <option value="custom">按优先级</option>
+              <option value="name">按名称</option>
+              <option value="status">按状态</option>
+            </Select>
+            <Button
+              variant="primary"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setEditing("new")}
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              新建自定义模型
+            </Button>
+          </>
+        }
+      />
 
       {isLoading ? (
         <TableSkeleton rows={4} />
@@ -201,14 +206,15 @@ export default function CustomModelsPage() {
         <QueryErrorBanner onRetry={() => refetch()} />
       ) : rows.length === 0 ? (
         <Card>
-          <div className="flex flex-col items-center gap-2 py-12 text-center">
-            <Bot className="h-8 w-8 text-ink-subtle" aria-hidden />
-            <p className="text-sm text-ink-muted">
-              {search
+          <EmptyState
+            icon={<Bot className="h-5 w-5" aria-hidden />}
+            title={
+              search
                 ? "没有匹配的自定义模型"
-                : "还没有自定义模型；点右上角创建，客户端命中即返回固定文案"}
-            </p>
-          </div>
+                : "还没有自定义模型"
+            }
+            hint={search ? undefined : "点右上角创建，客户端命中即返回固定文案"}
+          />
         </Card>
       ) : viewMode === "list" ? (
         <Card>
@@ -220,7 +226,7 @@ export default function CustomModelsPage() {
                   <th scope="col" className="px-4 py-2.5 font-medium">模型名</th>
                   <th scope="col" className="px-4 py-2.5 font-medium">固定回复</th>
                   <th scope="col" className="px-4 py-2.5 font-medium">状态</th>
-                  <th scope="col" className="px-4 py-2.5 text-right font-medium" title="越小越靠前，允许重复和负数，相同值按名称排序">优先级</th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-medium" title="越大越靠前，允许重复和负数，相同值按名称排序">优先级</th>
                   <th scope="col" className="px-4 py-2.5 font-medium">操作</th>
                 </tr>
               </thead>
@@ -231,7 +237,7 @@ export default function CustomModelsPage() {
                   return (
                     <tr
                       key={c.id}
-                      className="border-b border-border/60 last:border-b-0 hover:bg-surface-subtle/60"
+                      className="border-b border-border/60 transition-colors last:border-b-0 hover:bg-surface-subtle/60"
                     >
                       <td className="px-4 py-2.5 font-medium text-ink">{c.name}</td>
                       <td className="mono px-4 py-2.5 text-ink-muted">{modelName}</td>
@@ -280,7 +286,7 @@ export default function CustomModelsPage() {
                               (e.target as HTMLInputElement).blur();
                             }
                           }}
-                          title="优先级：越小越靠前，允许重复和负数，相同值按名称排序"
+                          title="优先级：越大越靠前，允许重复和负数，相同值按名称排序"
                           aria-label={`优先级 ${c.name}`}
                         />
                       </td>

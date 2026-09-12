@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  Activity,
   ArrowDownToLine,
   ArrowRight,
   Brain,
@@ -26,8 +27,11 @@ import type {
 import { Card } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { FormattedBody } from "@/components/ui/formatted-body";
-import { cn, formatNumber, formatElapsedWithFirst } from "@/lib/utils";
+import { cn, formatNumber, formatElapsedWithFirst, elapsedParts } from "@/lib/utils";
 import { QueryErrorBanner } from "@/components/ui/query-error";
 import { openSSE } from "@/lib/sse";
 import {
@@ -216,7 +220,7 @@ export default function LogsPage() {
   return (
     <div className="space-y-4">
       {/* 计数条 */}
-      <div className="flex flex-wrap items-center gap-4 rounded-card border border-border bg-card/60 px-4 py-2.5 text-xs">
+      <div className="glass-panel flex flex-wrap items-center gap-4 rounded-card px-4 py-2.5 text-xs">
         <Counter label="运行" value={stats.running} tone="info" />
         <Counter label="成功" value={stats.success} tone="success" />
         <Counter label="失败" value={stats.failed} tone="danger" />
@@ -277,24 +281,16 @@ export default function LogsPage() {
         </Button>
       </div>
 
-      {/* Tab */}
-      <div className="flex items-center gap-1 rounded-control border border-border bg-card/60 p-0.5 text-sm">
-        {(["live", "err"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            aria-pressed={tab === t}
-            className={cn(
-              "rounded-[5px] px-3 py-1 transition-colors",
-              tab === t
-                ? "bg-primary/12 font-medium text-primary-text"
-                : "text-ink-muted hover:text-ink",
-            )}
-          >
-            {t === "live" ? "实时请求" : "错误日志"}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        aria-label="日志类型"
+        size="md"
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: "live", label: "实时请求" },
+          { value: "err", label: "错误日志" },
+        ]}
+      />
 
       {tab === "live" ? (
         <LiveTable rows={live} onPick={(r) => setTracingId(r.id)} />
@@ -303,9 +299,9 @@ export default function LogsPage() {
           <div className="flex items-center justify-between border-b border-border px-4 py-2.5 text-xs text-ink-muted">
             <div className="flex items-center gap-2">
               <span>类别</span>
-              <select
+              <Select
+                className="h-7 text-xs"
                 aria-label="错误类别"
-                className="h-7 rounded-control border border-border bg-card px-2 text-xs"
                 value={errClass}
                 onChange={(e) => setErrClass(e.target.value)}
               >
@@ -315,7 +311,7 @@ export default function LogsPage() {
                     {c}
                   </option>
                 ))}
-              </select>
+              </Select>
               {/* errors 是「当前筛选 + limit 50」的子集，不能写成「共 N 条」误导为全量计数 */}
               <span>· 已载入 {errors?.length ?? 0} 条</span>
             </div>
@@ -336,9 +332,7 @@ export default function LogsPage() {
             ) : errorsError ? (
               <QueryErrorBanner onRetry={() => refetchErrors()} />
             ) : (errors?.length ?? 0) === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-ink-muted">
-                暂无错误
-              </p>
+              <EmptyState title="暂无错误" hint="当前筛选下没有持久化错误记录" />
             ) : (
               errors!.map((e) => <ErrorRow key={e.id} e={e} />)
             )}
@@ -405,12 +399,22 @@ function useElapsedTick(active: boolean) {
 /**
  * 耗时单元格：秒级计时器收敛在单元格内部，只重渲染自身，而不是整张
  * 虚拟化表格 —— 之前 now 放在 LiveTable 顶层，每秒迫使 200 行全部重渲染。
- * 非运行中的行不启定时器，直接展示首字耗时 · 总耗时（无首字时回退纯总耗时）。
+ * 窄列（90px）放不下「首字 X · 总耗时 Y」单行，有首字时拆成两行右对齐；
+ * 无首字时回退纯总耗时单行。
  */
 function ElapsedCell({ r }: { r: RequestState }) {
   const active = r.status === "running" || r.status === "committed";
   const now = useElapsedTick(active);
-  return <>{formatElapsedWithFirst(r, now)}</>;
+  const parts = elapsedParts(r, now);
+  if (parts.kind === "first-total" || parts.kind === "running") {
+    return (
+      <div className="flex flex-col items-end leading-tight">
+        <span>{parts.kind === "running" ? "正在请求" : `首字 ${parts.first}`}</span>
+        <span>总耗时 {parts.total}</span>
+      </div>
+    );
+  }
+  return <>{parts.kind === "total" ? parts.total : "—"}</>;
 }
 
 function LiveTable({
@@ -457,9 +461,11 @@ function LiveTable({
         style={{ height: "min(480px, 60vh)" }}
       >
         {rows.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-ink-muted">
-            暂无实时请求；客户端首次发起后会立即出现
-          </div>
+          <EmptyState
+            icon={<Activity className="h-5 w-5" aria-hidden />}
+            title="暂无实时请求"
+            hint="客户端首次发起后会立即出现"
+          />
         ) : (
           <div
             style={{

@@ -56,7 +56,7 @@ services:
 
     # 资源上限 + 日志滚动, 防止 OOM 与日志撑爆磁盘。
     pids_limit: 512
-    mem_limit: 512m
+    mem_limit: 2g
     cpus: "1.0"
     logging:
       driver: json-file

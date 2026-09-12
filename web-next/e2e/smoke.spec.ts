@@ -43,7 +43,7 @@ async function mockApi(page: Page) {
   await page.route("**/api/v1/user/status", (route) => jsonResponse(route, USER_OK));
   await page.route("**/api/v1/user/login", (route) => jsonResponse(route, USER_OK));
   // 仪表盘
-  await page.route("**/api/v1/update/now-version", (route) =>
+  await page.route("**/api/v1/stats/now-version", (route) =>
     jsonResponse(route, {
       version: "0.13.0",
       client_ip_count: 42,
@@ -56,6 +56,10 @@ async function mockApi(page: Page) {
         { model: "claude-3.5", total_tokens: 50_000 },
       ],
     }),
+  );
+  // 版本看门狗轮询的轻量端点；commit 与前端注入值不可判定时按 unknown 静默
+  await page.route("**/api/v1/stats/build-info", (route) =>
+    jsonResponse(route, { version: "0.13.0", commit: "e2e", build_time: "" }),
   );
   await page.route("**/api/v1/log/errors**", (route) => jsonResponse(route, []));
   await page.route("**/api/v1/channel/list", (route) => jsonResponse(route, []));

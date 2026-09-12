@@ -13,6 +13,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BrandMark } from "@/components/ui/brand-mark";
 import { useSidebar } from "./useSidebar";
 
 interface NavItem {
@@ -51,21 +52,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       )}
     >
       {/* 品牌 */}
-      <div className="flex h-14 items-center gap-2.5 px-4">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-gradient-to-br from-[#007AFF] to-[#5856D6] text-sm font-bold text-white shadow-apple-sm">
-          N
-        </div>
-        <span
-          className={cn(
-            "truncate text-[15px] font-semibold tracking-tight text-ink",
-            collapsed && "hidden",
-          )}
-        >
-          NovaVeil
-        </span>
+      <div className={cn("flex h-14 items-center px-3.5", collapsed && "justify-center px-0")}>
+        <BrandMark size="sm" withName={!collapsed} />
       </div>
 
-      <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-2" aria-label="导航">
+      <nav className="flex-1 space-y-5 overflow-y-auto px-2.5 py-2" aria-label="导航">
         <NavGroup label="运营" items={OPERATIONS} collapsed={collapsed} onNavigate={onNavigate} />
         <NavGroup label="接入" items={ACCESS} collapsed={collapsed} onNavigate={onNavigate} />
       </nav>
@@ -82,7 +73,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           className={cn(
             // 44px 高：WCAG 2.5.5 交互目标下限
             "flex h-11 w-full items-center gap-2.5 rounded-control px-2 text-[13px] transition-all duration-150",
-            "text-ink-subtle hover:bg-ink/[0.04] hover:text-ink-muted active:scale-[0.97]",
+            "text-ink-subtle hover:bg-ink/[0.04] hover:text-ink-muted",
+            collapsed && "justify-center px-0",
           )}
         >
           {collapsed ? (
@@ -130,9 +122,9 @@ function NavGroup({
           className={({ isActive }) =>
             cn(
               "flex min-h-10 items-center gap-2.5 rounded-control px-2 text-[13px] font-medium tracking-tight transition-all duration-150",
-              "active:scale-[0.97]",
+              collapsed && "justify-center px-0",
               isActive
-                ? "bg-primary/[0.08] text-primary-text"
+                ? "bg-primary/[0.10] text-primary-text"
                 : "text-ink-muted hover:bg-ink/[0.04] hover:text-ink",
             )
           }

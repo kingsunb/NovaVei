@@ -3,13 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { BrandMark } from "@/components/ui/brand-mark";
 import { useAuth } from "@/store/auth";
 import { APIError } from "@/lib/api";
 
 /**
- * 登录页 —— NovaVeil 科幻控制台入口
- *  - 低强度网格与信号色边框
- *  - 品牌标识保持清晰，避免装饰性光球干扰表单
+ * 登录页 —— 居中磨砂卡片，品牌标识保持清晰。
  */
 export default function LoginPage() {
   const { login } = useAuth();
@@ -32,7 +31,7 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const expire = remember ? 30 * 24 * 3600 : 0;
+      const expire = remember ? 24 * 3600 : 0;
       await login(username, password, expire);
       toast.success(`欢迎回来，${username}`);
       navigate("/dashboard", { replace: true });
@@ -51,26 +50,19 @@ export default function LoginPage() {
 
   return (
     <div className="bg-gradient-subtle relative flex min-h-full items-center justify-center overflow-hidden bg-background px-4">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-gradient-to-r from-transparent via-signal/30 to-transparent"
-      />
-
       <form
         onSubmit={onSubmit}
-        className="glass-panel glass-inset-highlight w-full max-w-[380px] rounded-card p-8"
+        className="glass-panel glass-inset-highlight w-full max-w-[380px] rounded-card p-8 shadow-apple-lg"
       >
-        {/* 品牌 */}
-        <div className="mb-8 flex flex-col items-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-[16px] bg-gradient-to-br from-[#007AFF] to-[#5856D6] text-xl font-bold text-white shadow-apple-md">
-            N
-          </div>
-          <div className="text-center">
-            <h1 className="text-xl font-semibold tracking-tight text-ink">
-              NovaVeil
-            </h1>
-            <p className="mt-0.5 text-[13px] text-ink-muted">LLM API 网关控制台</p>
-          </div>
+        <div className="mb-8">
+          <BrandMark
+            size="lg"
+            withName
+            stacked
+            heading
+            caption="LLM API 网关控制台"
+            className="items-center"
+          />
         </div>
 
         <div className="space-y-4">
@@ -110,10 +102,10 @@ export default function LoginPage() {
               type="checkbox"
               checked={remember}
               onChange={(e) => setRemember(e.target.checked)}
-              aria-label="信任此设备（30 天内免登录）"
+              aria-label="信任此设备（24 小时内免登录）"
               className="h-4 w-4 rounded-md border-border/60 accent-[#007AFF]"
             />
-            信任此设备（30 天内免登录）
+            信任此设备（24 小时内免登录）
           </label>
 
           {error && (

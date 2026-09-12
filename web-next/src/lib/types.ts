@@ -398,6 +398,13 @@ export interface NowVersion {
   tokens_by_model: ModelTokenUsage[];
 }
 
+/** 后端构建元信息（轻量端点 /update/build-info，不含统计聚合）。 */
+export interface BuildInfo {
+  version: string;
+  commit: string;
+  build_time: string;
+}
+
 /** Token 趋势档位：与后端 op.ValidUsageRange 对齐。 */
 export type TokenTrendRange = "24h" | "7d" | "30d" | "1y" | "3y" | "forever";
 

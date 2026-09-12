@@ -44,7 +44,7 @@ const KEY_TEST_CONCURRENCY = 4
 // keyTestRequestTimeout 单把密钥测试的上游超时; 部分上游(含推理/排队)首 token
 // 延迟较高, 300s 与单模型测试接口对齐, 避免慢上游被误判为不可用。
 // 并发池下一把密钥的等待不会被前一把的慢上游拖垮整体。
-const keyTestRequestTimeout = 300 * time.Second
+const keyTestRequestTimeout = 60 * time.Second
 
 // testProbeClientIP 测试探针在日志流里的客户端标识: 探针没有真实来源 IP,
 // 用固定中文标记与业务流量区分。因为不走 newRequestState, 该标记不会计入

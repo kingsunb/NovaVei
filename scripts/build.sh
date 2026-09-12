@@ -153,7 +153,8 @@ docker_platform_dir() {
 build_frontend() {
     echo "Building frontend from a clean output directory"
     rm -rf static/out
-    (cd web-next && pnpm install --frozen-lockfile && VITE_APP_VERSION="${VERSION}" pnpm run build)
+    (cd web-next && pnpm install --frozen-lockfile \
+        && VITE_APP_VERSION="${VERSION}" VITE_APP_COMMIT="${COMMIT}" pnpm run build)
 }
 
 build_standard() {

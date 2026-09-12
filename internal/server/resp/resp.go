@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/gin-gonic/gin"
 )
 
@@ -25,10 +26,20 @@ func Success(c *gin.Context, data any) {
 }
 
 func Error(c *gin.Context, code int, err string) {
+	if code >= http.StatusInternalServerError {
+		log.Errorf("http %d: %s", code, err)
+		err = ErrInternalServer
+	}
 	c.AbortWithStatusJSON(code, ResponseStruct{
 		Code:    code,
 		Message: err,
 	})
+}
+
+// NoStore 禁止中间缓存保存敏感响应(密钥导出、明文查看、整库备份)。
+func NoStore(c *gin.Context) {
+	c.Header("Cache-Control", "no-store, private")
+	c.Header("Pragma", "no-cache")
 }
 
 // ErrorMustChangePassword 以 403 返回强制改密错误, 并携带机器可读标记头

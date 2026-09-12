@@ -3,6 +3,7 @@ package update
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -23,13 +24,23 @@ import (
 // 并发触发会在 os.Rename 替换环节互相竞争产生半成品状态。
 var updateMu sync.Mutex
 
+var ErrSelfUpdateDisabled = errors.New("自更新默认关闭，请设置 NOVAVEIL_ENABLE_SELF_UPDATE=true 或改用镜像升级")
+
+func selfUpdateEnabled() bool {
+	if v := os.Getenv("NOVAVEIL_DISABLE_SELF_UPDATE"); v == "1" || strings.EqualFold(v, "true") {
+		return false
+	}
+	v := os.Getenv("NOVAVEIL_ENABLE_SELF_UPDATE")
+	return v == "1" || strings.EqualFold(v, "true")
+}
+
 func UpdateCore() error {
 	if !updateMu.TryLock() {
 		return fmt.Errorf("已有更新任务正在进行中")
 	}
 	defer updateMu.Unlock()
-	if os.Getenv("NOVAVEIL_DISABLE_SELF_UPDATE") == "1" || os.Getenv("NOVAVEIL_DISABLE_SELF_UPDATE") == "true" {
-		return fmt.Errorf("容器镜像内已禁用自更新，请更新镜像")
+	if !selfUpdateEnabled() {
+		return ErrSelfUpdateDisabled
 	}
 	log.Infof("start update core")
 

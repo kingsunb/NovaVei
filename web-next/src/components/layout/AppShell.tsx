@@ -6,7 +6,7 @@ import { CommandPalette } from "./CommandPalette";
 import { Button } from "@/components/ui/button";
 
 /**
- * 应用壳：科幻控制台布局。
+ * 应用壳：磨砂玻璃控制台布局。
  * 桌面使用常驻导航，小屏切换为可关闭的抽屉，保证主区始终有完整阅读宽度。
  */
 export function AppShell({ children }: { children: ReactNode }) {
@@ -36,7 +36,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="bg-gradient-subtle flex h-full min-h-0 bg-background text-foreground">
       <div
         aria-hidden={!mobileNavOpen}
-        className={mobileNavOpen ? "fixed inset-0 z-40 bg-slate-950/45 md:hidden" : "hidden"}
+        className={mobileNavOpen ? "fixed inset-0 z-40 bg-ink/35 backdrop-blur-[2px] md:hidden" : "hidden"}
         onClick={() => setMobileNavOpen(false)}
       />
       <div
@@ -53,7 +53,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           onOpenCommand={() => setCmdkOpen(true)}
           onOpenNavigation={() => setMobileNavOpen(true)}
         />
-        <main className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-7">
+        <main className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
           <div className="mx-auto h-full w-full max-w-[1440px]">{children}</div>
         </main>
       </div>

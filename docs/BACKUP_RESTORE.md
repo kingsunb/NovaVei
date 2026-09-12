@@ -5,7 +5,7 @@ the application export is not a full disaster-recovery snapshot.
 
 ## Application export
 
-`GET /api/v1/setting/export` returns a JSON file containing channels, groups,
+`POST /api/v1/setting/export` returns a JSON file containing channels, groups,
 channel-model mappings, group items, API keys, and non-secret settings. It contains
 channel keys and API keys in plaintext.
 
@@ -18,7 +18,7 @@ Use the authenticated Web UI export/import controls when available. The equivale
 HTTP endpoints are:
 
 ```text
-GET  /api/v1/setting/export
+POST /api/v1/setting/export
 POST /api/v1/setting/import
 ```
 

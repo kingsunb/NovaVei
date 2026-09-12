@@ -5,6 +5,12 @@ import path from "node:path";
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    // 与 vite.config.ts 的 define 对齐：vitest 不读 vite.config.ts，若不注入，
+    // 模块里的 typeof 守卫会退化成空串，版本看门狗的 mismatch 分支测不到。
+    __APP_VERSION__: JSON.stringify("test-version"),
+    __APP_COMMIT__: JSON.stringify("test-commit"),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

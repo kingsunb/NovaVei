@@ -83,6 +83,26 @@ func TestSecretRotationInvalidatesTokens(t *testing.T) {
 	}
 }
 
+func TestGenerateJWTTokenCapsAtOneDay(t *testing.T) {
+	_, maxAge, err := GenerateJWTToken(30 * 24 * 3600)
+	if err != nil {
+		t.Fatalf("GenerateJWTToken: %v", err)
+	}
+	if maxAge != 24*3600 {
+		t.Fatalf("maxAge = %d, want 86400", maxAge)
+	}
+}
+
+func TestGenerateAPIKeyReturnsNonEmpty(t *testing.T) {
+	key, err := GenerateAPIKey()
+	if err != nil {
+		t.Fatalf("GenerateAPIKey: %v", err)
+	}
+	if !strings.HasPrefix(key, "sk-") || len(key) < 20 {
+		t.Fatalf("unexpected key %q", key)
+	}
+}
+
 func TestVerifyRejectsNonHMACSigningMethod(t *testing.T) {
 	// alg=none 的未签名 token 必须被拒绝
 	unsigned := "eyJhbGciOiJub25lIiwidHlwZSI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0."

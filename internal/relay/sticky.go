@@ -120,6 +120,26 @@ func clearSessionStickyByGroup(groupID int) {
 	delete(sessionStickies, groupID)
 }
 
+// PruneExpiredSessionStickies 扫描全部分组的过期粘合条目。
+func PruneExpiredSessionStickies() int {
+	routeMu.Lock()
+	defer routeMu.Unlock()
+	now := time.Now().UnixMilli()
+	removed := 0
+	for groupID, sessions := range sessionStickies {
+		for key, entry := range sessions {
+			if entry.ExpireAtUnixMilli <= now {
+				delete(sessions, key)
+				removed++
+			}
+		}
+		if len(sessions) == 0 {
+			delete(sessionStickies, groupID)
+		}
+	}
+	return removed
+}
+
 // pruneSessionStickyLocked 清理分组内已删除成员和已过期的粘合残留; 调用方必须持有锁。
 func pruneSessionStickyLocked(group model.Group) {
 	sessions := sessionStickies[group.ID]

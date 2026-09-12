@@ -2,6 +2,7 @@ package mask
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -81,4 +82,40 @@ func TestSessionStore_Delete(t *testing.T) {
 	mNew := s.GetOrCreate("sess-A")
 	p := mNew.Recall("x", "TERM")
 	assert.True(t, IsPlaceholder(p), "删除后会话重建, 仍可正常工作")
+}
+
+func TestSessionStore_EmptyKeyIsRequestLocal(t *testing.T) {
+	s := NewSessionStore()
+	m1 := s.GetOrCreate("")
+	m2 := s.GetOrCreate("")
+	assert.NotSame(t, m1, m2, "空会话键每次应返回独立 Mapping, 不得入表共享")
+	assert.Equal(t, 0, s.Len(), "空会话键不得写入持久表")
+	p1 := m1.Recall("13800138000", "PHONE")
+	_, ok := m2.Lookup(p1)
+	assert.False(t, ok, "另一空键请求不得还原本请求的占位符")
+}
+
+func TestSessionStore_NamedKeyPersistsAcrossGets(t *testing.T) {
+	s := NewSessionStore()
+	m1 := s.GetOrCreate("chat-1")
+	p1 := m1.Recall("secret", "TERM")
+	m2 := s.GetOrCreate("chat-1")
+	assert.Same(t, m1, m2)
+	p2 := m2.Recall("secret", "TERM")
+	assert.Equal(t, p1, p2, "有会话键时应跨调用复用占位符")
+	assert.Equal(t, 1, s.Len())
+}
+
+func TestSessionStore_PruneExpired(t *testing.T) {
+	s := NewSessionStore()
+	_ = s.GetOrCreate("old")
+	_ = s.GetOrCreate("fresh")
+	s.mu.Lock()
+	s.sessions["old"].lastAccess = time.Now().Add(-SessionTTL - time.Second)
+	s.mu.Unlock()
+	removed := s.PruneExpired(time.Now())
+	assert.Equal(t, 1, removed)
+	assert.Equal(t, 1, s.Len())
+	_ = s.GetOrCreate("fresh")
+	assert.Equal(t, 1, s.Len())
 }
