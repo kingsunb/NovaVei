@@ -108,7 +108,7 @@ test.describe("E2E 冒烟", () => {
     await expect(page.getByRole("heading", { level: 2 })).toContainText("总览");
     await expect(page.getByText("总请求").first()).toBeVisible();
     await expect(page.getByText("客户端 IP").first()).toBeVisible();
-    await expect(page.getByText("24h 错误").first()).toBeVisible();
+    await expect(page.getByText("错误数").first()).toBeVisible();
     await expect(page.getByText("Token 用量").first()).toBeVisible();
   });
 
