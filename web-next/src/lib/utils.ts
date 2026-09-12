@@ -74,9 +74,9 @@ export function formatDuration(
 ) {
   if (request.status === "running" || request.status === "committed") {
     const startedAt = new Date(request.started_at).getTime();
-    if (!Number.isFinite(startedAt)) return "进行中";
+    if (!Number.isFinite(startedAt)) return "正在请求";
     const elapsed = Math.max(0, now - startedAt);
-    return `进行中 · ${formatElapsed(elapsed)}`;
+    return `正在请求 · ${formatElapsed(elapsed)}`;
   }
   const milliseconds =
     request.duration_ms ??
@@ -134,9 +134,9 @@ export function formatElapsedWithFirst(
   const firstStr = formatElapsed(firstElapsedMs);
   const totalStr = formatElapsed(totalMs);
 
-  // running：与旧 formatDuration 一致，展示「进行中 · 总耗时」。
+  // running：展示「正在请求 · 总耗时」。
   if (request.status === "running") {
-    return `进行中 · ${totalStr}`;
+    return `正在请求 · ${totalStr}`;
   }
 
   // 首字已交付时展示首字 + 总耗时；首字未到（如提交前失败）只展示纯总耗时。

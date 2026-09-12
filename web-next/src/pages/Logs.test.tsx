@@ -318,7 +318,7 @@ describe("formatDuration", () => {
       duration: 0,
       duration_ms: 0,
     } as const;
-    expect(formatDuration(running, now)).toBe("进行中 · 1m30s");
+    expect(formatDuration(running, now)).toBe("正在请求 · 1m30s");
   });
 
   it("终态请求优先使用 duration_ms", () => {
@@ -332,14 +332,14 @@ describe("formatDuration", () => {
     expect(formatDuration(finished, now)).toBe("1500ms");
   });
 
-  it("started_at 非法时运行中请求仍显示进行中", () => {
+  it("started_at 非法时运行中请求仍显示正在请求", () => {
     const running = {
       status: "committed",
       started_at: "not-a-date",
       duration: 0,
       duration_ms: 0,
     } as const;
-    expect(formatDuration(running, Date.now())).toBe("进行中");
+    expect(formatDuration(running, Date.now())).toBe("正在请求");
   });
 });
 
@@ -351,7 +351,7 @@ describe("formatElapsedWithFirst", () => {
       started_at: "2024-01-01T00:00:00Z",
       duration_ms: 0,
     } as const;
-    expect(formatElapsedWithFirst(running, now)).toBe("进行中 · 1m30s");
+    expect(formatElapsedWithFirst(running, now)).toBe("正在请求 · 1m30s");
   });
 
   it("终态请求展示「首字 · 总耗时」，首字耗时为 0 时回退纯总耗时", () => {

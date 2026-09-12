@@ -69,8 +69,8 @@ const STATE_TONE: Record<string, "neutral" | "info" | "success" | "danger"> = {
 
 /** 后端状态 → 中文展示；未知状态回退原文。 */
 const STATE_LABEL: Record<string, string> = {
-  running: "进行中",
-  committed: "已提交",
+  running: "正在请求",
+  committed: "响应中",
   success: "成功",
   failed: "失败",
   canceled: "已取消",
@@ -499,6 +499,9 @@ function LiveTable({
                   </div>
                   <div role="gridcell">
                     <Pill tone={STATE_TONE[r.status] ?? "neutral"}>
+                      {(r.status === "running" || r.status === "committed") && (
+                        <Loader2 className="size-3 animate-spin" />
+                      )}
                       {STATE_LABEL[r.status] ?? r.status}
                     </Pill>
                   </div>
@@ -780,6 +783,7 @@ function TraceSheet({
           </div>
           <DialogDescription className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <Pill tone={STATE_TONE[req.status] ?? "neutral"} dot={false}>
+              {isRunning && <Loader2 className="size-3 animate-spin" />}
               {STATE_LABEL[req.status] ?? req.status}
             </Pill>
             <Pill tone="neutral" dot={false} className="mono text-[10px]">
@@ -974,18 +978,23 @@ function TraceSheet({
 }
 
 function AttemptLine({ a }: { a: AttemptRecord }) {
+  const inProgress = !a.outcome;
   const outcomeTone =
     a.outcome === "success"
       ? "success"
       : a.outcome === "failed"
         ? "danger"
-        : "neutral";
+        : inProgress
+          ? "info"
+          : "neutral";
   const outcomeLabel =
     a.outcome === "success"
       ? "成功"
       : a.outcome === "failed"
         ? "失败"
-        : "已取消";
+        : inProgress
+          ? "进行中"
+          : "已取消";
   return (
     <li className="flex flex-col gap-1.5 px-3 py-2.5 text-xs">
       <div className="flex items-center gap-2 min-w-0">
@@ -1012,6 +1021,7 @@ function AttemptLine({ a }: { a: AttemptRecord }) {
           )}
           {a.latency_ms === 0 && <span>—</span>}
           <Pill tone={outcomeTone} dot={false}>
+            {inProgress && <Loader2 className="size-3 animate-spin" />}
             {outcomeLabel}
           </Pill>
         </span>
@@ -1185,15 +1195,20 @@ function RouteMemberRow({
                   ? "success"
                   : attempt.outcome === "failed"
                     ? "danger"
-                    : "neutral"
+                    : attempt.outcome
+                      ? "neutral"
+                      : "info"
               }
               className="text-[10px]"
             >
+              {!attempt.outcome && <Loader2 className="size-3 animate-spin" />}
               {attempt.outcome === "success"
                 ? "成功"
                 : attempt.outcome === "failed"
                   ? "失败"
-                  : "已取消"}
+                  : attempt.outcome
+                    ? "已取消"
+                    : "进行中"}
             </Pill>
             {attempt.err_class && (
               <span className="text-ink-muted">· {attempt.err_class}</span>
