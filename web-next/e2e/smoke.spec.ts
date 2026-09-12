@@ -139,15 +139,19 @@ test.describe("E2E 冒烟", () => {
     await expect(page.getByText(/类别/).first()).toBeVisible();
   });
 
-  test("设置页：8 个分区可点击", async ({ page }) => {
+  test("设置页：12 个分区可点击", async ({ page }) => {
     await navTo(page, "设置");
     for (const name of [
       "外观",
       "账户",
       "系统",
-      "日志保留",
+      "代理池",
+      "Header 模板",
+      "对话留存",
+      "错误日志保留",
+      "用量保留",
       "模型测试",
-      "LLM 同步",
+      "上游模型同步",
       "备份",
       "关于",
     ]) {
