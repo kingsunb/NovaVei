@@ -46,6 +46,57 @@ interface TargetSelection {
 }
 
 // ============================================================
+// 对话本地持久化
+// ============================================================
+
+const CHAT_STORAGE_PREFIX = "novaveil:chat:";
+
+/** 为目标生成唯一的 localStorage 键。 */
+function chatStorageKey(target: TargetSelection | null): string | null {
+  if (!target) return null;
+  return target.kind === "group"
+    ? `${CHAT_STORAGE_PREFIX}group:${target.groupName}`
+    : `${CHAT_STORAGE_PREFIX}channel:${target.channelId}:${target.channelModelId}`;
+}
+
+/** 从 localStorage 加载指定目标的对话消息。 */
+function loadConversation(key: string | null): ChatMessage[] {
+  if (!key) return [];
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as ChatMessage[];
+    // 过滤掉流式中的消息（页面刷新时未完成的回复）
+    return parsed.filter((m) => !m.streaming);
+  } catch {
+    return [];
+  }
+}
+
+/** 将对话消息保存到 localStorage。 */
+function saveConversation(key: string | null, messages: ChatMessage[]): void {
+  if (!key) return;
+  try {
+    // 不保存流式中的消息
+    const hasStreaming = messages.some((m) => m.streaming);
+    if (hasStreaming) return;
+    localStorage.setItem(key, JSON.stringify(messages));
+  } catch {
+    // 存储满或禁用时静默失败
+  }
+}
+
+/** 删除指定目标的对话记录。 */
+function clearConversation(key: string | null): void {
+  if (!key) return;
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+// ============================================================
 // 流式请求工具
 // ============================================================
 
@@ -145,11 +196,34 @@ export default function ChatPage() {
   const [showKeyDialog, setShowKeyDialog] = useState(false);
 
   // --- 对话状态 ---
+  const currentStorageKey = chatStorageKey(target);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const prevStorageKeyRef = useRef<string | null>(null);
+  // refs 供切换 effect 读取最新值而不触发重渲染
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const streamingRef = useRef(streaming);
+  streamingRef.current = streaming;
+
+  // 切换目标时：保存旧对话，加载新对话
+  useEffect(() => {
+    const prevKey = prevStorageKeyRef.current;
+    const newKey = currentStorageKey;
+
+    if (prevKey !== newKey) {
+      // 保存旧目标的对话（非流式状态才保存）
+      if (prevKey && !streamingRef.current) {
+        saveConversation(prevKey, messagesRef.current);
+      }
+      // 加载新目标的对话
+      setMessages(loadConversation(newKey));
+      prevStorageKeyRef.current = newKey;
+    }
+  }, [currentStorageKey]);
 
   // --- 数据查询 ---
   const { data: groups } = useQuery({ queryKey: ["groups"], queryFn: api.listGroups });
@@ -299,6 +373,13 @@ export default function ChatPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
+  // 对话自动保存：非流式状态下将消息持久化到 localStorage
+  useEffect(() => {
+    if (!streaming) {
+      saveConversation(currentStorageKey, messages);
+    }
+  }, [currentStorageKey, messages, streaming]);
+
   // --- 目标切换 ---
   const handleTargetChange = useCallback(
     (value: string) => {
@@ -395,10 +476,11 @@ export default function ChatPage() {
     });
   }, []);
 
-  // --- 清空对话 ---
+  // --- 清空对话（含 localStorage） ---
   const handleClear = useCallback(() => {
     setMessages([]);
-  }, []);
+    clearConversation(currentStorageKey);
+  }, [currentStorageKey]);
 
   // --- 密钥创建回调 ---
   const handleKeyCreated = useCallback((created: APIKeyCreated) => {
