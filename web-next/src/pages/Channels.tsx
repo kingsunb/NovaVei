@@ -52,6 +52,7 @@ export default function ChannelsPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   // 默认按自定义排序（sort 值升序、同值按名称兜底），与渠道编辑器里的排序值联动；
   // 排序值允许重复、零值与负值，相同数值按渠道名称字母序排列。
   const [sort, setSort] = useState<Sort>("custom");
@@ -183,6 +184,16 @@ export default function ChannelsPage() {
     sortMut.mutate({ id: c.id, sort: next });
   }
 
+  // 收集所有渠道标签，去重并按字母序排列
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of data ?? []) {
+      if (c.type === "custom") continue;
+      for (const t of c.tags ?? []) set.add(t);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [data]);
+
   const rows = useMemo(() => {
     const list = data ?? [];
     return list
@@ -190,6 +201,11 @@ export default function ChannelsPage() {
       .filter((c) => c.type !== "custom")
       .filter((c) =>
         filter === "all" ? true : filter === "on" ? c.enabled : !c.enabled,
+      )
+      .filter((c) =>
+        selectedTags.length === 0
+          ? true
+          : selectedTags.every((t) => (c.tags ?? []).includes(t)),
       )
       .filter((c) =>
         search
@@ -206,7 +222,7 @@ export default function ChannelsPage() {
             a.name.localeCompare(b.name);
         return (b.models?.length ?? 0) - (a.models?.length ?? 0);
       });
-  }, [data, search, filter, sort]);
+  }, [data, search, filter, sort, selectedTags]);
 
   async function onExport() {
     try {
@@ -356,6 +372,42 @@ export default function ChannelsPage() {
           </Button>
         </div>
       </div>
+
+      {/* 标签筛选：仅当存在标签时显示 */}
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-ink-muted">标签筛选：</span>
+          {allTags.map((t) => {
+            const active = selectedTags.includes(t);
+            return (
+              <button
+                key={t}
+                onClick={() =>
+                  setSelectedTags((prev) =>
+                    active ? prev.filter((x) => x !== t) : [...prev, t],
+                  )
+                }
+                className={cn(
+                  "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                  active
+                    ? "border-primary/30 bg-primary/15 font-medium text-primary-text"
+                    : "border-border bg-card/60 text-ink-muted hover:text-ink",
+                )}
+              >
+                {t}
+              </button>
+            );
+          })}
+          {selectedTags.length > 0 && (
+            <button
+              onClick={() => setSelectedTags([])}
+              className="ml-1 text-xs text-ink-muted underline hover:text-ink"
+            >
+              清除筛选
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 卡片网格 */}
       {isLoading ? (
