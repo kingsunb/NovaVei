@@ -9,7 +9,6 @@
 - 渠道导出、密钥明文、整库导出改为 POST，并禁止缓存；GET 不再返回凭据
 - 管理写操作在带登录 cookie 时必须提供 Origin/Referer
 - 登出轮换 JWT 密钥；登录有效期上限改为 24 小时
-- 上游密钥与 API Key 在数据目录用 `secrets.key` 加密存放
 - 自更新改为显式开启（`NOVAVEIL_ENABLE_SELF_UPDATE=true`）
 - 管理端对话走 cookie 会话，不再把 API Key 明文拉进浏览器
 - 增加 CSP；二进制默认监听 `127.0.0.1`

@@ -61,17 +61,9 @@ func ChannelCreate(channel *model.Channel, ctx context.Context) error {
 			return fmt.Errorf("渠道模型名称不能为空")
 		}
 	}
-	plainKey := channel.Key
-	plainKeys := cloneChannelKeys(channel.Keys)
-	sealed := sealChannelSecrets(*channel)
-	sealed.Models = channel.Models
-	if err := db.GetDB().WithContext(ctx).Create(&sealed).Error; err != nil {
+	if err := db.GetDB().WithContext(ctx).Create(channel).Error; err != nil {
 		return err
 	}
-	channel.ID = sealed.ID
-	channel.Models = sealed.Models
-	channel.Key = plainKey
-	channel.Keys = plainKeys
 	channelCache.Set(channel.ID, cacheableChannel(*channel))
 	for _, channelModel := range channel.Models {
 		channelModelCache.Set(channelModel.ID, channelModel)
@@ -185,7 +177,7 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 	}
 	if req.Key != nil {
 		selectFields = append(selectFields, "key")
-		updates.Key = EncryptSecret(*req.Key)
+		updates.Key = *req.Key
 	}
 	if req.FixedReply != nil {
 		selectFields = append(selectFields, "fixed_reply")
@@ -220,11 +212,7 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 			return nil, err
 		}
 		selectFields = append(selectFields, "keys")
-		sealedKeys := cloneChannelKeys(keys)
-		for i := range sealedKeys {
-			sealedKeys[i].Key = EncryptSecret(sealedKeys[i].Key)
-		}
-		updates.Keys = sealedKeys
+		updates.Keys = keys
 	}
 	if req.Proxy != nil {
 		selectFields = append(selectFields, "proxy")
@@ -332,7 +320,6 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 		return nil, err
 	}
 
-	revealChannelSecrets(&channel)
 	channelCache.Set(channel.ID, cacheableChannel(channel))
 	if req.Models != nil {
 		currentModelsByID := make(map[int]model.ChannelModel, len(currentModels))
@@ -460,7 +447,6 @@ func channelRefreshCache(ctx context.Context) error {
 	channelMap := make(map[int]model.Channel, len(channels))
 	for _, channel := range channels {
 		channel.Models = nil
-		revealChannelSecrets(&channel)
 		channelMap[channel.ID] = cacheableChannel(channel)
 	}
 	channelModelMap := make(map[int]model.ChannelModel, len(channelModels))
