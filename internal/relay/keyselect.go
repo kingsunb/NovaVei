@@ -122,7 +122,7 @@ func effectiveChannelForKey(channel model.Channel, selected model.ChannelKey) (m
 	// Runtime 生效副本只暴露本次选中的单一凭据: buildOutbound/conversionMiddleware 都通过
 	// PrimaryKey() 读取认证, 若保留原 Keys 列表会永远优先拿 Keys[0], 使轮询选中的 Key 失效。
 	effective.Keys = nil
-	if effective.ChannelProxy == nil || !strings.Contains(*effective.ChannelProxy, "{account}") {
+	if effective.ChannelProxy == nil || !strings.Contains(*effective.ChannelProxy, model.AccountPlaceholder) {
 		return effective, nil
 	}
 	resolvedProxy, err := helper.ResolveProxyTemplate(*effective.ChannelProxy, helper.AccountAliasFor(channel.ID, selected.ID))

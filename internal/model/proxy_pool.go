@@ -16,3 +16,12 @@ const (
 	MaxProxyNameLen = 100
 	MaxProxyURLLen  = 2048
 )
+
+// AccountPlaceholder 渠道专属代理模板中的账号占位符, 使用某把 Key 时替换为该 Key 的生成别名。
+// 代理池条目最终会作为渠道代理使用, 因此代理池同样支持该占位符。
+const AccountPlaceholder = "{account}"
+
+// AccountPlaceholderEscape 是 AccountPlaceholder 在 URL 中的等价百分号转义形式:
+// { 与 } 不在 net/url 允许的 userinfo 字符集内, 必须先按百分号转义占位符才能通过 url.Parse;
+// 解析完成后 User.Username() 返回的是解码还原的字面占位符, 再做编程式替换。
+const AccountPlaceholderEscape = "%7Baccount%7D"

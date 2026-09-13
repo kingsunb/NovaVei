@@ -12,20 +12,12 @@ import (
 	"github.com/kingsunb/NovaVeil/internal/model"
 )
 
-// accountPlaceholder 渠道专属代理模板中的账号占位符, 使用某把 Key 时替换为该 Key 的生成别名。
-const accountPlaceholder = "{account}"
-
 // accountAliasHexLen 生成别名的长度: 8 位 hex。
 const accountAliasHexLen = 8
 
 // errProxyTemplateInvalid 代理解析失败的固定哨兵, 不透出模板原文或底层 URL 错误,
 // 防止 userinfo 中的凭据泄漏到管理端响应。
 var errProxyTemplateInvalid = errors.New("proxy template invalid")
-
-// accountPlaceholderEscape 是 {account} 在 URL 中的等价转义形式:
-// { 与 } 不在 net/url 允许的 userinfo 字符集内, 必须先按百分号转义占位符才能通过 url.Parse;
-// 解析完成后 User.Username() 返回的是解码还原的字面占位符, 再做编程式替换。
-const accountPlaceholderEscape = "%7Baccount%7D"
 
 // ResolveProxyTemplate 解析渠道专属代理模板, 把 userinfo 用户名中的 {account} 占位符
 // 替换为指定 Key 的生效别名后返回重建的 URL。
@@ -34,16 +26,16 @@ const accountPlaceholderEscape = "%7Baccount%7D"
 // 禁止任何形式的裸字符串拼接。密码段不参与替换; 模板不含占位符或无 userinfo 时原样返回解析结果。
 func ResolveProxyTemplate(template, account string) (*url.URL, error) {
 	trimmed := strings.TrimSpace(template)
-	prepared := strings.ReplaceAll(trimmed, accountPlaceholder, accountPlaceholderEscape)
+	prepared := strings.ReplaceAll(trimmed, model.AccountPlaceholder, model.AccountPlaceholderEscape)
 	parsed, err := url.Parse(prepared)
 	if err != nil {
 		return nil, fmt.Errorf("invalid proxy template: %w", err)
 	}
 	// 占位符只按 userinfo 语义处理: 无 userinfo 或用户名不含占位符时原样返回。
-	if parsed.User == nil || !strings.Contains(parsed.User.Username(), accountPlaceholder) {
+	if parsed.User == nil || !strings.Contains(parsed.User.Username(), model.AccountPlaceholder) {
 		return parsed, nil
 	}
-	username := strings.ReplaceAll(parsed.User.Username(), accountPlaceholder, account)
+	username := strings.ReplaceAll(parsed.User.Username(), model.AccountPlaceholder, account)
 	password, hasPassword := parsed.User.Password()
 	if hasPassword {
 		parsed.User = url.UserPassword(username, password)
@@ -71,7 +63,7 @@ func AccountAliasFor(channelID int, keyID string) string {
 // 否则视为旧式单 Key(空 keyID), 与转发路径取同一别名, 预览与实际转发行为一致。
 // 渠道未配置代理模板或模板不含占位符时原样返回 nil。
 func ResolveChannelProxyTemplate(channel *model.Channel) error {
-	if channel.ChannelProxy == nil || !strings.Contains(*channel.ChannelProxy, accountPlaceholder) {
+	if channel.ChannelProxy == nil || !strings.Contains(*channel.ChannelProxy, model.AccountPlaceholder) {
 		return nil
 	}
 	var keyID string

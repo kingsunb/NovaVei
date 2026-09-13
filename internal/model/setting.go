@@ -378,7 +378,11 @@ func validateProxyPool(value string) error {
 		if len(entry.URL) > MaxProxyURLLen {
 			return fmt.Errorf("代理条目 %s 的地址过长(最多 %d 字符)", name, MaxProxyURLLen)
 		}
-		parsedURL, err := url.Parse(entry.URL)
+		// 代理池条目最终作为渠道代理使用, 同样支持 {account} 占位符。{ 与 } 不在 net/url
+		// 允许的 userinfo 字符集内, 需先按百分号转义占位符才能通过 url.Parse; 转义方式与
+		// helper.ResolveProxyTemplate 一致, 校验只验可解析, 占位符替换仍在转发时完成。
+		escaped := strings.ReplaceAll(entry.URL, AccountPlaceholder, AccountPlaceholderEscape)
+		parsedURL, err := url.Parse(escaped)
 		if err != nil {
 			return fmt.Errorf("代理条目 %s 的地址无效: %w", name, err)
 		}
