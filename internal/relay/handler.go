@@ -135,12 +135,14 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 		allCooldownClears := 0                         // 全冷却自动清除并重试的累计次数, 用于线性退避间隔计算。
 		var hops []refHop                              // 当轮引用链: 提升到循环外供 panic 兜底读取当轮占用, 每轮选路成功后重新赋值。
 		var failedIdx int                              // 引用链解析失败跳下标(仅当轮有效), 与 hops 一起提升以便用普通赋值接收。
+		var lifecycle *roundLifecycle                  // 当轮生命周期: 提升到循环外供 panic 兜底释放上游响应与并发槽位。
 
 		// panic 兜底: gin 会 recover 该请求, 但当轮引用链若已持有探测候选占用或半开标记而不归还,
 		// pickGroupItem 会因候选占用永久返回空、claimHalfOpenLocked 拒绝新半开, 整组钉死到重启。
 		// 只做幂等的占用归还(不动紧急并发计数), 已定论轮次为无操作。
 		defer func() {
 			if r := recover(); r != nil {
+				lifecycle.Stop()
 				releaseRefChainProbeHolds(hops)
 				panic(r)
 			}
@@ -359,7 +361,7 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 					return
 				}
 				roundCtx, cancelRound := context.WithCancelCause(ctx)
-				lifecycle := newRoundLifecycle(cancelRound)
+				lifecycle = newRoundLifecycle(cancelRound)
 				request.startRound(lifecycle.Stop, RoundTarget{
 					MemberID:     item.ID,
 					ChannelID:    channel.ID,
@@ -407,7 +409,7 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 			// 为本轮上游调用建立独立取消入口并登记当前目标。
 			// 带原因的取消用于区分成员级响应超时与人工中止: 人工中止原因为 context.Canceled, 超时为 errMemberResponseTimeout。
 			roundCtx, cancelRound := context.WithCancelCause(ctx)
-			lifecycle := newRoundLifecycle(cancelRound)
+			lifecycle = newRoundLifecycle(cancelRound)
 			modelLimit, _ := lookupModelLimit(channel.ModelLimits, channelModel.Name)
 			request.startRound(lifecycle.Stop, RoundTarget{
 				MemberID:      item.ID,

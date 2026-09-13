@@ -64,8 +64,12 @@ func channelKeyCooling(channelID int, keyID string) bool {
 	if time.Now().Before(deadline) {
 		return true
 	}
+	// 到期后在写锁下重新检查, 避免 TOCTOU: 另一个 goroutine 可能在我们
+	// RLock→Lock 之间通过 markChannelKeyCooldown 写入了新的未来 deadline。
 	keyCooldownsMu.Lock()
-	delete(keyCooldowns, ref)
+	if d, ok := keyCooldowns[ref]; ok && !time.Now().Before(d) {
+		delete(keyCooldowns, ref)
+	}
 	keyCooldownsMu.Unlock()
 	return false
 }
