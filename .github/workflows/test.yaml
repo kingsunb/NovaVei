@@ -1,6 +1,6 @@
 name: test
 
-# 轻量后端测试——每次 push/PR 跑 Go 单元测试, ~3 分钟完成。
+# 轻量后端测试——每次 push/PR 跑 Go 单元测试, ~5 分钟完成。
 # 前端测试由 web-next-ci.yaml 负责, Docker 镜像发布由 docker-publish.yaml 负责。
 # 完整安全审计 (Trivy + SBOM + 多架构) 见 build.yaml (手动触发)。
 
@@ -37,11 +37,29 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0 (peeled commit)
+        with:
+          version: '11.21.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22.19.0'
+          cache: pnpm
+          cache-dependency-path: web-next/pnpm-lock.yaml
+
       - name: Setup Go
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version: '1.26.7'
           cache: true
+
+      - name: Build frontend (for go:embed)
+        working-directory: web-next
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
 
       - name: Test Go packages
         run: |
