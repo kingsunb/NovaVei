@@ -112,10 +112,13 @@ export default function GroupsPage() {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["groups"],
     queryFn: api.listGroups,
+    // 兜底轮询（移植自 NovaVeil_api）：保存后的 refetch 延迟/丢失时最迟 30s 自愈。
+    refetchInterval: 30_000,
   });
   const { data: channels } = useQuery({
     queryKey: ["channels"],
     queryFn: api.listChannels,
+    refetchInterval: 30_000,
   });
   const channelById = useMemo(
     () => new Map((channels ?? []).map((channel) => [channel.id, channel])),
@@ -135,7 +138,11 @@ export default function GroupsPage() {
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => api.deleteGroup(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      // 先从本地缓存移除该卡片再后台校对，删除反馈即时可见。
+      qc.setQueryData<Group[]>(["groups"], (prev) =>
+        prev ? prev.filter((g) => g.id !== id) : prev,
+      );
       toast.success("已删除");
       setPendingDelete(null);
       qc.invalidateQueries({ queryKey: ["groups"] });
@@ -143,15 +150,44 @@ export default function GroupsPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // 自定义展示顺序持久化：按目标全量顺序重排 display_order（1..N），只提交变化的分组
+  // 自定义展示顺序持久化：按目标全量顺序重排 display_order（1..N），只提交变化的分组。
+  // 乐观更新：本地立即按后端 GroupList 同款规则重排（有 display_order 者在前按值
+  // 升序，其余按名称），失败回滚；onSettled 的 invalidate 负责与后端最终对齐。
   const reorderMut = useMutation({
     mutationFn: async (updates: { id: number; display_order: number }[]) => {
       await Promise.all(
         updates.map((u) => api.updateGroup({ id: u.id, display_order: u.display_order })),
       );
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["groups"] }),
-    onError: (e: Error) => toast.error(e.message || "保存顺序失败"),
+    onMutate: async (updates) => {
+      await qc.cancelQueries({ queryKey: ["groups"] });
+      const prev = qc.getQueryData<Group[]>(["groups"]);
+      if (prev) {
+        const byId = new Map(updates.map((u) => [u.id, u.display_order]));
+        qc.setQueryData<Group[]>(
+          ["groups"],
+          prev
+            .map((g) =>
+              byId.has(g.id) ? { ...g, display_order: byId.get(g.id) } : g,
+            )
+            .sort((a, b) => {
+              const oa = a.display_order ?? 0;
+              const ob = b.display_order ?? 0;
+              const orderedA = oa !== 0;
+              const orderedB = ob !== 0;
+              if (orderedA !== orderedB) return orderedA ? -1 : 1;
+              if (orderedA && orderedB && oa !== ob) return oa - ob;
+              return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+            }),
+        );
+      }
+      return { prev };
+    },
+    onError: (e: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["groups"], ctx.prev);
+      toast.error(e.message || "保存顺序失败");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["groups"] }),
   });
 
   function moveCustom(g: Group, dir: -1 | 1) {
@@ -697,10 +733,12 @@ function GroupEditor({
         });
         // 新成员在创建请求时 id 都是 0；创建成功后默认把第一成员设为
         // 手动模式当前成员，避免新建的 manual 分组没有可路由成员。
+        // setActive 的响应包含已生效的 active_item_id，作为最终实体返回。
+        let latest = created;
         if (mode === "manual" && created.items?.[0]?.id) {
-          await api.setActiveGroupItem(created.id, created.items[0].id);
+          latest = await api.setActiveGroupItem(created.id, created.items[0].id);
         }
-        return created;
+        return latest;
       }
       const diff = buildMemberDiff();
       // 仅向 patch 传递本次实际修改的 relay_config 字段；前端默认 0/undefined
@@ -719,7 +757,7 @@ function GroupEditor({
           relayUpdates[key] = relayConfig[key];
         }
       }
-      const updated = await api.updateGroup({
+      let latest = await api.updateGroup({
         id: group!.id,
         name,
         mode,
@@ -738,19 +776,30 @@ function GroupEditor({
           activeItemId > 0 &&
           draftItems.some((item) => item.id === activeItemId);
         if (activeStillExists) {
-          await api.setActiveGroupItem(group!.id, activeItemId);
+          latest = await api.setActiveGroupItem(group!.id, activeItemId);
         } else {
           const fallback = draftItems.find((item) => item.id > 0);
           if (fallback && fallback.id) {
-            await api.setActiveGroupItem(group!.id, fallback.id);
+            latest = await api.setActiveGroupItem(group!.id, fallback.id);
           } else {
-            await api.setActiveGroupItem(group!.id, null);
+            latest = await api.setActiveGroupItem(group!.id, null);
           }
         }
       }
-      return updated;
+      return latest;
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      // 保存响应即最新实体（含成员与 active_item_id）：直接写回列表缓存，
+      // 界面即时更新；invalidate 触发的 refetch 仅作后台一致性兜底。
+      if (saved && saved.id > 0) {
+        qc.setQueryData<Group[]>(["groups"], (prev) =>
+          prev
+            ? prev.some((g) => g.id === saved.id)
+              ? prev.map((g) => (g.id === saved.id ? saved : g))
+              : [...prev, saved]
+            : [saved],
+        );
+      }
       toast.success(isNew ? "已创建" : "已保存");
       onSaved();
     },

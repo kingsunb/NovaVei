@@ -568,69 +568,83 @@ function isTokenTrendPoint(item: unknown): item is TokenTrendPoint {
   );
 }
 
+/**
+ * normalizeChannelOne 单渠道归一化：补齐后端 omitempty 字段的前端默认值。
+ * 列表与 create/update 接口共用，保证保存响应写回缓存时与列表数据同形。
+ */
+export function normalizeChannelOne(raw: unknown): Channel | null {
+  if (!raw || typeof raw !== "object") return null;
+  const channel = raw as Record<string, unknown>;
+  return {
+    ...channel,
+    key: typeof channel.key === "string" ? channel.key : "",
+    fixed_reply:
+      typeof channel.fixed_reply === "string" ? channel.fixed_reply : "",
+    keys: Array.isArray(channel.keys) ? channel.keys : [],
+    models: Array.isArray(channel.models) ? channel.models : [],
+    tags: Array.isArray(channel.tags) ? channel.tags : [],
+    custom_header: Array.isArray(channel.custom_header)
+      ? channel.custom_header
+      : [],
+    model_limits:
+      channel.model_limits && typeof channel.model_limits === "object"
+        ? channel.model_limits
+        : {},
+    rate_limit_rpm:
+      typeof channel.rate_limit_rpm === "number" ? channel.rate_limit_rpm : 0,
+    max_concurrent:
+      typeof channel.max_concurrent === "number" ? channel.max_concurrent : 0,
+    sort: typeof channel.sort === "number" ? channel.sort : 0,
+    opencode_compat:
+      typeof channel.opencode_compat === "boolean"
+        ? channel.opencode_compat
+        : false,
+  } as unknown as Channel;
+}
+
 function normalizeChannels(raw: unknown): Channel[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const channel = item as Record<string, unknown>;
-    return [
-      {
-        ...channel,
-        key: typeof channel.key === "string" ? channel.key : "",
-        fixed_reply:
-          typeof channel.fixed_reply === "string" ? channel.fixed_reply : "",
-        keys: Array.isArray(channel.keys) ? channel.keys : [],
-        models: Array.isArray(channel.models) ? channel.models : [],
-        tags: Array.isArray(channel.tags) ? channel.tags : [],
-        custom_header: Array.isArray(channel.custom_header)
-          ? channel.custom_header
-          : [],
-        model_limits:
-          channel.model_limits && typeof channel.model_limits === "object"
-            ? channel.model_limits
-            : {},
-        rate_limit_rpm:
-          typeof channel.rate_limit_rpm === "number" ? channel.rate_limit_rpm : 0,
-        max_concurrent:
-          typeof channel.max_concurrent === "number" ? channel.max_concurrent : 0,
-        sort: typeof channel.sort === "number" ? channel.sort : 0,
-        opencode_compat:
-          typeof channel.opencode_compat === "boolean"
-            ? channel.opencode_compat
-            : false,
-      } as unknown as Channel,
-    ];
+    const normalized = normalizeChannelOne(item);
+    return normalized ? [normalized] : [];
   });
+}
+
+/**
+ * normalizeGroupOne 单分组归一化：items 补 client_uid（编辑器草稿的稳定标识）。
+ * 列表与 create/update/active 接口共用，保证保存响应写回缓存时与列表数据同形。
+ */
+export function normalizeGroupOne(raw: unknown): Group | null {
+  if (!raw || typeof raw !== "object") return null;
+  const group = raw as Record<string, unknown>;
+  const items = Array.isArray(group.items) ? group.items : [];
+  return {
+    ...group,
+    items: items.flatMap((rawItem, index) => {
+      if (!rawItem || typeof rawItem !== "object") return [];
+      const groupItem = rawItem as Record<string, unknown>;
+      const id = typeof groupItem.id === "number" ? groupItem.id : 0;
+      return [
+        {
+          ...groupItem,
+          // 仅供编辑器本地识别；saved:id 稳定，new:* 避免多个 id=0 碰撞。
+          client_uid:
+            typeof groupItem.client_uid === "string"
+              ? groupItem.client_uid
+              : id > 0
+                ? `saved:${id}`
+                : `server:${index}`,
+        },
+      ];
+    }),
+  } as unknown as Group;
 }
 
 function normalizeGroups(raw: unknown): Group[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const group = item as Record<string, unknown>;
-    const items = Array.isArray(group.items) ? group.items : [];
-    return [
-      {
-        ...group,
-        items: items.flatMap((rawItem, index) => {
-          if (!rawItem || typeof rawItem !== "object") return [];
-          const groupItem = rawItem as Record<string, unknown>;
-          const id = typeof groupItem.id === "number" ? groupItem.id : 0;
-          return [
-            {
-              ...groupItem,
-              // 仅供编辑器本地识别；saved:id 稳定，new:* 避免多个 id=0 碰撞。
-              client_uid:
-                typeof groupItem.client_uid === "string"
-                  ? groupItem.client_uid
-                  : id > 0
-                    ? `saved:${id}`
-                    : `server:${index}`,
-            },
-          ];
-        }),
-      } as unknown as Group,
-    ];
+    const normalized = normalizeGroupOne(item);
+    return normalized ? [normalized] : [];
   });
 }
 
@@ -732,10 +746,22 @@ export const api = {
     const raw = await http<unknown>("/channel/list");
     return normalizeChannels(raw);
   },
-  createChannel: (body: Omit<Channel, "id">) =>
-    http<Channel>("/channel/create", { method: "POST", body: JSON.stringify(body) }),
-  updateChannel: (req: ChannelUpdateRequest) =>
-    http<Channel>("/channel/update", { method: "POST", body: JSON.stringify(req) }),
+  // 保存接口返回后端刷新后的完整实体（已归一化）：调用方直接写回 React Query
+  // 缓存即可即时更新界面，无需等列表 refetch 二次往返（弱网/长链路下延迟明显）。
+  createChannel: async (body: Omit<Channel, "id">) =>
+    normalizeChannelOne(
+      await http<unknown>("/channel/create", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    ) as Channel,
+  updateChannel: async (req: ChannelUpdateRequest) =>
+    normalizeChannelOne(
+      await http<unknown>("/channel/update", {
+        method: "POST",
+        body: JSON.stringify(req),
+      }),
+    ) as Channel,
   enableChannel: (id: number, enabled: boolean) =>
     http<null>("/channel/enable", {
       method: "POST",
@@ -850,15 +876,28 @@ export const api = {
         typeof (item as GroupTestResult).channel_name === "string",
     );
   },
-  createGroup: (body: Omit<Group, "id">) =>
-    http<Group>("/group/create", { method: "POST", body: JSON.stringify(body) }),
-  updateGroup: (req: GroupUpdateRequest) =>
-    http<Group>("/group/update", { method: "POST", body: JSON.stringify(req) }),
-  setActiveGroupItem: (id: number, itemId: number | null) =>
-    http<Group>(`/group/active/${id}`, {
-      method: "POST",
-      body: JSON.stringify({ item_id: itemId ?? 0 }),
-    }),
+  // 同渠道：保存/设当前成员的响应即最新分组实体，归一化后供调用方写回缓存。
+  createGroup: async (body: Omit<Group, "id">) =>
+    normalizeGroupOne(
+      await http<unknown>("/group/create", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    ) as Group,
+  updateGroup: async (req: GroupUpdateRequest) =>
+    normalizeGroupOne(
+      await http<unknown>("/group/update", {
+        method: "POST",
+        body: JSON.stringify(req),
+      }),
+    ) as Group,
+  setActiveGroupItem: async (id: number, itemId: number | null) =>
+    normalizeGroupOne(
+      await http<unknown>(`/group/active/${id}`, {
+        method: "POST",
+        body: JSON.stringify({ item_id: itemId ?? 0 }),
+      }),
+    ) as Group,
   deleteGroup: (id: number) =>
     http<null>(`/group/delete/${id}`, { method: "DELETE" }),
   clearGroupCooldown: async (id: number) => {

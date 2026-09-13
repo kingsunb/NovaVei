@@ -258,7 +258,21 @@ export function ChannelEditor({
       isNew
         ? api.createChannel(d as Omit<Channel, "id">)
         : api.updateChannel(buildChannelUpdateRequest(channel as Channel, d)),
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      // 保存响应即后端刷新后的最新实体：直接替换/追加进列表缓存，
+      // 界面立即反映改动，不必等 invalidate 触发的 refetch 二次往返
+      // （移动端经代理/CDN/隧道访问时该往返可感知地慢）。refetch 仅兜底。
+      if (saved && saved.id > 0) {
+        qc.setQueryData<Channel[]>(["channels"], (prev) =>
+          isNew
+            ? prev
+              ? [...prev, saved]
+              : [saved]
+            : prev
+              ? prev.map((c) => (c.id === saved.id ? saved : c))
+              : prev,
+        );
+      }
       toast.success(isNew ? "已创建" : "已保存");
       qc.invalidateQueries({ queryKey: ["channels"] });
       onSaved();

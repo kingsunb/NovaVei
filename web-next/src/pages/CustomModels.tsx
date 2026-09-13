@@ -33,6 +33,7 @@ import { Select } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SearchField } from "@/components/ui/search-field";
 import { PageToolbar } from "@/components/ui/page-toolbar";
+import { PriorityInput } from "@/components/ui/priority-input";
 import { ViewToggle } from "@/components/ui/view-toggle";
 import { useViewMode } from "@/lib/use-view-mode";
 
@@ -49,12 +50,12 @@ export default function CustomModelsPage() {
   // 优先级允许重复、零值与负值，相同数值按渠道名称字母序排列。
   const [sort, setSort] = useState<Sort>("custom");
   const [viewMode, setViewMode] = useViewMode("nv-custom-view", "list");
-  // 优先级行内编辑草稿: 仅在用户正在输入时持有该行的文本值, 提交或失焦后清除。
-  const [sortDraft, setSortDraft] = useState<Record<number, string>>({});
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["channels"],
     queryFn: api.listChannels,
+    // 兜底轮询（移植自 NovaVeil_api）：保存后的 refetch 延迟/丢失时最迟 30s 自愈。
+    refetchInterval: 30_000,
   });
   const rows = useMemo(() => {
     const list = (data ?? []).filter((c) => c.type === "custom");
@@ -76,57 +77,7 @@ export default function CustomModelsPage() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["channels"] });
 
-  // 优先级行内编辑: 乐观更新本地缓存, 失败回滚并恢复输入框为服务端值。
-  const sortMut = useMutation({
-    mutationFn: ({ id, sort }: { id: number; sort: number }) =>
-      api.updateChannel({ id, sort }),
-    onMutate: async ({ id, sort }) => {
-      await qc.cancelQueries({ queryKey: ["channels"] });
-      const prev = qc.getQueryData<Channel[]>(["channels"]);
-      if (prev) {
-        qc.setQueryData<Channel[]>(
-          ["channels"],
-          prev.map((c) => (c.id === id ? { ...c, sort } : c)),
-        );
-      }
-      return { prev };
-    },
-    onError: (err, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(["channels"], ctx.prev);
-      toast.error(err.message);
-    },
-    onSettled: (_d, _e, vars) => {
-      setSortDraft((d) => {
-        const next = { ...d };
-        delete next[vars.id];
-        return next;
-      });
-      qc.invalidateQueries({ queryKey: ["channels"] });
-    },
-  });
-
-  function commitSort(c: Channel, raw: string) {
-    const trimmed = raw.trim();
-    // 空输入或非数字: 不提交, 清除草稿回退显示服务端值。
-    if (trimmed === "" || !/^-?\d+$/.test(trimmed)) {
-      setSortDraft((d) => {
-        const next = { ...d };
-        delete next[c.id];
-        return next;
-      });
-      return;
-    }
-    const next = parseInt(trimmed, 10);
-    if (next === (c.sort ?? 0)) {
-      setSortDraft((d) => {
-        const n = { ...d };
-        delete n[c.id];
-        return n;
-      });
-      return;
-    }
-    sortMut.mutate({ id: c.id, sort: next });
-  }
+  // 优先级行内编辑已抽到 <PriorityInput />（components/ui/priority-input.tsx）。
 
   const enableMut = useMutation({
     mutationFn: (input: { id: number; enabled: boolean }) =>
@@ -270,24 +221,9 @@ export default function CustomModelsPage() {
                         onKeyDown={(e) => e.stopPropagation()}
                         className="cursor-text whitespace-nowrap px-4 py-2.5 text-right"
                       >
-                        <input
-                          type="number"
-                          step="1"
-                          className="no-spin h-7 w-24 rounded-control border border-border bg-card px-2 text-right text-sm text-ink"
-                          value={sortDraft[c.id] ?? String(c.sort ?? 0)}
-                          disabled={sortMut.isPending && sortMut.variables?.id === c.id}
-                          onChange={(e) =>
-                            setSortDraft((d) => ({ ...d, [c.id]: e.target.value }))
-                          }
-                          onBlur={(e) => commitSort(c, e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              (e.target as HTMLInputElement).blur();
-                            }
-                          }}
-                          title="优先级：越大越靠前，允许重复和负数，相同值按名称排序"
-                          aria-label={`优先级 ${c.name}`}
+                        <PriorityInput
+                          channel={c}
+                          inputClassName="h-7 w-24 rounded-control border border-border bg-card px-2 text-right text-sm text-ink"
                         />
                       </td>
                       <td className="px-4 py-2.5">
@@ -378,23 +314,9 @@ export default function CustomModelsPage() {
                   </div>
                   <div className="flex items-center gap-2 text-xs">
                     <span className="shrink-0 text-ink-muted">优先级</span>
-                    <input
-                      type="number"
-                      step="1"
-                      className="no-spin h-7 w-20 rounded-control border border-border bg-card px-2 text-right text-sm text-ink"
-                      value={sortDraft[c.id] ?? String(c.sort ?? 0)}
-                      disabled={sortMut.isPending && sortMut.variables?.id === c.id}
-                      onChange={(e) =>
-                        setSortDraft((d) => ({ ...d, [c.id]: e.target.value }))
-                      }
-                      onBlur={(e) => commitSort(c, e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          (e.target as HTMLInputElement).blur();
-                        }
-                      }}
-                      aria-label={`优先级 ${c.name}`}
+                    <PriorityInput
+                      channel={c}
+                      inputClassName="h-7 w-20 rounded-control border border-border bg-card px-2 text-right text-sm text-ink"
                     />
                   </div>
                   <div className="flex items-center gap-1 pt-1">
@@ -491,6 +413,7 @@ function CustomModelEditor({
   onSaved: () => void;
 }) {
   const isNew = !channel || channel === "new";
+  const qc = useQueryClient();
   const [name, setName] = useState("");
   const [modelName, setModelName] = useState("");
   const [reply, setReply] = useState("");
@@ -540,7 +463,20 @@ function CustomModelEditor({
         fixed_reply: reply,
       });
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      // 保存响应即最新实体：直接替换/追加进列表缓存，界面即时更新；
+      // refetch 由 onSaved 的 invalidate 兜底。
+      if (saved && saved.id > 0) {
+        qc.setQueryData<Channel[]>(["channels"], (prev) =>
+          isNew
+            ? prev
+              ? [...prev, saved]
+              : [saved]
+            : prev
+              ? prev.map((c) => (c.id === saved.id ? saved : c))
+              : prev,
+        );
+      }
       toast.success(isNew ? "已创建" : "已保存");
       onSaved();
     },

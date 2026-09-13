@@ -234,6 +234,8 @@ function SystemSection() {
   const { data: settings } = useQuery({
     queryKey: ["settings", "list"],
     queryFn: api.listSettings,
+    // 兜底轮询（移植自 NovaVeil_api）：保存后的 refetch 延迟/丢失时最迟 30s 自愈。
+    refetchInterval: 30_000,
   });
 
   const [proxy, setProxy] = useState("");
@@ -396,6 +398,8 @@ function ProxyPoolSection() {
   const { data: settings } = useQuery({
     queryKey: ["settings", "list"],
     queryFn: api.listSettings,
+    // 兜底轮询（移植自 NovaVeil_api）：保存后的 refetch 延迟/丢失时最迟 30s 自愈。
+    refetchInterval: 30_000,
   });
 
   const [proxies, setProxies] = useState<ProxyEntry[]>([]);
@@ -633,6 +637,8 @@ function HeaderTemplatesSection() {
   const { data: settings } = useQuery({
     queryKey: ["settings", "list"],
     queryFn: api.listSettings,
+    // 兜底轮询（移植自 NovaVeil_api）：保存后的 refetch 延迟/丢失时最迟 30s 自愈。
+    refetchInterval: 30_000,
   });
 
   const [templates, setTemplates] = useState<HeaderTemplate[]>([]);

@@ -31,6 +31,7 @@ import { Switch } from "@/components/ui/switch";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SearchField } from "@/components/ui/search-field";
 import { PageToolbar } from "@/components/ui/page-toolbar";
+import { PriorityInput } from "@/components/ui/priority-input";
 import { cn, downloadText, formatNumber } from "@/lib/utils";
 import { ViewToggle } from "@/components/ui/view-toggle";
 import { useViewMode } from "@/lib/use-view-mode";
@@ -66,13 +67,13 @@ export default function ChannelsPage() {
   const [confirmExport, setConfirmExport] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
-  // 优先级行内编辑草稿: 仅在用户正在输入时持有该行的文本值, 提交或失焦后清除,
-  // 其余时候回退显示服务端 c.sort, 避免本地态与远端长期不一致。
-  const [sortDraft, setSortDraft] = useState<Record<number, string>>({});
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["channels"],
     queryFn: api.listChannels,
+    // 兜底轮询（移植自 NovaVeil_api）：保存后的 invalidate refetch 若因弱网
+    // 延迟或丢失，列表最迟 30s 自动与后端对齐。
+    refetchInterval: 30_000,
   });
 
   const enableMut = useMutation({
@@ -101,7 +102,11 @@ export default function ChannelsPage() {
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => api.deleteChannel(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      // 先从本地缓存移除该行再后台校对，删除反馈即时可见。
+      qc.setQueryData<Channel[]>(["channels"], (prev) =>
+        prev ? prev.filter((c) => c.id !== id) : prev,
+      );
       toast.success("已删除");
       setPendingDelete(null);
       qc.invalidateQueries({ queryKey: ["channels"] });
@@ -114,7 +119,13 @@ export default function ChannelsPage() {
   const copyMut = useMutation({
     mutationFn: (vars: { sourceId: number; body: Omit<Channel, "id"> }) =>
       api.createChannel(vars.body),
-    onSuccess: () => {
+    onSuccess: (created) => {
+      // 新副本直接进列表缓存，无需等 refetch 回来才看到。
+      if (created && created.id > 0) {
+        qc.setQueryData<Channel[]>(["channels"], (prev) =>
+          prev ? [...prev, created] : prev,
+        );
+      }
       toast.success("已复制");
       qc.invalidateQueries({ queryKey: ["channels"] });
     },
@@ -134,58 +145,8 @@ export default function ChannelsPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // 优先级行内编辑: 乐观更新本地缓存, 失败回滚并恢复输入框为服务端值。
-  const sortMut = useMutation({
-    mutationFn: ({ id, sort }: { id: number; sort: number }) =>
-      api.updateChannel({ id, sort }),
-    onMutate: async ({ id, sort }) => {
-      await qc.cancelQueries({ queryKey: ["channels"] });
-      const prev = qc.getQueryData<Channel[]>(["channels"]);
-      if (prev) {
-        qc.setQueryData<Channel[]>(
-          ["channels"],
-          prev.map((c) => (c.id === id ? { ...c, sort } : c)),
-        );
-      }
-      return { prev };
-    },
-    onError: (err, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(["channels"], ctx.prev);
-      toast.error(err.message);
-    },
-    onSettled: (_d, _e, vars) => {
-      setSortDraft((d) => {
-        const next = { ...d };
-        delete next[vars.id];
-        return next;
-      });
-      qc.invalidateQueries({ queryKey: ["channels"] });
-    },
-  });
-
-  function commitSort(c: Channel, raw: string) {
-    const trimmed = raw.trim();
-    // 空输入或非数字: 不提交, 清除草稿回退显示服务端值。
-    if (trimmed === "" || !/^-?\d+$/.test(trimmed)) {
-      setSortDraft((d) => {
-        const next = { ...d };
-        delete next[c.id];
-        return next;
-      });
-      return;
-    }
-    const next = parseInt(trimmed, 10);
-    if (next === (c.sort ?? 0)) {
-      // 值未变, 仅清除草稿。
-      setSortDraft((d) => {
-        const n = { ...d };
-        delete n[c.id];
-        return n;
-      });
-      return;
-    }
-    sortMut.mutate({ id: c.id, sort: next });
-  }
+  // 优先级行内编辑已抽到 <PriorityInput />（components/ui/priority-input.tsx）：
+  // 防抖 + 串行队列 + 乐观回滚，本页不再持有排序草稿状态。
 
   // 收集所有渠道标签，去重并按字母序排列
   const allTags = useMemo(() => {
@@ -514,28 +475,9 @@ export default function ChannelsPage() {
                   <span className="num">
                     并发 {c.max_concurrent > 0 ? c.max_concurrent : "∞"}
                   </span>
-                  <input
-                    type="number"
-                    step="1"
-                    className="no-spin h-6 w-16 rounded-control border border-border bg-card px-1.5 text-center text-xs text-ink"
-                    value={sortDraft[c.id] ?? String(c.sort ?? 0)}
-                    disabled={
-                      sortMut.isPending && sortMut.variables?.id === c.id
-                    }
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) =>
-                      setSortDraft((d) => ({ ...d, [c.id]: e.target.value }))
-                    }
-                    onBlur={(e) => commitSort(c, e.target.value)}
-                    onKeyDown={(e) => {
-                      e.stopPropagation();
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        (e.target as HTMLInputElement).blur();
-                      }
-                    }}
-                    title="优先级：越大越靠前"
-                    aria-label={`优先级 ${c.name}`}
+                  <PriorityInput
+                    channel={c}
+                    inputClassName="h-6 w-16 rounded-control border border-border bg-card px-1.5 text-center text-xs text-ink"
                   />
                 </div>
                 <div
