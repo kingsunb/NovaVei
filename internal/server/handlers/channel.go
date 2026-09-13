@@ -256,7 +256,7 @@ func testChannel(c *gin.Context) {
 }
 
 // testChannelKeys 对渠道配置的每一把密钥各发送一条测试消息, 逐 Key 返回有效性结果。
-// 单 Key 上游超时 300s、并发池 4, 整体 30 分钟预算足够 240+ 把密钥的最坏情况(ceil(N/4)*300s)。
+// 单 Key 上游超时 60s、并发池 4, 整体 30 分钟预算足够 120+ 把密钥的最坏情况(ceil(N/4)*60s)。
 func testChannelKeys(c *gin.Context) {
 	var request struct {
 		ID      int    `json:"id" binding:"required"` // 待测试的渠道主键。
@@ -267,7 +267,7 @@ func testChannelKeys(c *gin.Context) {
 		resp.Error(c, http.StatusBadRequest, resp.ErrInvalidJSON)
 		return
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Minute)
 	defer cancel()
 	results, err := relay.TestChannelKeys(ctx, request.ID, request.Model, request.Message)
 	if err != nil {

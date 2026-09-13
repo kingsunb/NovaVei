@@ -199,7 +199,11 @@ func runTask(entry *taskEntry) {
 	}
 
 	entry.ticker = time.NewTicker(entry.interval)
-	defer entry.ticker.Stop()
+	defer func() {
+		if entry.ticker != nil {
+			entry.ticker.Stop()
+		}
+	}()
 
 	for {
 		select {

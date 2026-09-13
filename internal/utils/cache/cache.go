@@ -123,8 +123,8 @@ func (c *cache[K, V]) RefreshAll(target map[K]V) {
 	defer c.refreshMu.Unlock()
 	for _, shard := range c.shards {
 		shard.clear()
-		for k, v := range target {
-			shard.set(k, v)
-		}
+	}
+	for k, v := range target {
+		c.Set(k, v)
 	}
 }
