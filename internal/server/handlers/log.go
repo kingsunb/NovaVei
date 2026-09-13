@@ -249,7 +249,9 @@ func streamOverview(c *gin.Context) {
 // prepareSSE 设置实时日志连接需要的响应头。
 func prepareSSE(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
+	// no-store: 禁止任何缓存存储 SSE 响应; no-transform: 禁止中间代理(Cloudflare 等)
+	// 对响应体做压缩/转换 — CF 的 zstd/gzip 压缩会缓冲数据块, 破坏 SSE 逐条实时推送。
+	c.Header("Cache-Control", "no-store, no-transform")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
 }

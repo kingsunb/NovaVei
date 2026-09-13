@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/kingsunb/NovaVeil/internal/conf"
 )
@@ -25,6 +27,12 @@ func SecurityHeaders() gin.HandlerFunc {
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("Referrer-Policy", "no-referrer")
 		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://cloudflareinsights.com https://a.nel.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+		// API 响应禁止缓存: Cloudflare 和浏览器在无 Cache-Control 时可能对 GET /api/v1/*
+		// 做启发式缓存, 导致前端轮询拿到旧数据(渠道列表不更新等)。no-store 阻止存储,
+		// private 阻止共享缓存(CDN)保存; SSE 端点在 prepareSSE 中会覆盖为 no-store,no-transform。
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") || strings.HasPrefix(c.Request.URL.Path, "/v1/") {
+			c.Header("Cache-Control", "no-store, private")
+		}
 		// 仅在显式配置 HTTPS 部署时启用 HSTS, 避免直连 HTTP 形态下浏览器被永久锁死 HTTPS。
 		if conf.AppConfig.Security.CookieSecure {
 			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")

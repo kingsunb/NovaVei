@@ -189,6 +189,7 @@ async function http<T>(
       headers,
       body: toRequestBody(init.body),
       credentials: "include",
+      cache: "no-store",
       signal: init.signal,
     });
   } catch (cause) {
@@ -282,7 +283,7 @@ async function rawDownload(
 ): Promise<{ text: string; filename?: string }> {
   let res: Response;
   try {
-    res = await fetch(`${BASE}${path}`, await requestInit(init));
+    res = await fetch(`${BASE}${path}`, { ...(await requestInit(init)), cache: "no-store" });
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause);
     throw new APIError(0, message || "Network request failed", undefined, "network");
