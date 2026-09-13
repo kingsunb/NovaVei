@@ -59,6 +59,9 @@ const testProbeClientIP = "面板测试"
 // clientModel 为日志流展示的客户端模型名(单渠道测试=上游模型名, 分组测试=分组名);
 // targetModel 为实际上游模型名; relayMode/clientFormat/upstreamType 记录本次中继方式
 // 与协议标签, 供日志页按透传/转换、客户端/上游协议筛选。
+// channel 为已解析的生效渠道(多 Key 代理模板已按所选 Key 展开), 测试出站与其余
+// 转发路径一样经 ChannelHttpClient 按该渠道代理发出, 因此代理标注必须同样落进
+// 日志流, 否则面板测试明明走了代理却显示直连。
 func recordTestRequest(channel model.Channel, keyLabel, clientModel, targetModel string, rawBody []byte, responseBody string, elapsed time.Duration, usage *llm.Usage, reqErr error, relayMode, clientFormat, upstreamType string) {
 	status := StatusSuccess
 	class := ErrClass("")
@@ -85,6 +88,7 @@ func recordTestRequest(channel model.Channel, keyLabel, clientModel, targetModel
 		ClientFormat:  clientFormat,
 		UpstreamType:  upstreamType,
 		RelayMode:     relayMode,
+		ProxyAddr:     roundProxyLabel(channel, channel),
 		Error:         brief,
 		Class:         class,
 		body:          truncatePreview(string(rawBody)),

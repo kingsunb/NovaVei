@@ -3,6 +3,7 @@ package relay
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kingsunb/NovaVeil/internal/model"
 )
@@ -53,5 +54,59 @@ func TestRoundProxyLabel(t *testing.T) {
 	systemProxy = ""
 	if got := roundProxyLabel(systemProxyChannel, systemProxyChannel); got != systemProxyUnsetLabel {
 		t.Fatalf("系统代理未配置时应给出提示文案, 实际 %q", got)
+	}
+}
+
+// TestRecordTestRequestProxyLabel 面板测试与真实转发走同一套 ChannelHttpClient 出站,
+// 日志流条目必须带上同样的代理标注: 否则渠道测试明明经代理出去, 日志页却显示直连。
+func TestRecordTestRequestProxyLabel(t *testing.T) {
+	// 替换系统代理查找, 避免依赖全局设置缓存的初始状态。
+	originalLookup := systemProxyLookup
+	t.Cleanup(func() { systemProxyLookup = originalLookup })
+	systemProxy := "http://admin:pass@127.0.0.1:7890"
+	systemProxyLookup = func() string { return systemProxy }
+
+	record := func(t *testing.T, channel model.Channel) RequestState {
+		t.Helper()
+		id := idSeq.Load() + 1
+		recordTestRequest(channel, "", "proxy-label-model", "proxy-label-model",
+			[]byte("{}"), "{}", time.Second, nil, nil, "passthrough", "openai_chat", "openai_chat")
+		mu.Lock()
+		defer mu.Unlock()
+		request, ok := requests[id]
+		if !ok {
+			t.Fatalf("面板测试条目 %d 未登记", id)
+		}
+		return *request
+	}
+	cleanup := func(t *testing.T, id uint64) {
+		t.Helper()
+		mu.Lock()
+		delete(requests, id)
+		mu.Unlock()
+	}
+
+	// 渠道专属代理: 标注打码地址, 保留主机端口、不回显密码。
+	channelProxy := "socks5://user:secret@127.0.0.1:1080"
+	proxied := model.Channel{ID: 21, Name: "label-test-proxy", Proxy: true, ChannelProxy: &channelProxy}
+	state := record(t, proxied)
+	defer cleanup(t, state.ID)
+	assertProxyLabel(t, state.ProxyAddr, "127.0.0.1:1080", "secret", "面板测试渠道专属代理")
+
+	// 关闭代理: 与真实转发一致, 不标注(直连)。
+	direct := model.Channel{ID: 22, Name: "label-test-direct", Proxy: false, ChannelProxy: &channelProxy}
+	state = record(t, direct)
+	defer cleanup(t, state.ID)
+	if state.ProxyAddr != "" {
+		t.Fatalf("关闭代理的渠道测试不应标注代理, 实际 %q", state.ProxyAddr)
+	}
+
+	// 仅开启开关未填专属地址: 标注系统代理地址。
+	blank := model.Channel{ID: 23, Name: "label-test-system", Proxy: true}
+	state = record(t, blank)
+	defer cleanup(t, state.ID)
+	assertProxyLabel(t, state.ProxyAddr, "127.0.0.1:7890", "pass", "面板测试系统代理")
+	if !strings.Contains(state.ProxyAddr, "系统代理") {
+		t.Fatalf("系统代理标注应带前缀, 实际 %q", state.ProxyAddr)
 	}
 }
