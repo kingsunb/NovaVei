@@ -280,7 +280,7 @@ function SystemSection() {
   const initialModelFilter =
     settings?.find((s) => s.key === "model_filter")?.value ?? "";
   const proxyDirty = hydrated && proxy !== initialProxy;
-  const corsDirty = hydrated && cors !== initialCors;
+  const corsDirty = hydrated && originsForStorage(cors) !== initialCors;
   const modelFilterDirty = hydrated && modelFilter !== initialModelFilter;
 
   return (
@@ -903,10 +903,12 @@ function ConversationSection() {
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     if (hydrated) return;
-    if (enabledSetting) setEnabled(enabledSetting.value === "1");
-    if (daysSetting) setDays(daysSetting.value || "3");
-    if (capSetting) setCap(capSetting.value || "5");
-    if (enabledSetting && daysSetting && capSetting) setHydrated(true);
+    if (enabledSetting != null || daysSetting != null || capSetting != null) {
+      if (enabledSetting) setEnabled(enabledSetting.value === "1");
+      if (daysSetting) setDays(daysSetting.value || "3");
+      if (capSetting) setCap(capSetting.value || "5");
+      setHydrated(true);
+    }
   }, [enabledSetting, daysSetting, capSetting, hydrated]);
 
   const saveEnabled = useMutation({
@@ -1129,8 +1131,8 @@ function ConvTraceSection() {
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     if (hydrated) return;
-    if (enabledSetting) {
-      setEnabled(enabledSetting.value === "1");
+    if (enabledSetting != null) {
+      setEnabled(enabledSetting ? enabledSetting.value === "1" : false);
       setHydrated(true);
     }
   }, [enabledSetting, hydrated]);
@@ -1317,8 +1319,8 @@ function UsageRetentionSection() {
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     if (hydrated) return;
-    if (setting) {
-      setDays(setting.value || "0");
+    if (setting != null) {
+      setDays(setting ? setting.value || "0" : "0");
       setHydrated(true);
     }
   }, [setting, hydrated]);
