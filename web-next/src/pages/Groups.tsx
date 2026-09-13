@@ -1502,11 +1502,14 @@ function ChannelModelPicker({
               addedModelIds.has(m.id),
             ).length;
             const available = channel.models.length - addedInChannel;
-            // 搜索时只显示匹配的模型；非搜索态显示全部
+            // 搜索时：渠道名命中则显示该渠道全部模型，否则只显示模型名命中的
+            const channelNameMatches = channel.name.toLowerCase().includes(q);
             const visibleModels = hasSearch
-              ? channel.models.filter((m) =>
-                  m.name.toLowerCase().includes(q),
-                )
+              ? channelNameMatches
+                ? channel.models
+                : channel.models.filter((m) =>
+                    m.name.toLowerCase().includes(q),
+                  )
               : channel.models;
             return (
             <div

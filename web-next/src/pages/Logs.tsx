@@ -384,7 +384,7 @@ export default function LogsPage() {
  */
 const ROW_HEIGHT = 44;
 const COLS =
-  "120px 90px minmax(280px,1fr) 90px 80px 140px 160px 90px";
+  "120px 90px minmax(280px,1fr) 90px 100px 80px 140px 160px 90px";
 
 function useElapsedTick(active: boolean) {
   const [now, setNow] = useState(() => Date.now());
@@ -448,6 +448,7 @@ function LiveTable({
         <div role="columnheader" className="font-medium">状态</div>
         <div role="columnheader" className="font-medium">模型 → 渠道 → 目标</div>
         <div role="columnheader" className="font-medium">中继</div>
+        <div role="columnheader" className="font-medium">代理</div>
         <div role="columnheader" className="font-medium">审计</div>
         <div role="columnheader" className="font-medium">客户端</div>
         <div role="columnheader" className="text-right font-medium">Tokens（入/出/缓存）</div>
@@ -520,6 +521,15 @@ function LiveTable({
                     >
                       {r.relay_mode === "passthrough" ? "透传" : "转换"}
                     </Pill>
+                  </div>
+                  <div role="gridcell" className="truncate" title={r.proxy_addr ?? ""}>
+                    {r.proxy_addr ? (
+                      <Pill tone="info" dot={false}>
+                        代理
+                      </Pill>
+                    ) : (
+                      <span className="text-xs text-ink-muted">直连</span>
+                    )}
                   </div>
                   <div role="gridcell">
                     {r.masked && (

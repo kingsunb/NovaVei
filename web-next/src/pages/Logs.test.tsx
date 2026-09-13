@@ -170,7 +170,7 @@ describe("<LogsPage /> 虚拟化结构", () => {
     // 表头具备 columnheader 语义（审计 4.18）
     expect(
       grid.querySelectorAll('[role="row"][aria-rowindex="1"] > [role="columnheader"]'),
-    ).toHaveLength(8);
+    ).toHaveLength(9);
   });
 
   it("SSE 推送 N 条后 grid aria-rowcount 同步（表头 + N 数据行）", async () => {
@@ -271,6 +271,41 @@ describe("<LogsPage /> 实时列表顺序（最新在顶）", () => {
     });
     expect(labels.length).toBe(1);
     expect(labels[0]).toBe("查看请求 #3 追踪");
+  });
+
+  it("代理列：有 proxy_addr 显示「代理」标签，无则显示「直连」", async () => {
+    setupBasicFetch();
+    const sources = setupEventSource();
+
+    const { container } = render(<LogsPage />, { wrapper: Wrapper });
+    await waitFor(() => {
+      const g = container.querySelector('[role="grid"]');
+      if (!g) throw new Error("grid not yet");
+      return g;
+    });
+    await waitFor(() => sources.length > 0 && sources[0]!.readyState !== 0);
+
+    const es = sources[0]!;
+    // 推送两条：一条有代理、一条无代理
+    await act(async () => {
+      es.fireEvent("log", { ...makeLog(1), proxy_addr: "socks5://***@10.0.0.9:1080" });
+      es.fireEvent("log", makeLog(2)); // 无 proxy_addr
+    });
+
+    const rows = await waitFor(() => {
+      const r = Array.from(container.querySelectorAll('[aria-label^="查看请求 #"]'));
+      if (r.length !== 2) throw new Error("rows not yet rendered");
+      return r;
+    });
+
+    // 行按 ID 降序排列：#2（无代理）在前，#1（有代理）在后
+    const row1 = rows[1] as HTMLElement; // #1 有代理
+    const row2 = rows[0] as HTMLElement; // #2 无代理
+
+    // 有代理的行应包含「代理」Pill
+    expect(within(row1).getByText("代理")).toBeTruthy();
+    // 无代理的行应包含「直连」文本
+    expect(within(row2).getByText("直连")).toBeTruthy();
   });
 });
 

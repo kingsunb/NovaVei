@@ -1849,7 +1849,7 @@ function AdvancedTab({
     <div className="space-y-4">
       <Field
         label="渠道代理（可选）"
-        hint="可从代理池下拉选择，也可手动填写；支持 http(s) 与 socks5/socks5h。需开启下方「使用系统代理」开关才会生效"
+        hint="可从代理池下拉选择，也可手动填写；支持 http(s) 与 socks5/socks5h。需开启下方「启用代理」开关才会生效"
       >
         {proxyPool.length > 0 && (
           <Select
@@ -1991,7 +1991,7 @@ function AdvancedTab({
 
       <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
         <div>
-          <p className="text-sm font-medium text-ink">使用系统代理</p>
+          <p className="text-sm font-medium text-ink">启用代理</p>
           <p className="text-xs text-ink-muted">
             开启后出站走代理：优先使用上方渠道代理，留空时走设置页的全局代理；关闭则一律直连
           </p>

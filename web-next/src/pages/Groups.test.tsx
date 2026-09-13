@@ -528,6 +528,31 @@ describe("ChannelModelPicker 搜索过滤", () => {
     expect(screen.queryByText("claude-sonnet")).not.toBeInTheDocument();
   });
 
+  it("搜索渠道名：显示该渠道下全部模型（即使模型名不含搜索词）", async () => {
+    const user = userEvent.setup();
+    setupSearchFetch();
+    render(<GroupsPage />, { wrapper: Wrapper });
+    await waitFor(() => screen.getByText("gpt-4o-prod"));
+
+    await user.click(screen.getAllByRole("button", { name: /编辑/ })[0]);
+    await waitFor(() => screen.getByRole("dialog"));
+
+    const searchInput = screen.getByLabelText("搜索渠道或模型");
+    // 搜索渠道名 "openai" —— 渠道名命中但模型名都不含 "openai"
+    await user.type(searchInput, "openai");
+
+    // 渠道名命中 → 该渠道下全部模型都应显示
+    await waitFor(() =>
+      expect(screen.getByText("gpt-4o")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("gpt-4o-mini")).toBeInTheDocument();
+    expect(screen.getByText("o1-preview")).toBeInTheDocument();
+    // 不应出现"无匹配模型"提示
+    expect(screen.queryByText("无匹配模型")).not.toBeInTheDocument();
+    // anthropic 渠道不命中，其模型不应出现
+    expect(screen.queryByText("claude-sonnet")).not.toBeInTheDocument();
+  });
+
   it("搜索分组名：引用分组区域只显示匹配的分组", async () => {
     const user = userEvent.setup();
     setupSearchFetch();
