@@ -148,7 +148,12 @@ func importDB(c *gin.Context) {
 	if strings.Contains(contentType, "multipart/form-data") {
 		fh, err := c.FormFile("file")
 		if err != nil {
-			resp.Error(c, http.StatusBadRequest, "missing upload file field 'file'")
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				resp.Error(c, http.StatusRequestEntityTooLarge, errDBImportTooLarge.Error())
+			} else {
+				resp.Error(c, http.StatusBadRequest, "missing upload file field 'file'")
+			}
 			return
 		}
 		f, err := fh.Open()
@@ -173,7 +178,8 @@ func importDB(c *gin.Context) {
 	} else {
 		body, err := io.ReadAll(io.LimitReader(c.Request.Body, maxDBImportBodyBytes+1))
 		if err != nil {
-			if errors.Is(err, errDBImportTooLarge) {
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
 				resp.Error(c, http.StatusRequestEntityTooLarge, errDBImportTooLarge.Error())
 			} else {
 				resp.Error(c, http.StatusBadRequest, err.Error())

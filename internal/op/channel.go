@@ -346,7 +346,7 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 		}
 
 		if err := groupRefreshCache(ctx); err != nil {
-			return nil, fmt.Errorf("刷新分组失败: %w", err)
+			log.Warnf("channel update succeeded but group cache refresh failed: %v", err)
 		}
 	}
 	snapshot := channelSnapshot(channel)
@@ -396,7 +396,7 @@ func ChannelDel(id int, ctx context.Context) error {
 	channelCache.Del(id)
 	channelModelCache.Del(modelIDs...)
 	if err := groupRefreshCache(ctx); err != nil {
-		return fmt.Errorf("刷新分组失败: %w", err)
+		log.Warnf("channel delete succeeded but group cache refresh failed: %v", err)
 	}
 	return nil
 }

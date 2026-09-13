@@ -620,11 +620,34 @@ func verifyGzipArchive(path string) error {
 // 并先 flush 内存待写队列、关闭当前文件句柄、重置日期标记, 避免删除后写入协程仍认为当日文件有效而追加到已删文件。
 // 调用方(HTTP handler)负责鉴权; 仓库为单管理员, 任意登录者(=admin)均可触发。
 func ClearConversationArchives(ctx context.Context) (int, error) {
+	conversationFlushMu.Lock()
+	defer conversationFlushMu.Unlock()
+
+	// 阶段 1: 停止写入协程, 避免与 conversationFlushBatch 的锁外 I/O 阶段竞争同一个 Writer。
 	conversationMu.Lock()
-	defer conversationMu.Unlock()
 	if conversationDir == "" {
+		conversationMu.Unlock()
 		return 0, nil
 	}
+	var done chan struct{}
+	if conversationStop != nil && conversationAlive() {
+		close(conversationStop)
+		done = conversationDone
+	}
+	conversationMu.Unlock()
+
+	if done != nil {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			log.Warnf("clear conversation archives: writer did not stop: %v", ctx.Err())
+			return 0, ctx.Err()
+		}
+	}
+
+	// 阶段 2: writer 已退出, 安全地 flush + close + 删除文件。
+	conversationMu.Lock()
+	defer conversationMu.Unlock()
 
 	// 1) 先把内存待写队列落盘, 关闭文件句柄, 让后续写入重新打开新文件。
 	flushConversationLocked(time.Now())

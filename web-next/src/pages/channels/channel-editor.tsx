@@ -194,6 +194,10 @@ export function ChannelEditor({
   onSaved: () => void;
 }) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(channel));
+  // Keep a ref to the latest draft so async handlers (e.g. handleSave's auto-fetch)
+  // can read the current value after an await, avoiding stale-closure data loss.
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const [tab, setTab] = useState<"cred" | "models" | "limits" | "advanced">(
     "cred",
   );
@@ -390,7 +394,7 @@ export function ChannelEditor({
           // 去重：上游偶发返回重复模型名时，Set 保证唯一。
           const names = Array.from(new Set(models.map((m) => m.name)));
           enriched = {
-            ...draft,
+            ...draftRef.current,
             models: names.map((name) => ({
               id: 0,
               channel_id: 0,
@@ -475,16 +479,20 @@ export function ChannelEditor({
       toast.warning("请先为渠道添加模型");
       return;
     }
+    // 捕获当前 channelKey，await 返回后校验是否已切换渠道。
+    const gen = channelKey;
     setKeyTestRunning(true);
     setKeyTests(null);
     setKeyTestUsedModel(model);
     try {
       const results = await api.testChannelKeys(channel!.id, model);
+      if (gen !== prevChannelKeyRef.current) return;
       setKeyTests(results);
     } catch (err) {
+      if (gen !== prevChannelKeyRef.current) return;
       toast.error(err instanceof Error ? err.message : "逐密钥测试失败");
     } finally {
-      setKeyTestRunning(false);
+      if (gen === prevChannelKeyRef.current) setKeyTestRunning(false);
     }
   };
 
@@ -535,6 +543,8 @@ export function ChannelEditor({
         testMessage,
         testKeyID || undefined,
       );
+      // 切换渠道/卸载后不回写过期结果，避免串入新渠道界面。
+      if (modelTestsAbortedRef.current) return { ok: false, latency_ms: 0, error: "aborted" };
       // 200 即成功：失败由后端以 5xx 表达，走下方 catch
       const normalized = {
         ok: true,
@@ -545,6 +555,7 @@ export function ChannelEditor({
       setModelTestResults((prev) => ({ ...prev, [modelName]: normalized }));
       return normalized;
     } catch (err) {
+      if (modelTestsAbortedRef.current) return { ok: false, latency_ms: 0, error: "aborted" };
       const normalized = {
         ok: false,
         latency_ms: 0,

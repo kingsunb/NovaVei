@@ -165,7 +165,9 @@ func newRequestState(model, body, clientIP, apiKeyRaw, keyName string) *RequestS
 // updateBody 替换请求体为脱敏后的版本, 使日志/审计/对话留存只记录脱敏后内容,
 // 不保留原始明文(凭据安全红线, 文档 04 §五)。
 func (r *RequestState) updateBody(masked string) {
+	mu.Lock()
 	r.body = masked
+	mu.Unlock()
 }
 
 // maskAPIKey 仅保留最后 4 个 rune 并加固定掩码；空值不输出。无论传入的是原始

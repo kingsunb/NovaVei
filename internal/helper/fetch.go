@@ -133,12 +133,15 @@ func fetchGeminiModels(client *http.Client, ctx context.Context, request model.C
 	}
 
 	for {
-		req, _ := http.NewRequestWithContext(
+		req, err := http.NewRequestWithContext(
 			ctx,
 			http.MethodGet,
 			baseURL+"/models",
 			nil,
 		)
+		if err != nil {
+			return nil, fmt.Errorf("build gemini models request: %w", err)
+		}
 		req.Header.Set("X-Goog-Api-Key", request.Key)
 		applyCustomHeaders(req, request)
 		if pageToken != "" {
@@ -183,12 +186,15 @@ func fetchAnthropicModels(client *http.Client, ctx context.Context, request mode
 	baseURL := transformer.NormalizeBaseURL(request.BaseURL, "v1")
 	for {
 
-		req, _ := http.NewRequestWithContext(
+		req, err := http.NewRequestWithContext(
 			ctx,
 			http.MethodGet,
 			baseURL+"/models",
 			nil,
 		)
+		if err != nil {
+			return nil, fmt.Errorf("build anthropic models request: %w", err)
+		}
 		req.Header.Set("X-Api-Key", request.Key)
 		req.Header.Set("Anthropic-Version", "2023-06-01")
 		applyCustomHeaders(req, request)

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/gin-contrib/sse"
 	"github.com/gin-gonic/gin"
 	"github.com/kingsunb/NovaVeil/internal/model"
@@ -202,7 +203,10 @@ func clearGroupCooldown(c *gin.Context) {
 		result.KeyCooldowns += keyCooldowns
 		result.RateWindows += rateWindows
 	}
-	memberItems, _ := relay.ResetGroupCooldown(id)
+	memberItems, ok := relay.ResetGroupCooldown(id)
+	if !ok {
+		log.Warnf("reset group cooldown may be incomplete, group=%d", id)
+	}
 	result.MemberItems = memberItems
 	resp.Success(c, result)
 }

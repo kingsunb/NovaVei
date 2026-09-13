@@ -120,6 +120,11 @@ func APIKeyUpdate(key *model.APIKey, ctx context.Context) error {
 	if apiKeyValueTakenSnap(cur, key.APIKey, key.ID) {
 		return ErrAPIKeyValueExists
 	}
+	// Preserve server-managed fields that must not be overwritten by client edits.
+	// Save() does a full-column UPDATE; without this, CreatedAt (autoCreateTime only
+	// fires on INSERT) and LastUsedAt (updated by auth middleware) would be zeroed.
+	key.CreatedAt = existing.CreatedAt
+	key.LastUsedAt = existing.LastUsedAt
 	if err := db.GetDB().WithContext(ctx).Save(key).Error; err != nil {
 		if isUniqueConstraintError(err) {
 			return ErrAPIKeyValueExists

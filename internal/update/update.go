@@ -197,8 +197,8 @@ func extractFile(f *zip.File, fpath string, maxFileBytes, remainingTotalBytes in
 	}
 	outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, filePerm)
 	if err != nil {
-		if err = os.Remove(fpath); err != nil {
-			log.Debugf("remove file failed: %v", err)
+		if rmErr := os.Remove(fpath); rmErr != nil {
+			log.Debugf("remove file failed: %v (original open error: %v)", rmErr, err)
 			return 0, err
 		}
 		outFile, err = os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, filePerm)
@@ -219,7 +219,6 @@ func extractFile(f *zip.File, fpath string, maxFileBytes, remainingTotalBytes in
 	limit := min(maxFileBytes, remainingTotalBytes)
 	written, err := copyLimited(outFile, rc, limit)
 	if err != nil {
-		_ = outFile.Close()
 		_ = os.Remove(fpath)
 		if errors.Is(err, errSizeLimitExceeded) {
 			if maxFileBytes <= remainingTotalBytes {
