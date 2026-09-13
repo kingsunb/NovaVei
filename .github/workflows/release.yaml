@@ -1,19 +1,9 @@
 name: release
 
+# 已禁用自动触发——此工作流构建全平台 (含 Android) + 4 架构安全扫描 + GitHub Release,
+# 耗时 120+ 分钟。普通 push 只跑 test + docker-publish。
+# 需要发布正式 release 时手动触发 (workflow_dispatch), 确保版本号已更新。
 on:
-  push:
-    branches:
-      - main
-      - master
-    paths:
-      - main.go
-      - cmd/**
-      - internal/**
-      - web-next/**
-      - scripts/**
-      - go.mod
-      - go.sum
-      - .github/workflows/release.yaml
   workflow_dispatch:
 
 permissions:
@@ -65,7 +55,7 @@ jobs:
       - name: Setup Trivy
         uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
         with:
-          version: v0.70.0
+          version: v0.74.0
           cache: true
 
       - name: Scan repository for secrets

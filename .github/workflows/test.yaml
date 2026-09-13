@@ -1,0 +1,49 @@
+name: test
+
+# 轻量后端测试——每次 push/PR 跑 Go 单元测试, ~3 分钟完成。
+# 前端测试由 web-next-ci.yaml 负责, Docker 镜像发布由 docker-publish.yaml 负责。
+# 完整安全审计 (Trivy + SBOM + 多架构) 见 build.yaml (手动触发)。
+
+on:
+  push:
+    branches:
+      - dev
+      - master
+      - main
+  pull_request:
+    branches:
+      - dev
+      - master
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go-test:
+    name: Go tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.7'
+          cache: true
+
+      - name: Test Go packages
+        run: |
+          go test -count=1 -timeout=10m ./... || \
+          (echo "::warning::Go tests failed on first attempt, retrying..." && go test -count=1 -timeout=10m ./...)
