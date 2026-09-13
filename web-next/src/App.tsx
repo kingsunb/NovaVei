@@ -5,7 +5,7 @@ import { useAuth } from "@/store/auth";
 import { AppShell } from "@/components/layout/AppShell";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { Button } from "@/components/ui/button";
-import { PageSkeleton } from "@/components/ui/skeleton";
+import { PageSkeleton, Skeleton } from "@/components/ui/skeleton";
 import { ForceChangePassword } from "@/components/auth/ForceChangePassword";
 import { loadFlags, shouldUseNewWeb, type Flags } from "@/lib/flags";
 import { apiForbiddenEvent, apiUnauthorizedEvent } from "@/lib/api";
@@ -60,7 +60,7 @@ const FALLBACK_FLAGS: Flags = {
 };
 
 export default function App() {
-  const { isAuthenticated, username, logout, mustChangePassword, refreshStatus } =
+  const { isAuthenticated, username, logout, mustChangePassword, refreshStatus, isBootstrapping } =
     useAuth();
   const [flags, setFlags] = useState<Flags | null>(null);
 
@@ -125,6 +125,21 @@ export default function App() {
     () => shouldUseNewWeb(effective, username),
     [effective, username],
   );
+
+  // 启动探活尚未完成：渲染加载骨架，绝不进入未登录分支。否则刷新时会在
+  // /user/status 返回前被判成未登录，<Navigate to="/login"> 把当前 URL 吞掉，
+  // 探活成功后又从 /login 重定向到 /dashboard（「刷新即重新登录并跳主页」）。
+  if (isBootstrapping) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="flex flex-col items-center gap-3">
+          <Skeleton className="h-9 w-9 rounded-[10px]" />
+          <Skeleton className="h-3 w-28" />
+        </div>
+      </div>
+    );
+  }
+
   if (!useNew) {
     return <RollbackNotice flags={effective} />;
   }

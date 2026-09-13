@@ -16,6 +16,10 @@ interface AuthState {
   isAuthenticated: boolean;
   username: string | null;
   mustChangePassword: boolean;
+  // isBootstrapping 标记启动探活是否仍在进行。刷新/首次打开时，在 /user/status
+  // 返回前绝不能把界面判成「未登录」并跳 /login，否则会把当前 URL 吞掉、探活
+  // 成功后又被 /login 路由重定向到 /dashboard（表现为「刷新即重新登录并跳主页」）。
+  isBootstrapping: boolean;
 }
 
 interface AuthContextValue extends AuthState {
@@ -41,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: false,
     username: null,
     mustChangePassword: false,
+    isBootstrapping: true,
   });
   const queryClient = useQueryClient();
   // 每次发起会改变登录态的异步操作时递增；结果返回时若不匹配则丢弃。
@@ -57,18 +62,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled || gen !== generationRef.current) return;
         setState((prev) => ({
           ...prev,
+          isBootstrapping: false,
           isAuthenticated: true,
           // 旧后端可能不带 username: 空串回落 null, Topbar 走自己的兜底而不是空名
           username: s.username || prev.username,
           mustChangePassword: s.must_change_password ?? false,
         }));
       } catch (err) {
-        // 401 等都视为未登录，UI 自然跳 login
+        // 探活结束：无论何种失败都退出 bootstrapping，让 UI 切换到登录页（仅
+        // 401 明确视为未登录；网络/CORS 错误下 isAuthenticated 本就为 false）。
         if (cancelled || gen !== generationRef.current) return;
-        if (err instanceof APIError && err.status === 401) {
-          setState((prev) => ({ ...prev, isAuthenticated: false }));
-        }
-        // 其他错误（网络/CORS）保持未登录态
+        setState((prev) => ({
+          ...prev,
+          isBootstrapping: false,
+          isAuthenticated: false,
+        }));
       }
     })();
     return () => {
@@ -85,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: true,
         username,
         mustChangePassword: s.must_change_password,
+        isBootstrapping: false,
       });
     },
     [],
@@ -108,7 +117,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 3. 清空全部查询缓存（渠道明文 Key、API Key 明文等不复用）。
     queryClient.clear();
     // 4. 更新认证状态。
-    setState({ isAuthenticated: false, username: null, mustChangePassword: false });
+    setState({
+      isAuthenticated: false,
+      username: null,
+      mustChangePassword: false,
+      isBootstrapping: false,
+    });
   }, [queryClient]);
 
   const refreshStatus = useCallback(async () => {
@@ -131,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isAuthenticated: false,
           username: null,
           mustChangePassword: false,
+          isBootstrapping: false,
         });
       }
     }

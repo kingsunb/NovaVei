@@ -102,6 +102,11 @@ export default function ChannelsPage() {
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => api.deleteChannel(id),
+    // 与 enableMut/saveMut 一致：删除前取消在途轮询 refetch，避免 30s 兜底轮询
+    // 的旧响应在删除成功后返回，把已删除的渠道「复活」回来。
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ["channels"] });
+    },
     onSuccess: (_data, id) => {
       // 先从本地缓存移除该行再后台校对，删除反馈即时可见。
       qc.setQueryData<Channel[]>(["channels"], (prev) =>
@@ -119,6 +124,10 @@ export default function ChannelsPage() {
   const copyMut = useMutation({
     mutationFn: (vars: { sourceId: number; body: Omit<Channel, "id"> }) =>
       api.createChannel(vars.body),
+    // 复制前取消在途轮询 refetch，避免旧响应在复制成功后返回、把刚追加的副本覆盖掉。
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ["channels"] });
+    },
     onSuccess: (created) => {
       // 新副本直接进列表缓存，无需等 refetch 回来才看到。
       if (created && created.id > 0) {

@@ -258,6 +258,13 @@ export function ChannelEditor({
       isNew
         ? api.createChannel(d as Omit<Channel, "id">)
         : api.updateChannel(buildChannelUpdateRequest(channel as Channel, d)),
+    // 保存前取消可能在途的列表轮询 refetch：30s 兜底轮询若恰好在保存瞬间发出，
+    // 其旧响应会在 optimistic update 之后返回并覆盖「已保存」的最新结果，导致
+    // 「点了保存、toast 成功，但列表数据没变」。与 Channels 页 enableMut /
+    // PriorityInput 的 cancelQueries 保持一致。
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ["channels"] });
+    },
     onSuccess: (saved) => {
       // 保存响应即后端刷新后的最新实体：直接替换/追加进列表缓存，
       // 界面立即反映改动，不必等 invalidate 触发的 refetch 二次往返

@@ -463,6 +463,11 @@ function CustomModelEditor({
         fixed_reply: reply,
       });
     },
+    // 保存前取消在途轮询 refetch：与 Channels 页 saveMut 相同的竞态防护，
+    // 避免 30s 兜底轮询的旧响应在乐观更新之后返回，把保存结果覆盖掉。
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ["channels"] });
+    },
     onSuccess: (saved) => {
       // 保存响应即最新实体：直接替换/追加进列表缓存，界面即时更新；
       // refetch 由 onSaved 的 invalidate 兜底。

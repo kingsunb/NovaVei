@@ -138,6 +138,11 @@ export default function GroupsPage() {
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => api.deleteGroup(id),
+    // 与 reorderMut 一致的竞态防护：删除前取消在途轮询 refetch，
+    // 避免 30s 兜底轮询的旧响应在删除成功后返回、把已删除的分组「复活」回来。
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ["groups"] });
+    },
     onSuccess: (_data, id) => {
       // 先从本地缓存移除该卡片再后台校对，删除反馈即时可见。
       qc.setQueryData<Group[]>(["groups"], (prev) =>
@@ -788,6 +793,11 @@ function GroupEditor({
         }
       }
       return latest;
+    },
+    // 与 reorderMut/deleteMut 相同的竞态防护：保存前取消在途轮询 refetch，
+    // 避免 30s 兜底轮询的旧响应在乐观更新之后返回、把保存结果覆盖掉。
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ["groups"] });
     },
     onSuccess: (saved) => {
       // 保存响应即最新实体（含成员与 active_item_id）：直接写回列表缓存，
