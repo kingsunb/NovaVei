@@ -195,8 +195,16 @@ func TestSTA11StreamCumulativeBudgetExceeded(t *testing.T) {
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
 		for i := 0; i < 10; i++ {
-			writeUpstreamSSE(t, w, "", `{"choices":[{"delta":{"content":"a"}}]}`)
+			// relay 在累计事件预算超限后会关闭上游连接, 剩余写入返回
+			// "connection reset by peer" — 这是预期行为, 不应标记测试失败。
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", `{"choices":[{"delta":{"content":"a"}}]}`); err != nil {
+				return
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
 		}
 	}))
 	defer upstream.Close()
