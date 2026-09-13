@@ -78,7 +78,7 @@ export function useBuildVersionCheck(enabled: boolean): void {
     if (!enabled) return;
 
     let disposed = false;
-    let intervalId: number | undefined;
+    const timer: { id: number | undefined } = { id: undefined };
 
     const check = async () => {
       const info = await api.getBuildInfo().catch(() => null);
@@ -92,7 +92,7 @@ export function useBuildVersionCheck(enabled: boolean): void {
       }
       // 已错位：停掉轮询（toast 常驻，刷新前无需再探测），弹一次提示。
       disposed = true;
-      if (intervalId !== undefined) window.clearInterval(intervalId);
+      if (timer.id !== undefined) window.clearInterval(timer.id);
       toast.info("检测到服务端已更新", {
         id: "novaveil-build-update",
         description:
@@ -113,12 +113,12 @@ export function useBuildVersionCheck(enabled: boolean): void {
     };
 
     void check();
-    intervalId = window.setInterval(() => void check(), CHECK_INTERVAL_MS);
+    timer.id = window.setInterval(() => void check(), CHECK_INTERVAL_MS);
     window.addEventListener("focus", checkThrottled);
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       disposed = true;
-      if (intervalId !== undefined) window.clearInterval(intervalId);
+      if (timer.id !== undefined) window.clearInterval(timer.id);
       window.removeEventListener("focus", checkThrottled);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };

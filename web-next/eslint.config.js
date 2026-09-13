@@ -73,6 +73,15 @@ export default tseslint.config(
     },
   },
 
+  // public/ 下的浏览器脚本（如 theme-init.js，在 <head> 中内联执行）
+  {
+    files: ["public/**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: { ...globals.browser, ...globals.es2022 },
+    },
+  },
+
   // 一次性迁移脚本
   {
     files: ["scripts/**/*.{js,mjs,ts}"],
