@@ -516,6 +516,7 @@ function GroupEditor({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const qc = useQueryClient();
   const [name, setName] = useState("");
   const [mode, setMode] = useState<GroupMode>("manual");
   // 单个 relayConfig 对象管理全部路由策略字段，避免 17+ 个零散 useState。
