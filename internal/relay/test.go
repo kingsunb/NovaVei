@@ -149,6 +149,44 @@ func TestChannel(ctx context.Context, channelID int, modelName string, message s
 	return sendChannelTestRequest(ctx, channel, modelName, message, channelKeyLabel(keyIndex, key))
 }
 
+// TestChannelKeyFailover 依次尝试渠道的每把密钥, 任一成功即返回该 Key 的结果;
+// 全部失败时返回聚合错误。供模型评估使用, 与面板逐密钥诊断(TestChannelKeys 并发全测)不同:
+// 评估只需确认渠道可服务该模型, 顺序探测避免对同一上游产生并发压力, 且首个可用 Key 即可短路。
+// 不检查冷却: 评估是主动诊断, 应尝试所有配置的 Key 而非被业务流量的冷却状态遮蔽。
+func TestChannelKeyFailover(ctx context.Context, channelID int, modelName string, message string) (*ChannelTestResult, error) {
+	channel, err := op.ChannelGet(channelID)
+	if err != nil {
+		return nil, fmt.Errorf("channel not found: %w", err)
+	}
+	if modelName == "" {
+		return nil, fmt.Errorf("model is required")
+	}
+	if message == "" {
+		message = "ping"
+	}
+	candidates := channelKeyTestCandidates(channel)
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("渠道未配置任何密钥")
+	}
+	var errs []string
+	for index, key := range candidates {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		effective, err := effectiveChannelForKey(channel, key)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("#%d(%s): %v", index+1, key.ID, err))
+			continue
+		}
+		result, err := sendChannelTestRequest(ctx, effective, modelName, message, channelKeyLabel(index, key))
+		if err == nil {
+			return result, nil
+		}
+		errs = append(errs, fmt.Sprintf("#%d(%s): %v", index+1, key.ID, err))
+	}
+	return nil, fmt.Errorf("全部密钥测试失败: %s", strings.Join(errs, "; "))
+}
+
 // TestChannelKeys 对渠道配置的每一把密钥各发送一条测试消息, 按配置顺序返回逐 Key 结果,
 // 供管理端一键核验全部密钥有效性。诊断入口不写冷却记录, 每把密钥独立判定互不影响。
 func TestChannelKeys(ctx context.Context, channelID int, modelName string, message string) ([]ChannelKeyTestResult, error) {

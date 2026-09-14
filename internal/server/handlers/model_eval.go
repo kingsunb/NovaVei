@@ -64,16 +64,16 @@ func runModelEval(c *gin.Context) {
 		},
 		Prompt: model.ModelEvalPrompt,
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 300*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Minute)
 	defer cancel()
-	result, testErr := relay.TestChannel(ctx, channel.ID, channelModel.Name, record.Prompt, "")
+	result, testErr := relay.TestChannelKeyFailover(ctx, channel.ID, channelModel.Name, record.Prompt)
 	record.CompletedAt = time.Now()
 	record.LatencyMS = time.Since(started).Milliseconds()
 	if testErr != nil {
 		record.Outcome = model.ModelEvalError
 		switch {
 		case errors.Is(testErr, context.DeadlineExceeded):
-			record.Error = "评估超时（最长等待 300 秒）"
+			record.Error = "评估超时（最长等待 10 分钟）"
 		case errors.Is(testErr, context.Canceled):
 			record.Error = "评估请求已取消"
 		default:

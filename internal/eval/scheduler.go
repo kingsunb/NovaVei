@@ -17,7 +17,7 @@ import (
 
 const (
 	EvalConcurrency  = 4
-	evalTimeout      = 300 * time.Second
+	evalTimeout      = 10 * time.Minute
 	evalSaveTimeout  = 10 * time.Second
 	evalTickInterval = 2 * time.Second
 )
@@ -181,7 +181,7 @@ func (s *Scheduler) executeTask(task model.ModelEvalQueueTask) {
 		Prompt: model.ModelEvalPrompt,
 	}
 	evalCtx, cancel := context.WithTimeout(s.ctx, evalTimeout)
-	result, testErr := relay.TestChannel(evalCtx, task.ChannelID, task.ModelName, model.ModelEvalPrompt, "")
+	result, testErr := relay.TestChannelKeyFailover(evalCtx, task.ChannelID, task.ModelName, model.ModelEvalPrompt)
 	cancel()
 	record.CompletedAt = time.Now()
 	record.LatencyMS = time.Since(started).Milliseconds()
@@ -189,7 +189,7 @@ func (s *Scheduler) executeTask(task model.ModelEvalQueueTask) {
 		record.Outcome = model.ModelEvalError
 		switch {
 		case errors.Is(testErr, context.DeadlineExceeded):
-			record.Error = "评估超时（最长等待 300 秒）"
+			record.Error = "评估超时（最长等待 10 分钟）"
 		case errors.Is(testErr, context.Canceled):
 			record.Error = "评估请求已取消"
 		default:
