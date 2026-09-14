@@ -24,8 +24,8 @@ export const EVAL_PROMPT =
   `请将最终完整的 HTML 代码放在 ${RESULT_START} 和 ${RESULT_END} 之间，` +
   "这两个标记之外不要输出任何其他内容。";
 
-/** 分组名称固定为 pro。 */
-export const PRO_GROUP_NAME = "pro";
+/** 评估排序自动写入的分组名称。 */
+export const AUTO_GROUP_NAME = "auto";
 
 /** 并发测试的 worker 数，与渠道编辑器批量测试保持一致，避免触发上游风控。 */
 export const EVAL_CONCURRENCY = 4;

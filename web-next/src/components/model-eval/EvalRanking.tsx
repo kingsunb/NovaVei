@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, ListChecks, Plus, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-import { PRO_GROUP_NAME, extractRenderableHtml, formatEvalTime, type EvalRankSummary } from "@/lib/model-eval";
+import { AUTO_GROUP_NAME, extractRenderableHtml, formatEvalTime, type EvalRankSummary } from "@/lib/model-eval";
 import { formatNumber } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -24,13 +24,13 @@ export function EvalRanking({ busy, onShowHistory }: { busy: boolean; onShowHist
   });
   const groupsQuery = useQuery({ queryKey: ["groups"], queryFn: api.listGroups });
   const rankable = (ranksQuery.data?.items ?? []).filter((r) => r.outcome === "ok" || r.outcome === "violation");
-  const existingPro = groupsQuery.data?.find((g) => g.name === PRO_GROUP_NAME);
+  const existingAuto = groupsQuery.data?.find((g) => g.name === AUTO_GROUP_NAME);
 
-  const applyProMut = useMutation({
+  const applyAutoMut = useMutation({
     mutationFn: () => api.applyProGroup(),
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ["groups"] });
-      toast.success(`分组 ${PRO_GROUP_NAME} 已${res.created ? "创建" : "更新"}，共 ${res.item_count} 个成员`);
+      toast.success(`分组 ${AUTO_GROUP_NAME} 已${res.created ? "创建" : "更新"}，共 ${res.item_count} 个成员`);
     },
     onError: (e: Error) => toast.error(e.message || "更新分组失败"),
   });
@@ -50,7 +50,7 @@ export function EvalRanking({ busy, onShowHistory }: { busy: boolean; onShowHist
     onError: (e: Error) => toast.error(e.message || "移除失败"),
     onSettled: () => qc.invalidateQueries({ queryKey: ["model-eval", "rank", "list"] }),
   });
-  const rankBusy = busy || moveMut.isPending || removeMut.isPending || applyProMut.isPending;
+  const rankBusy = busy || moveMut.isPending || removeMut.isPending || applyAutoMut.isPending;
 
   function toggle(id: number) {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -68,12 +68,12 @@ export function EvalRanking({ busy, onShowHistory }: { busy: boolean; onShowHist
             <Button type="button" variant="ghost" size="sm" onClick={() => void ranksQuery.refetch()} disabled={rankBusy || ranksQuery.isFetching}>
               <RefreshCw className={`h-3.5 w-3.5 ${ranksQuery.isFetching ? "animate-spin" : ""}`} aria-hidden />刷新
             </Button>
-            <Button type="button" variant="secondary" size="sm" onClick={() => applyProMut.mutate()} disabled={rankBusy || rankable.length === 0 || ranksQuery.isFetching || ranksQuery.isError} loading={applyProMut.isPending}>
-              <Plus className="h-3.5 w-3.5" aria-hidden />{existingPro ? "更新" : "创建"} {PRO_GROUP_NAME} 分组
+            <Button type="button" variant="secondary" size="sm" onClick={() => applyAutoMut.mutate()} disabled={rankBusy || rankable.length === 0 || ranksQuery.isFetching || ranksQuery.isError} loading={applyAutoMut.isPending}>
+              <Plus className="h-3.5 w-3.5" aria-hidden />{existingAuto ? "更新" : "创建"} {AUTO_GROUP_NAME} 分组
             </Button>
           </div>
         </div>
-        <p className="text-[11px] leading-relaxed text-ink-subtle">仅显示格式合规的成功结果，越靠前优先级越高。输入名次后按回车或移开焦点保存，其他模型自动顺延；超过最大名次时排到最后。{existingPro ? `更新将用当前排序替换 ${PRO_GROUP_NAME} 的现有成员。` : "可从历史记录加入成功结果。"}</p>
+        <p className="text-[11px] leading-relaxed text-ink-subtle">仅显示格式合规的成功结果，越靠前优先级越高。输入名次后按回车或移开焦点保存，其他模型自动顺延；超过最大名次时排到最后。{existingAuto ? `更新将用当前排序替换 ${AUTO_GROUP_NAME} 的现有成员。` : "可从历史记录加入成功结果。"}</p>
       </div>
 
       {ranksQuery.isError ? (

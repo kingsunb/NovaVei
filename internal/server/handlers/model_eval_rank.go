@@ -140,7 +140,7 @@ func applyProFromEvalRank(c *gin.Context) {
 		resp.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	group, created, err := op.GroupReplaceItemsByName(c.Request.Context(), "pro", ranks)
+	group, created, err := op.GroupReplaceItemsByName(c.Request.Context(), "auto", ranks)
 	if err != nil {
 		switch {
 		case errors.Is(err, op.ErrGroupReplaceNoRankable),

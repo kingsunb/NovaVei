@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   EVAL_PROMPT,
-  PRO_GROUP_NAME,
+  AUTO_GROUP_NAME,
   RESULT_END,
   RESULT_START,
   extractEvalHtml,
@@ -69,8 +69,8 @@ describe("常量", () => {
     expect(EVAL_PROMPT).toContain(RESULT_END);
   });
 
-  it("PRO_GROUP_NAME 为 pro", () => {
-    expect(PRO_GROUP_NAME).toBe("pro");
+  it("AUTO_GROUP_NAME 为 auto", () => {
+    expect(AUTO_GROUP_NAME).toBe("auto");
   });
 });
 
