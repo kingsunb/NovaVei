@@ -15,22 +15,36 @@ var (
 	ErrEvalRankNotFound         = errors.New("排序条目不存在")
 	ErrEvalRankMoveBounds       = errors.New("已到排序边界")
 	ErrEvalRankInvalidPosition  = errors.New("排序名次必须为大于 0 的整数")
-	ErrEvalRankMoveErrorOutcome = errors.New("仅格式合规的成功评估可调整顺序")
+	ErrEvalRankMoveErrorOutcome = errors.New("仅成功评估可调整顺序")
 	ErrEvalRankModelUnavailable = errors.New("渠道或模型已不可用")
-	ErrEvalRankErrorOutcome     = errors.New("仅格式合规的成功评估可加入排序")
+	ErrEvalRankErrorOutcome     = errors.New("仅成功评估可加入排序")
 )
 
 // 串行化队列写入与手动排序，避免并发分配相同位置或覆盖正在调整的名次。
 var modelEvalRankMu sync.Mutex
 
-// position 语义：越小越靠前（ORDER BY position ASC）。仅格式合规(ok)的评估
-// 进入排序，position >= 0 递增；请求失败和格式不符的结果仅保留历史。
+// rankableOutcomes 可进入排序的评估结果：请求成功即可，不区分格式是否合规。
+// ok = 成功且格式合规；violation = 成功但格式不符；error = 请求失败不入排序。
+var rankableOutcomes = []model.ModelEvalOutcome{model.ModelEvalOK, model.ModelEvalViolation}
+
+// isRankableOutcome 判断该评估结果是否可进入排序（成功即入，不区分格式合规）。
+func isRankableOutcome(outcome model.ModelEvalOutcome) bool {
+	for _, o := range rankableOutcomes {
+		if outcome == o {
+			return true
+		}
+	}
+	return false
+}
+
+// position 语义：越小越靠前（ORDER BY position ASC）。请求成功的评估（ok 和
+// violation）进入排序，position >= 0 递增；请求失败(error)的结果仅保留历史。
 
 // ModelEvalRankList 返回排序列表摘要（不含 content），按 position ASC, id ASC。
 func ModelEvalRankList(ctx context.Context) ([]model.ModelEvalRankSummary, error) {
 	items := make([]model.ModelEvalRankSummary, 0)
 	err := db.GetDB().WithContext(ctx).Model(&model.ModelEvalRank{}).
-		Where("outcome = ?", model.ModelEvalOK).
+		Where("outcome IN ?", rankableOutcomes).
 		Omit("content").
 		Order("position ASC, id ASC").
 		Find(&items).Error
@@ -54,7 +68,7 @@ func nextRankablePosition(ctx context.Context) (int, error) {
 	var maxPos int
 	if err := db.GetDB().WithContext(ctx).Model(&model.ModelEvalRank{}).
 		Select("COALESCE(MAX(position), -1)").
-		Where("outcome = ? AND position >= ?", model.ModelEvalOK, 0).
+		Where("outcome IN ? AND position >= ?", rankableOutcomes, 0).
 		Scan(&maxPos).Error; err != nil {
 		return 0, err
 	}
@@ -62,10 +76,10 @@ func nextRankablePosition(ctx context.Context) (int, error) {
 }
 
 // ModelEvalRankUpsert 以 (channel_id, model_name) 为去重键写入排序条目：
-// 命中则替换快照字段；未命中则追加到可入组区末尾。仅格式合规(ok)的评估写入排序。
+// 命中则替换快照字段；未命中则追加到可入组区末尾。请求成功的评估（ok 和 violation）写入排序。
 // 写入前对 Content 做 1MB 截断、Error 脱敏并截断 4096。
 func ModelEvalRankUpsert(ctx context.Context, rank *model.ModelEvalRank) error {
-	if rank.Outcome != model.ModelEvalOK {
+	if !isRankableOutcome(rank.Outcome) {
 		return nil
 	}
 	modelEvalRankMu.Lock()
@@ -83,8 +97,8 @@ func ModelEvalRankUpsert(ctx context.Context, rank *model.ModelEvalRank) error {
 		First(&existing).Error
 	switch {
 	case err == nil:
-		// 原有条目同为成功：保留已调整的位置；历史遗留的不合规条目重新追加到末尾。
-		if existing.Outcome == model.ModelEvalOK {
+		// 原有条目同为可入组：保留已调整的位置；历史遗留的不合规条目重新追加到末尾。
+		if isRankableOutcome(existing.Outcome) && existing.Position >= 0 {
 			rank.Position = existing.Position
 		} else if pos, e := nextRankablePosition(ctx); e != nil {
 			return e
@@ -145,13 +159,13 @@ func modelEvalRankReorder(ctx context.Context, id int64, direction int, position
 			}
 			return err
 		}
-		if target.Outcome != model.ModelEvalOK {
+		if !isRankableOutcome(target.Outcome) {
 			return ErrEvalRankMoveErrorOutcome
 		}
 
 		var rankable []model.ModelEvalRank
 		if err := tx.Select("id", "position").
-			Where("outcome = ?", model.ModelEvalOK).
+			Where("outcome IN ?", rankableOutcomes).
 			Order("position ASC, id ASC").
 			Find(&rankable).Error; err != nil {
 			return err
@@ -215,7 +229,7 @@ func ModelEvalRankFromHistory(ctx context.Context, evalID int64) ([]model.ModelE
 		}
 		return nil, err
 	}
-	if record.Outcome != model.ModelEvalOK {
+	if !isRankableOutcome(record.Outcome) {
 		return nil, ErrEvalRankErrorOutcome
 	}
 	if _, err := ChannelModelGet(record.ChannelModelID); err != nil {

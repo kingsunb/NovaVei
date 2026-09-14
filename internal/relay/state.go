@@ -101,17 +101,18 @@ type RequestState struct {
 
 // AttemptRecord 一轮上游尝试的轨迹记录, 面板据此渲染请求的时间线。
 type AttemptRecord struct {
-	Seq         int            `json:"seq"`                 // 轮次序号, 与 Round 一致。
-	ChannelID   int            `json:"channel_id"`          // 本轮选中的渠道 ID。
-	ChannelName string         `json:"channel_name"`        // 本轮选中的渠道名称。
-	MemberID    int            `json:"member_id"`           // 本轮使用的分组成员 ID。
-	Model       string         `json:"model"`               // 本轮实际请求上游的模型名称。
-	KeyLabel    string         `json:"key_label,omitempty"` // 本轮使用的渠道 Key 标签: "#序号(别名)", 旧式单 Key 为空。
-	ProxyAddr   string         `json:"proxy_addr,omitempty"` // 本轮出口代理地址(密码打码); 空为直连。
-	LatencyMS   int64          `json:"latency_ms"`          // 本轮从发起到结束的耗时毫秒。
-	Outcome     AttemptOutcome `json:"outcome"`             // 结束形态: 成功/失败/取消。
-	ErrClass    ErrClass       `json:"err_class,omitempty"` // 失败分类, 成功时为空。
-	ErrBrief    string         `json:"err_brief,omitempty"` // 失败摘要, 超长按字节截断。
+	Seq          int            `json:"seq"`                 // 轮次序号, 与 Round 一致。
+	ChannelID    int            `json:"channel_id"`          // 本轮选中的渠道 ID。
+	ChannelName  string         `json:"channel_name"`        // 本轮选中的渠道名称。
+	MemberID     int            `json:"member_id"`           // 本轮使用的分组成员 ID。
+	Model        string         `json:"model"`               // 本轮实际请求上游的模型名称。
+	KeyLabel     string         `json:"key_label,omitempty"` // 本轮使用的渠道 Key 标签: "#序号(别名)", 旧式单 Key 为空。
+	ProxyAddr    string         `json:"proxy_addr,omitempty"` // 本轮出口代理地址(密码打码); 空为直连。
+	FirstTokenMS int64          `json:"first_token_ms,omitempty"` // 本轮首字耗时毫秒(TTFT), 首字未到为 0。
+	LatencyMS    int64          `json:"latency_ms"`          // 本轮从发起到结束的耗时毫秒。
+	Outcome      AttemptOutcome `json:"outcome"`             // 结束形态: 成功/失败/取消。
+	ErrClass     ErrClass       `json:"err_class,omitempty"` // 失败分类, 成功时为空。
+	ErrBrief     string         `json:"err_brief,omitempty"` // 失败摘要, 超长按字节截断。
 }
 
 const streamBuffer = 16 // 单个状态流连接的非阻塞消息缓冲容量。
@@ -205,10 +206,12 @@ func (r RequestState) MarshalJSON() ([]byte, error) {
 		Round          int             `json:"round"`
 		TargetChannel  string          `json:"target_channel"`
 		TargetModel    string          `json:"target_model"`
+		KeyLabel       string          `json:"key_label,omitempty"`
 		ThinkingLevel  string          `json:"thinking_level,omitempty"`
 		ClientFormat   string          `json:"client_format"`
 		UpstreamType   string          `json:"upstream_type"`
 		RelayMode      string          `json:"relay_mode"`
+		ProxyAddr      string          `json:"proxy_addr,omitempty"`
 		Masked         bool            `json:"masked,omitempty"`
 		Sending        bool            `json:"sending"`
 		Error          string          `json:"error,omitempty"`
@@ -227,9 +230,9 @@ func (r RequestState) MarshalJSON() ([]byte, error) {
 		FirstTokenAt: r.FirstTokenAt, Duration: nanoseconds,
 		DurationMS: milliseconds, Model: r.Model, ClientIP: r.ClientIP, APIKey: maskAPIKey(r.APIKey),
 		KeyName: r.KeyName, Usage: r.Usage, UsageEstimated: r.UsageEstimated, Round: r.Round,
-		TargetChannel: r.TargetChannel, TargetModel: r.TargetModel, ThinkingLevel: r.ThinkingLevel,
-		ClientFormat: r.ClientFormat, UpstreamType: r.UpstreamType, RelayMode: r.RelayMode,
-		Masked: r.Masked,
+		TargetChannel: r.TargetChannel, TargetModel: r.TargetModel, KeyLabel: r.KeyLabel,
+		ThinkingLevel: r.ThinkingLevel, ClientFormat: r.ClientFormat, UpstreamType: r.UpstreamType,
+		RelayMode: r.RelayMode, ProxyAddr: r.ProxyAddr, Masked: r.Masked,
 		Sending: r.Sending, Error: r.Error, Class: r.Class, Attempts: attempts,
 	})
 }
@@ -450,12 +453,18 @@ func (r *RequestState) wait(ctx context.Context, seconds int) bool {
 
 // markCommitted 标记响应已提交; 流式响应在此之后仍会持续转发, 故必须先于提交动作调用。
 // 首字时点在此统一记录：流式首帧写出、非流式整响应提交均落在该位置，便于展示首字耗时（TTFT）。
+// 同时回填当前轮次尝试轨迹的首字耗时，供时间线展示「首字 X · 总耗时 Y」。
 func (r *RequestState) markCommitted() {
 	mu.Lock()
 	defer mu.Unlock()
 
-	r.FirstTokenAt = time.Now()
+	now := time.Now()
+	r.FirstTokenAt = now
 	r.Status = StatusCommitted
+	// 回填最新一条尝试轨迹的首字耗时（本轮即成功轮，roundStartedAt 已在 startRound 设置）。
+	if len(r.Attempts) > 0 && r.Attempts[len(r.Attempts)-1].Seq == r.Round && !r.roundStartedAt.IsZero() {
+		r.Attempts[len(r.Attempts)-1].FirstTokenMS = now.Sub(r.roundStartedAt).Milliseconds()
+	}
 	publishRequestLocked(r)
 }
 

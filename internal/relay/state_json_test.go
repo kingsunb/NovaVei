@@ -99,6 +99,125 @@ func TestMaskAPIKey(t *testing.T) {
 	}
 }
 
+// TestRequestStateJSONIncludesProxyAddrAndKeyLabel 验证 MarshalJSON 输出 proxy_addr 和 key_label，
+// 修复前这两个字段在 requestStateJSON 中缺失，导致前端列表始终显示「直连」且无法看到密钥标签。
+func TestRequestStateJSONIncludesProxyAddrAndKeyLabel(t *testing.T) {
+	state := RequestState{
+		ID:        100,
+		Status:    StatusSuccess,
+		StartedAt: time.Unix(200, 0).UTC(),
+		Duration:  500 * time.Millisecond,
+		Model:     "demo",
+		ClientIP:  "203.0.113.50",
+		ProxyAddr: "socks5://***@10.0.0.9:1080",
+		KeyLabel:  "#1(my-key)",
+		Attempts:  []AttemptRecord{},
+	}
+
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var got struct {
+		ProxyAddr string `json:"proxy_addr"`
+		KeyLabel  string `json:"key_label"`
+	}
+	if err := json.Unmarshal(encoded, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.ProxyAddr != "socks5://***@10.0.0.9:1080" {
+		t.Fatalf("proxy_addr = %q, want socks5://***@10.0.0.9:1080", got.ProxyAddr)
+	}
+	if got.KeyLabel != "#1(my-key)" {
+		t.Fatalf("key_label = %q, want #1(my-key)", got.KeyLabel)
+	}
+}
+
+// TestRequestStateJSONOmitsEmptyProxyAddr 验证无代理时 proxy_addr 为空且 omitempty 生效。
+func TestRequestStateJSONOmitsEmptyProxyAddr(t *testing.T) {
+	state := RequestState{
+		ID:        101,
+		Status:    StatusSuccess,
+		StartedAt: time.Unix(300, 0).UTC(),
+		Model:     "demo",
+		ClientIP:  "203.0.113.51",
+		Attempts:  []AttemptRecord{},
+	}
+
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got struct {
+		ProxyAddr string `json:"proxy_addr"`
+	}
+	if err := json.Unmarshal(encoded, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.ProxyAddr != "" {
+		t.Fatalf("proxy_addr = %q, want empty for direct connection", got.ProxyAddr)
+	}
+}
+
+// TestAttemptRecordJSONIncludesFirstTokenMS 验证 AttemptRecord 序列化包含 first_token_ms 字段。
+func TestAttemptRecordJSONIncludesFirstTokenMS(t *testing.T) {
+	attempt := AttemptRecord{
+		Seq:          1,
+		ChannelID:    7,
+		ChannelName:  "ch",
+		Model:        "m",
+		FirstTokenMS: 120,
+		LatencyMS:    500,
+		Outcome:      AttemptSuccess,
+	}
+	encoded, err := json.Marshal(attempt)
+	if err != nil {
+		t.Fatalf("marshal attempt: %v", err)
+	}
+	var got struct {
+		FirstTokenMS int64 `json:"first_token_ms"`
+		LatencyMS    int64 `json:"latency_ms"`
+	}
+	if err := json.Unmarshal(encoded, &got); err != nil {
+		t.Fatalf("unmarshal attempt: %v", err)
+	}
+	if got.FirstTokenMS != 120 {
+		t.Fatalf("first_token_ms = %d, want 120", got.FirstTokenMS)
+	}
+	if got.LatencyMS != 500 {
+		t.Fatalf("latency_ms = %d, want 500", got.LatencyMS)
+	}
+}
+
+// TestMarkCommittedSetsAttemptFirstTokenMS 验证 markCommitted 回填当前轮次尝试轨迹的首字耗时。
+func TestMarkCommittedSetsAttemptFirstTokenMS(t *testing.T) {
+	Clear()
+	state := newRequestState("demo", "{}", "127.0.0.1", "sk-test-ABCD", "test-key")
+	state.startRound(func() {}, RoundTarget{
+		MemberID:    1,
+		ChannelID:   7,
+		ChannelName: "ch",
+		Model:       "m",
+	})
+	// 确保首字时点与轮次起始有可测量的差值。
+	time.Sleep(2 * time.Millisecond)
+	// finishRound 先记录本轮成功并设置 LatencyMS，markCommitted 随后回填 FirstTokenMS。
+	state.finishRound(AttemptSuccess, "", "")
+	state.markCommitted()
+	state.markSucceeded("resp", nil)
+
+	if len(state.Attempts) != 1 {
+		t.Fatalf("attempts = %d, want 1", len(state.Attempts))
+	}
+	if state.Attempts[0].FirstTokenMS <= 0 {
+		t.Fatalf("first_token_ms = %d, want > 0 after markCommitted", state.Attempts[0].FirstTokenMS)
+	}
+	if state.Attempts[0].LatencyMS < state.Attempts[0].FirstTokenMS {
+		t.Fatalf("latency_ms (%d) should be >= first_token_ms (%d)", state.Attempts[0].LatencyMS, state.Attempts[0].FirstTokenMS)
+	}
+}
+
 // TestRequestStateJSONAttemptsNeverNull 技术债回归: attempts 契约一致。
 // 修复前 MarshalJSON 构造了非 nil 的 attempts 局部值, 却仍序列化 r.Attempts(可能 nil),
 // 导致 nil 时输出 "attempts":null 而非 "attempts":[]。前端按数组迭代时 null 会报错。

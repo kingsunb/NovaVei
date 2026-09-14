@@ -1013,6 +1013,60 @@ function AttemptLine({ a }: { a: AttemptRecord }) {
         : inProgress
           ? "进行中"
           : "已取消";
+
+  // 成功尝试：三行布局（渠道+模型+密钥 / 代理 / 首字+耗时）。
+  if (a.outcome === "success") {
+    return (
+      <li className="flex flex-col gap-1 px-3 py-2.5 text-xs">
+        {/* 第一行：渠道 + 模型名字 + 密钥 */}
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="shrink-0 tabular-nums text-ink-muted">
+            #{a.seq}
+          </span>
+          <span className="font-semibold text-ink truncate">
+            {a.channel_name}
+          </span>
+          {a.key_label && (
+            <Pill tone="neutral" dot={false} className="text-[10px]">
+              {a.key_label}
+            </Pill>
+          )}
+          <span className="mono truncate text-ink-muted" title={a.model}>
+            {a.model}
+          </span>
+          <span className="ml-auto shrink-0">
+            <Pill tone={outcomeTone} dot={false}>
+              {outcomeLabel}
+            </Pill>
+          </span>
+        </div>
+        {/* 第二行：是否使用代理 + 代理详情 */}
+        <div className="flex items-center gap-1.5 min-w-0 pl-5">
+          {a.proxy_addr ? (
+            <span
+              className="mono truncate text-[10px] text-blue-600 dark:text-blue-400"
+              title={a.proxy_addr}
+            >
+              代理 {a.proxy_addr}
+            </span>
+          ) : (
+            <span className="shrink-0 text-[10px] text-ink-subtle">直连（未走代理）</span>
+          )}
+        </div>
+        {/* 第三行：首字 + 耗时 */}
+        <div className="flex items-center gap-1.5 pl-5 tabular-nums text-ink-muted">
+          <Clock className="size-3" />
+          {a.first_token_ms && a.first_token_ms > 0 ? (
+            <span>首字 {a.first_token_ms}ms · 总耗时 {a.latency_ms}ms</span>
+          ) : (
+            <span>总耗时 {a.latency_ms}ms</span>
+          )}
+        </div>
+      </li>
+    );
+  }
+
+  // 非成功尝试：保持原有单行布局。
   return (
     <li className="flex flex-col gap-1.5 px-3 py-2.5 text-xs">
       <div className="flex items-center gap-2 min-w-0">

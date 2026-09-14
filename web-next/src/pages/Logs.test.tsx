@@ -473,7 +473,7 @@ describe("<LogsPage /> 追踪 Sheet 诊断区块与时间线", () => {
     expect(within(dialog).queryByText("（估算）")).toBeNull();
   });
 
-  it("时间线：latency_ms>0 显示毫秒、0 显示「—」，失败分类与摘要可见", async () => {
+  it("时间线：成功尝试三行布局(渠道+模型+密钥/代理/首字+耗时)，失败尝试保持单行", async () => {
     const dialog = await openTrace({
       ...makeLog(1),
       attempts: [
@@ -484,6 +484,8 @@ describe("<LogsPage /> 追踪 Sheet 诊断区块与时间线", () => {
           member_id: 1,
           model: "gpt-4o",
           key_label: "#1(主)",
+          proxy_addr: "socks5://***@10.0.0.9:1080",
+          first_token_ms: 200,
           latency_ms: 1500,
           outcome: "success",
         },
@@ -503,10 +505,42 @@ describe("<LogsPage /> 追踪 Sheet 诊断区块与时间线", () => {
     const ol = dialog.querySelector("ol");
     expect(ol).toBeTruthy();
     const timeline = within(ol as HTMLElement);
-    expect(timeline.getByText("1500ms")).toBeTruthy();
+    // 成功尝试第一行：渠道 + 模型 + 密钥标签
+    expect(timeline.getAllByText("openai-prod").length).toBeGreaterThanOrEqual(1);
+    expect(timeline.getAllByText("gpt-4o").length).toBeGreaterThanOrEqual(1);
+    expect(timeline.getByText("#1(主)")).toBeTruthy();
+    // 成功尝试第二行：代理详情
+    expect(timeline.getByText(/代理 socks5:\/\/\*\*\*@10\.0\.0\.9:1080/)).toBeTruthy();
+    // 成功尝试第三行：首字 + 总耗时
+    expect(timeline.getByText(/首字 200ms · 总耗时 1500ms/)).toBeTruthy();
+    // 失败尝试保持单行：0 显示「—」，失败分类与摘要可见
     expect(timeline.getByText("—")).toBeTruthy();
     expect(timeline.getByText("timeout")).toBeTruthy();
     expect(timeline.getByText("上游超时")).toBeTruthy();
-    expect(timeline.getByText("#1(主)")).toBeTruthy();
+  });
+
+  it("时间线：成功尝试无首字时回退纯总耗时，无代理时显示直连", async () => {
+    const dialog = await openTrace({
+      ...makeLog(1),
+      attempts: [
+        {
+          seq: 1,
+          channel_id: 1,
+          channel_name: "direct-ch",
+          member_id: 1,
+          model: "gpt-4o",
+          latency_ms: 800,
+          outcome: "success",
+        },
+      ],
+    });
+    const ol = dialog.querySelector("ol");
+    expect(ol).toBeTruthy();
+    const timeline = within(ol as HTMLElement);
+    // 无 first_token_ms 时回退纯总耗时
+    expect(timeline.getByText(/总耗时 800ms/)).toBeTruthy();
+    expect(timeline.queryByText(/首字/)).toBeNull();
+    // 无代理时显示直连
+    expect(timeline.getByText("直连（未走代理）")).toBeTruthy();
   });
 });

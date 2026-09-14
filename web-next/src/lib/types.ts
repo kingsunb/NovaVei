@@ -454,6 +454,8 @@ export interface AttemptRecord {
   model: string;
   key_label?: string;
   proxy_addr?: string;
+  /** 本轮首字耗时毫秒(TTFT)，首字未到为 0 或 undefined。 */
+  first_token_ms?: number;
   latency_ms: number;
   outcome: AttemptOutcome;
   err_class?: ErrClass;

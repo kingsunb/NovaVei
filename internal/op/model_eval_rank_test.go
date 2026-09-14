@@ -197,3 +197,82 @@ func TestModelEvalRankFromHistoryRejectsError(t *testing.T) {
 	_, err := ModelEvalRankFromHistory(ctx, eval.ID)
 	assert.ErrorIs(t, err, ErrEvalRankErrorOutcome)
 }
+
+// TestModelEvalRankListIncludesViolation 验证排序列表包含 violation 条目（成功但格式不符）。
+func TestModelEvalRankListIncludesViolation(t *testing.T) {
+	ctx := context.Background()
+	t.Cleanup(func() { cleanupRanksByChannel(t, 970090, 970091) })
+
+	require.NoError(t, ModelEvalRankUpsert(ctx, &model.ModelEvalRank{ChannelID: 970090, ChannelModelID: 90, ModelName: "vio-a", Outcome: model.ModelEvalViolation, Content: "c"}))
+	require.NoError(t, ModelEvalRankUpsert(ctx, &model.ModelEvalRank{ChannelID: 970091, ChannelModelID: 91, ModelName: "ok-a", Outcome: model.ModelEvalOK, Content: "c"}))
+
+	items, err := ModelEvalRankList(ctx)
+	require.NoError(t, err)
+	var foundVio, foundOK bool
+	for _, it := range items {
+		if it.ChannelID == 970090 && it.Outcome == model.ModelEvalViolation {
+			foundVio = true
+		}
+		if it.ChannelID == 970091 && it.Outcome == model.ModelEvalOK {
+			foundOK = true
+		}
+	}
+	assert.True(t, foundVio, "violation 条目应出现在排序列表")
+	assert.True(t, foundOK, "ok 条目应出现在排序列表")
+}
+
+// TestModelEvalRankMoveAllowsViolation 验证 violation 条目可调整顺序。
+func TestModelEvalRankMoveAllowsViolation(t *testing.T) {
+	ctx := context.Background()
+	t.Cleanup(func() { cleanupRanksByChannel(t, 970100, 970101) })
+
+	a := &model.ModelEvalRank{ChannelID: 970100, ChannelModelID: 100, ModelName: "vio-mv", Outcome: model.ModelEvalViolation}
+	require.NoError(t, ModelEvalRankUpsert(ctx, a))
+	b := &model.ModelEvalRank{ChannelID: 970101, ChannelModelID: 101, ModelName: "ok-mv", Outcome: model.ModelEvalOK}
+	require.NoError(t, ModelEvalRankUpsert(ctx, b))
+	require.Less(t, a.Position, b.Position)
+
+	// b 向前移动（direction=-1），应与 a 交换，不应报错。
+	list, err := ModelEvalRankMove(ctx, b.ID, -1)
+	require.NoError(t, err, "violation 条目应可移动")
+
+	var afterA model.ModelEvalRankSummary
+	for _, it := range list {
+		if it.ID == a.ID {
+			afterA = it
+		}
+	}
+	assert.Equal(t, b.Position, afterA.Position, "a 应拿到 b 原位置")
+}
+
+// TestModelEvalRankFromHistoryAcceptsViolation 验证从历史加入 violation 评估时成功入排序。
+func TestModelEvalRankFromHistoryAcceptsViolation(t *testing.T) {
+	ctx := context.Background()
+	// 先创建渠道和渠道模型（FromHistory 会校验渠道存在且启用）；用 ChannelCreate 以刷新缓存。
+	ch := &model.Channel{Name: "vio-ch", Type: "openai", Enabled: true, BaseURL: "https://api.openai.com", Key: "sk-test", Models: []model.ChannelModel{{Name: "vio-model"}}}
+	require.NoError(t, ChannelCreate(ch, ctx))
+	t.Cleanup(func() {
+		db.GetDB().Delete(&model.Channel{}, ch.ID)
+		cleanupRanksByChannel(t, ch.ID)
+	})
+
+	eval := &model.ModelEval{
+		ModelEvalSummary: model.ModelEvalSummary{
+			ChannelID: ch.ID, ChannelModelID: ch.Models[0].ID, ChannelName: ch.Name, ChannelType: ch.Type, ModelName: "vio-model",
+			Outcome: model.ModelEvalViolation,
+		},
+		Content: "some content without markers",
+	}
+	require.NoError(t, db.GetDB().Create(eval).Error)
+	t.Cleanup(func() { db.GetDB().Delete(&model.ModelEval{}, eval.ID) })
+
+	list, err := ModelEvalRankFromHistory(ctx, eval.ID)
+	require.NoError(t, err, "violation 评估应可从历史加入排序")
+	var found bool
+	for _, it := range list {
+		if it.ChannelID == ch.ID && it.Outcome == model.ModelEvalViolation {
+			found = true
+		}
+	}
+	assert.True(t, found, "violation 条目应出现在排序列表")
+}

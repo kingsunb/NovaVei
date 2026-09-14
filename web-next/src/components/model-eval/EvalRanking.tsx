@@ -23,7 +23,7 @@ export function EvalRanking({ busy, onShowHistory }: { busy: boolean; onShowHist
     staleTime: 0,
   });
   const groupsQuery = useQuery({ queryKey: ["groups"], queryFn: api.listGroups });
-  const rankable = (ranksQuery.data?.items ?? []).filter((r) => r.outcome === "ok");
+  const rankable = (ranksQuery.data?.items ?? []).filter((r) => r.outcome === "ok" || r.outcome === "violation");
   const existingPro = groupsQuery.data?.find((g) => g.name === PRO_GROUP_NAME);
 
   const applyProMut = useMutation({
