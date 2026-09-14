@@ -878,7 +878,9 @@ function TraceSheet({
                 </div>
                 <div className="min-h-0 flex-1 overflow-auto">
                   <ol className="divide-y divide-border">
-                    {attempts.map((a) => (
+                    {/* 倒序渲染：最新轮次在顶部，打开弹窗即可见当前尝试状态，
+                        无需滚动到底部寻找进行中的条目。 */}
+                    {[...attempts].reverse().map((a) => (
                       <AttemptLine key={a.seq} a={a} />
                     ))}
                   </ol>
@@ -1028,6 +1030,16 @@ function AttemptLine({ a }: { a: AttemptRecord }) {
         <span className="mono truncate text-ink-muted" title={a.model}>
           {a.model}
         </span>
+        {a.proxy_addr ? (
+          <span
+            className="mono truncate text-[10px] text-blue-600 dark:text-blue-400"
+            title={a.proxy_addr}
+          >
+            代理 {a.proxy_addr}
+          </span>
+        ) : (
+          <span className="shrink-0 text-[10px] text-ink-subtle">直连</span>
+        )}
         <span className="ml-auto flex shrink-0 items-center gap-1.5 tabular-nums text-ink-muted">
           {a.latency_ms > 0 && (
             <>
@@ -1231,6 +1243,11 @@ function RouteMemberRow({
             )}
             {attempt.latency_ms > 0 && (
               <span className="num text-ink-muted">· {attempt.latency_ms}ms</span>
+            )}
+            {attempt.proxy_addr && (
+              <span className="mono truncate text-ink-muted" title={attempt.proxy_addr}>
+                · 代理 {attempt.proxy_addr}
+              </span>
             )}
           </div>
         )}

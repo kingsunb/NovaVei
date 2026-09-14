@@ -103,6 +103,7 @@ func recordTestRequest(channel model.Channel, keyLabel, clientModel, targetModel
 		ChannelName: channel.Name,
 		Model:       clientModel,
 		KeyLabel:    keyLabel,
+		ProxyAddr:   roundProxyLabel(channel, channel),
 		LatencyMS:   elapsed.Milliseconds(),
 		Outcome:     outcome,
 		ErrClass:    class,
@@ -280,11 +281,19 @@ func effectiveTestChannel(channel model.Channel, keyID string) (model.Channel, i
 	return model.Channel{}, 0, model.ChannelKey{}, fmt.Errorf("渠道上不存在指定的密钥")
 }
 
+// testMaxTokens 非流式测试请求的输出 token 上限。模型评估页会要求模型生成
+// 完整的 HTML+SVG 动画, 产物动辄数万 token; 早期硬编码 1024 会截断 Anthropic
+// 渠道的输出导致渲染残缺, 统一放宽到 100k 与各协议上限留出余量。
+const testMaxTokens = 100000
+
 // newTestRequest 按 format 构造一条非流式测试请求, 供单模型/逐密钥/分组测试共用。
 // 透传渠道(原生格式)直接以渠道协议报文发出; 转换渠道一律以 OpenAI Chat 报文发出,
 // 由 pipeline 转换为渠道上游协议。各协议必填字段差异在此对齐:
 //   - OpenAI Chat / Anthropic Messages: messages 数组; Anthropic 另需 max_tokens。
 //   - OpenAI Responses: input 字段。
+//
+// 三种协议均显式注入 testMaxTokens 输出上限, 避免上游默认值(部分渠道仅 1024)
+// 截断长 HTML 产物; 个别模型不接受该字段时会以错误返回, 由调用方按测试失败处理。
 func newTestRequest(format llm.APIFormat, modelName, message string) (*httpclient.Request, error) {
 	body := []byte("{}")
 	var err error
@@ -296,7 +305,7 @@ func newTestRequest(format llm.APIFormat, modelName, message string) (*httpclien
 		if body, err = sjson.SetBytes(body, "messages", []map[string]string{{"role": "user", "content": message}}); err != nil {
 			return nil, err
 		}
-		if body, err = sjson.SetBytes(body, "max_tokens", 1024); err != nil {
+		if body, err = sjson.SetBytes(body, "max_tokens", testMaxTokens); err != nil {
 			return nil, err
 		}
 		if body, err = sjson.SetBytes(body, "stream", false); err != nil {
@@ -309,6 +318,9 @@ func newTestRequest(format llm.APIFormat, modelName, message string) (*httpclien
 		if body, err = sjson.SetBytes(body, "input", message); err != nil {
 			return nil, err
 		}
+		if body, err = sjson.SetBytes(body, "max_output_tokens", testMaxTokens); err != nil {
+			return nil, err
+		}
 		if body, err = sjson.SetBytes(body, "stream", false); err != nil {
 			return nil, err
 		}
@@ -317,6 +329,9 @@ func newTestRequest(format llm.APIFormat, modelName, message string) (*httpclien
 			return nil, err
 		}
 		if body, err = sjson.SetBytes(body, "messages", []map[string]string{{"role": "user", "content": message}}); err != nil {
+			return nil, err
+		}
+		if body, err = sjson.SetBytes(body, "max_tokens", testMaxTokens); err != nil {
 			return nil, err
 		}
 		if body, err = sjson.SetBytes(body, "stream", false); err != nil {

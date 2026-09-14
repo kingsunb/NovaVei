@@ -453,6 +453,7 @@ export interface AttemptRecord {
   member_id: number;
   model: string;
   key_label?: string;
+  proxy_addr?: string;
   latency_ms: number;
   outcome: AttemptOutcome;
   err_class?: ErrClass;

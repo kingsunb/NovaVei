@@ -4,6 +4,7 @@ import {
   Bot,
   ChevronsLeft,
   ChevronsRight,
+  FlaskConical,
   GaugeCircle,
   KeyRound,
   LayoutGrid,
@@ -27,6 +28,7 @@ const OPERATIONS: NavItem[] = [
   { to: "/channels", label: "渠道", icon: LayoutGrid },
   { to: "/custom-models", label: "自定义模型", icon: Bot },
   { to: "/groups", label: "分组", icon: UsersRound },
+  { to: "/model-eval", label: "模型评估", icon: FlaskConical },
   { to: "/mask", label: "脱敏", icon: ShieldCheck },
   { to: "/chat", label: "对话", icon: MessageSquare },
 ];

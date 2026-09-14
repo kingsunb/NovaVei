@@ -27,6 +27,7 @@ export function CommandPalette({
       { label: "前往 渠道", hint: "导航", run: () => navigate("/channels") },
       { label: "前往 自定义模型", hint: "导航", run: () => navigate("/custom-models") },
       { label: "前往 分组", hint: "导航", run: () => navigate("/groups") },
+      { label: "前往 模型评估", hint: "导航", run: () => navigate("/model-eval") },
       { label: "前往 脱敏", hint: "导航", run: () => navigate("/mask") },
       { label: "前往 对话", hint: "导航", run: () => navigate("/chat") },
       { label: "前往 API 密钥", hint: "导航", run: () => navigate("/keys") },

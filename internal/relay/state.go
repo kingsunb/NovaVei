@@ -107,6 +107,7 @@ type AttemptRecord struct {
 	MemberID    int            `json:"member_id"`           // 本轮使用的分组成员 ID。
 	Model       string         `json:"model"`               // 本轮实际请求上游的模型名称。
 	KeyLabel    string         `json:"key_label,omitempty"` // 本轮使用的渠道 Key 标签: "#序号(别名)", 旧式单 Key 为空。
+	ProxyAddr   string         `json:"proxy_addr,omitempty"` // 本轮出口代理地址(密码打码); 空为直连。
 	LatencyMS   int64          `json:"latency_ms"`          // 本轮从发起到结束的耗时毫秒。
 	Outcome     AttemptOutcome `json:"outcome"`             // 结束形态: 成功/失败/取消。
 	ErrClass    ErrClass       `json:"err_class,omitempty"` // 失败分类, 成功时为空。
@@ -354,6 +355,7 @@ func (r *RequestState) startRound(cancel context.CancelFunc, target RoundTarget)
 		MemberID:    target.MemberID,
 		Model:       target.Model,
 		KeyLabel:    target.KeyLabel,
+		ProxyAddr:   target.ProxyAddr,
 	})
 	publishRequestLocked(r)
 	return r.Round

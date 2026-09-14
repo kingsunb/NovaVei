@@ -22,6 +22,7 @@ const DashboardPage = lazy(() => import("@/pages/Dashboard"));
 const ChannelsPage = lazy(() => import("@/pages/Channels"));
 const CustomModelsPage = lazy(() => import("@/pages/CustomModels"));
 const GroupsPage = lazy(() => import("@/pages/Groups"));
+const ModelEvalPage = lazy(() => import("@/pages/ModelEval"));
 const MaskPage = lazy(() => import("@/pages/Mask"));
 const KeysPage = lazy(() => import("@/pages/Keys"));
 const LogsPage = lazy(() => import("@/pages/Logs"));
@@ -194,6 +195,14 @@ export default function App() {
           element={
             <LazyPage>
               <GroupsPage />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/model-eval"
+          element={
+            <LazyPage>
+              <ModelEvalPage />
             </LazyPage>
           }
         />
