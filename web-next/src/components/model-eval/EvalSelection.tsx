@@ -1,9 +1,12 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, History, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { QueryErrorBanner } from "@/components/ui/query-error";
 import { SearchField } from "@/components/ui/search-field";
+import { api } from "@/lib/api";
 import type { EvalTarget } from "@/lib/model-eval";
 
 export function EvalSelection({
@@ -23,6 +26,15 @@ export function EvalSelection({
 }) {
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  const statsQuery = useQuery({
+    queryKey: ["model-eval", "stats"],
+    queryFn: ({ signal }) => api.listEvalStats(signal),
+    staleTime: 0,
+    refetchInterval: 5000,
+  });
+  const statsByTarget = useMemo(() => new Map((statsQuery.data?.items ?? []).map((stats) =>
+    [`${stats.channel_id}:${stats.model_name}`, stats] as const,
+  )), [statsQuery.data]);
   const visible = useMemo(() => {
     const query = search.trim().toLowerCase();
     return targets.filter((target) => `${target.channelName} ${target.modelName}`.toLowerCase().includes(query));
@@ -80,6 +92,7 @@ export function EvalSelection({
             清空选择
           </button>
         </div>
+        {statsQuery.isError && <QueryErrorBanner onRetry={() => void statsQuery.refetch()} />}
       </div>
 
       <div className="max-h-[min(55vh,36rem)] overflow-y-auto p-2">
@@ -132,31 +145,41 @@ export function EvalSelection({
               </div>
               {open && (
                 <div className="space-y-1 px-2 pb-2 pl-9">
-                  {items.map((target) => (
-                    <div key={target.channelModelId} className="flex items-center gap-1">
-                      <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 py-1.5 text-xs text-ink-muted">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(target.channelModelId)}
-                          onChange={() => toggle([target.channelModelId])}
-                          disabled={disabled}
-                          className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-primary"
-                        />
-                        <span className="break-all font-mono leading-5">{target.modelName}</span>
-                      </label>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0"
-                        onClick={() => onHistory(target.channelId, target.modelName)}
-                        aria-label={`查看 ${target.channelName} ${target.modelName} 的评估历史`}
-                        title="模型评估历史"
-                      >
-                        <History className="h-3 w-3" aria-hidden />
-                      </Button>
-                    </div>
-                  ))}
+                  {items.map((target) => {
+                    const stats = statsByTarget.get(`${target.channelId}:${target.modelName}`);
+                    return (
+                      <div key={target.channelModelId} className="flex items-center gap-1">
+                        <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 py-1.5 text-xs text-ink-muted">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(target.channelModelId)}
+                            onChange={() => toggle([target.channelModelId])}
+                            disabled={disabled}
+                            className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-primary"
+                          />
+                          <span className="min-w-0 space-y-0.5">
+                            <span className="block break-all font-mono leading-5">{target.modelName}</span>
+                            {stats && stats.total_count > 0 && (
+                              <span className="block text-[10px] leading-relaxed tabular-nums text-ink-subtle" title="成功次数仅统计格式合规的评估">
+                                累计评估 {stats.total_count} 次，成功 {stats.success_count} 次
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          onClick={() => onHistory(target.channelId, target.modelName)}
+                          aria-label={`查看 ${target.channelName} ${target.modelName} 的评估历史`}
+                          title="模型评估历史"
+                        >
+                          <History className="h-3 w-3" aria-hidden />
+                        </Button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

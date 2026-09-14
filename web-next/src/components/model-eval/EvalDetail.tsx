@@ -84,7 +84,7 @@ function EvalDetailContent({ id, targets, busy, onReuse, onRepeat }: DetailActio
       </DialogBody>
       <DialogFooter className="shrink-0 flex-wrap">
         {data && !available && <p className="mr-auto text-xs text-ink-subtle">渠道或模型已不可用，历史记录仍可查看。</p>}
-        <Button type="button" variant="secondary" size="sm" onClick={() => { if (data) onReuse(data); }} disabled={!data || busy || !available || data.outcome === "error"}>加入当前排序</Button>
+        <Button type="button" variant="secondary" size="sm" onClick={() => { if (data) onReuse(data); }} disabled={!data || busy || !available || data.outcome !== "ok"} title={data?.outcome === "ok" ? "复用这次结果加入当前排序" : "仅格式合规的成功评估可加入排序"}>加入当前排序</Button>
         <Button type="button" size="sm" onClick={() => { if (data) onRepeat(data); }} disabled={!data || busy || !available}>重新评估</Button>
       </DialogFooter>
     </DialogContent>

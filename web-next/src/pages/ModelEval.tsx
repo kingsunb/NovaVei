@@ -164,7 +164,7 @@ export default function ModelEvalPage() {
             <EmptyState
               icon={<ListOrdered className="h-5 w-5" />}
               title="选择模型开始评估"
-              hint="点击左侧「开始评估」将所选模型加入评估队列，任务按顺序自动执行，结果自动保存到历史并加入排序。"
+              hint="点击左侧「开始评估」将所选模型加入评估队列，任务按顺序自动执行，所有结果保存到历史，格式合规的成功结果自动加入排序。"
               action={<Button type="button" variant="ghost" size="sm" onClick={() => changeView("queue")}><ListOrdered className="h-3.5 w-3.5" aria-hidden />查看评估队列</Button>}
             />
           </div>

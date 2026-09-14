@@ -44,6 +44,7 @@ import type {
   EvalRankList,
   EvalRecord,
   EvalRemovedResult,
+  EvalStatsList,
 } from "./model-eval";
 import { openSSE } from "./sse";
 
@@ -962,6 +963,8 @@ export const api = {
   },
   getModelEval: (id: number, signal?: AbortSignal) =>
     http<EvalRecord>(`/model-eval/${id}`, { signal }),
+  listEvalStats: (signal?: AbortSignal) =>
+    http<EvalStatsList>("/model-eval/stats", { signal }),
   listEvalRanks: (signal?: AbortSignal) =>
     http<EvalRankList>("/model-eval/rank/list", { signal }),
   getEvalRankContent: (id: number, signal?: AbortSignal) =>
@@ -970,6 +973,11 @@ export const api = {
     http<EvalRankList>("/model-eval/rank/move", {
       method: "POST",
       body: { id, direction },
+    }),
+  setEvalRankPosition: (id: number, position: number) =>
+    http<EvalRankList>("/model-eval/rank/move", {
+      method: "POST",
+      body: { id, position },
     }),
   removeEvalRank: (id: number) =>
     http<EvalRankList>("/model-eval/rank/remove", {

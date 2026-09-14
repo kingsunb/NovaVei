@@ -158,7 +158,7 @@ export function EvalHistory({
                   </div>
                   <div className="flex flex-wrap items-center gap-1 sm:justify-end">
                     <Button type="button" variant="secondary" size="sm" onClick={() => onPreview(record.id)}>查看</Button>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => onReuse(record)} disabled={busy || !available || record.outcome === "error"} title="复用这次结果加入当前排序">加入排序</Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => onReuse(record)} disabled={busy || !available || record.outcome !== "ok"} title={record.outcome === "ok" ? "复用这次结果加入当前排序" : "仅格式合规的成功评估可加入排序"}>加入排序</Button>
                     <Button type="button" variant="ghost" size="sm" onClick={() => onRepeat(record)} disabled={busy || !available} title="新增一次评估，保留原记录">重测</Button>
                   </div>
                 </li>

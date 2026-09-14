@@ -567,14 +567,14 @@ var (
 )
 
 // GroupReplaceItemsByName 以当前排序整体替换指定名称的分组成员：
-// 过滤可入组条目(剔除 error)、逐条校验渠道启用且模型存在、事务内清空旧成员并以
+// 仅纳入格式合规(ok)的评估、逐条校验渠道启用且模型存在、事务内清空旧成员并以
 // priority 递减写入新成员；分组不存在则按 failover + 默认 Relay 配置创建。
 // 返回分组快照与是否新建。任一模型不可用便整体中止，保证不产生半空分组。
 func GroupReplaceItemsByName(ctx context.Context, name string, ranks []model.ModelEvalRankSummary) (*model.Group, bool, error) {
 	name = strings.TrimSpace(name)
 	rankable := make([]model.ModelEvalRankSummary, 0, len(ranks))
 	for _, r := range ranks {
-		if r.Outcome != model.ModelEvalError {
+		if r.Outcome == model.ModelEvalOK {
 			rankable = append(rankable, r)
 		}
 	}

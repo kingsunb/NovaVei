@@ -6,6 +6,8 @@ import (
 
 	"github.com/kingsunb/NovaVeil/internal/db"
 	"github.com/kingsunb/NovaVeil/internal/model"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ModelEvalFilter struct {
@@ -30,7 +32,35 @@ func ModelEvalCreate(ctx context.Context, record *model.ModelEval) error {
 		record.ContentTruncated = true
 	}
 	record.Error = truncateUTF8Bytes(redactSensitiveText(record.Error), 4096)
-	return db.GetDB().WithContext(ctx).Create(record).Error
+	// 历史与累计次数同事务写入；裁剪历史或清空失败记录不回退累计次数。
+	return db.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(record).Error; err != nil {
+			return err
+		}
+		stats := model.ModelEvalStats{
+			ChannelID:  record.ChannelID,
+			ModelName:  record.ModelName,
+			TotalCount: 1,
+		}
+		if record.Outcome == model.ModelEvalOK {
+			stats.SuccessCount = 1
+		}
+		return tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "channel_id"}, {Name: "model_name"}},
+			DoUpdates: clause.Assignments(map[string]interface{}{
+				"total_count":   gorm.Expr("? + ?", clause.Column{Table: clause.CurrentTable, Name: "total_count"}, 1),
+				"success_count": gorm.Expr("? + ?", clause.Column{Table: clause.CurrentTable, Name: "success_count"}, stats.SuccessCount),
+			}),
+		}).Create(&stats).Error
+	})
+}
+
+func ModelEvalStatsList(ctx context.Context) ([]model.ModelEvalStats, error) {
+	stats := make([]model.ModelEvalStats, 0)
+	if err := db.GetDB().WithContext(ctx).Order("channel_id ASC, model_name ASC").Find(&stats).Error; err != nil {
+		return nil, err
+	}
+	return stats, nil
 }
 
 func ModelEvalGet(ctx context.Context, id int64) (*model.ModelEval, error) {

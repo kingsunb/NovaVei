@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kingsunb/NovaVeil/internal/model"
 	"github.com/kingsunb/NovaVeil/internal/op"
 	"github.com/kingsunb/NovaVeil/internal/server/middleware"
 	"github.com/kingsunb/NovaVeil/internal/server/resp"
@@ -60,18 +61,25 @@ func getModelEvalRankContent(c *gin.Context) {
 func moveModelEvalRank(c *gin.Context) {
 	resp.NoStore(c)
 	var request struct {
-		ID        int64 `json:"id" binding:"required,min=1"`
-		Direction int   `json:"direction" binding:"required"`
+		ID        int64  `json:"id" binding:"required,min=1"`
+		Direction *int   `json:"direction" binding:"omitempty,oneof=-1 1"`
+		Position  *int64 `json:"position" binding:"omitempty,min=1"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
 		resp.Error(c, http.StatusBadRequest, resp.ErrInvalidJSON)
 		return
 	}
-	if request.Direction != -1 && request.Direction != 1 {
+	if (request.Direction == nil) == (request.Position == nil) {
 		resp.Error(c, http.StatusBadRequest, resp.ErrInvalidParam)
 		return
 	}
-	items, err := op.ModelEvalRankMove(c.Request.Context(), request.ID, request.Direction)
+	var items []model.ModelEvalRankSummary
+	var err error
+	if request.Position != nil {
+		items, err = op.ModelEvalRankSetPosition(c.Request.Context(), request.ID, *request.Position)
+	} else {
+		items, err = op.ModelEvalRankMove(c.Request.Context(), request.ID, *request.Direction)
+	}
 	if err != nil {
 		writeEvalRankOpError(c, err)
 		return
@@ -155,6 +163,7 @@ func writeEvalRankOpError(c *gin.Context, err error) {
 	case errors.Is(err, op.ErrEvalRankNotFound):
 		resp.Error(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, op.ErrEvalRankMoveBounds),
+		errors.Is(err, op.ErrEvalRankInvalidPosition),
 		errors.Is(err, op.ErrEvalRankMoveErrorOutcome),
 		errors.Is(err, op.ErrEvalRankModelUnavailable),
 		errors.Is(err, op.ErrEvalRankErrorOutcome):

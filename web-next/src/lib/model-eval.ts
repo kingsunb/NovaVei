@@ -2,9 +2,9 @@
  * 模型评估页核心逻辑：固定测试题、包裹标记、HTML 提取与格式判定。
  *
  * 评估流程：对每个渠道的每个模型发送 EVAL_PROMPT，模型须把完整 HTML 放在
- * RESULT_START / RESULT_END 之间。根据回复是否合规决定优先级：
+ * RESULT_START / RESULT_END 之间。根据回复是否合规决定是否进入排序：
  *  - 测试报错 → 保留历史与失败原因，不参与分组
- *  - 成功但未按格式包裹 → 自动判最低优先级
+ *  - 请求成功但未按格式包裹 → 保留历史，不参与排序和分组
  *  - 成功且包裹合规 → 正常参与手动排序
  */
 
@@ -84,7 +84,7 @@ export function extractRenderableHtml(content: string): string {
 /**
  * EvalOutcome 单个渠道模型的评估终态。
  *  - error      : 测试请求失败（上游报错/超时/拒绝），保留记录但不参与分组。
- *  - violation  : 成功返回但未按格式包裹，自动最低优先级。
+ *  - violation  : 请求成功但未按格式包裹，保留记录但不参与排序和分组。
  *  - ok         : 成功且包裹合规，正常参与手动排序。
  */
 export type EvalOutcome = "ok" | "violation" | "error";
@@ -151,6 +151,18 @@ export interface EvalHistoryPage {
   total: number;
   page: number;
   page_size: number;
+}
+
+/** 按渠道和模型独立累计，不受历史裁剪和清理影响；成功指格式合规。 */
+export interface EvalStatsSummary {
+  channel_id: number;
+  model_name: string;
+  total_count: number;
+  success_count: number;
+}
+
+export interface EvalStatsList {
+  items: EvalStatsSummary[];
 }
 
 export function formatEvalTime(value: string): string {

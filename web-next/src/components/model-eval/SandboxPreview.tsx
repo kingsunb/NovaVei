@@ -11,12 +11,14 @@ export function SandboxPreview({
   className,
   minHeight = 360,
   maxHeight = 720,
+  thumbnail = false,
 }: {
   html: string;
   title: string;
   className?: string;
   minHeight?: number;
   maxHeight?: number;
+  thumbnail?: boolean;
 }) {
   const srcDoc = useMemo(() => {
     const doc = new DOMParser().parseFromString(html, "text/html");
@@ -28,17 +30,30 @@ export function SandboxPreview({
     return `<!DOCTYPE html>\n${doc.documentElement.outerHTML}`;
   }, [html]);
 
-  return (
+  const frame = (
     <iframe
       title={title}
       srcDoc={srcDoc}
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"
+      tabIndex={thumbnail ? -1 : undefined}
+      aria-hidden={thumbnail || undefined}
+      loading={thumbnail ? "lazy" : undefined}
       className={cn(
-        "block w-full rounded-lg border border-border/50 bg-white",
-        className,
+        "block bg-white",
+        thumbnail ? "pointer-events-none absolute left-0 top-0 border-0" : "w-full rounded-lg border border-border/50",
+        !thumbnail && className,
       )}
-      style={{ height: `clamp(${minHeight}px, 65vh, ${maxHeight}px)` }}
+      style={thumbnail
+        ? { width: 960, height: 640, transform: "scale(0.125)", transformOrigin: "top left" }
+        : { height: `clamp(${minHeight}px, 65vh, ${maxHeight}px)` }}
     />
   );
+
+  // 以完整视窗绘制后缩小到 120 × 80，避免直接缩小 iframe 导致画面被裁切。
+  return thumbnail ? (
+    <div className={cn("relative h-20 w-[7.5rem] shrink-0 overflow-hidden rounded-lg border border-border/50 bg-white", className)}>
+      {frame}
+    </div>
+  ) : frame;
 }
