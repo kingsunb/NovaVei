@@ -51,6 +51,36 @@ export function extractEvalHtml(content: string): {
 }
 
 /**
+ * extractRenderableHtml 从模型回复中尽力提取可渲染的 HTML，用于人工评估预览。
+ *
+ * 依次尝试：
+ *  1. <<<RESULT>>> … <<<END>>>  包裹标记（首选）
+ *  2. ```html … ``` 或 ``` … ```  markdown 代码围栏
+ *  3. 裸 HTML 检测（含 <html / <svg / <!DOCTYPE / <body）
+ *
+ * 即使模型没按格式包裹，也尽量把产出渲染出来让用户目视评估。
+ */
+export function extractRenderableHtml(content: string): string {
+  if (!content) return "";
+  // 1. 包裹标记
+  const { wrapped, html } = extractEvalHtml(content);
+  if (wrapped) return html;
+  // 2. markdown 代码围栏 ```html … ``` 或 ``` … ```
+  const fence = content.match(/```(?:html)?\s*\n?([\s\S]*?)```/i);
+  if (fence?.[1]) {
+    const inner = fence[1].trim();
+    if (/<(?:html|svg|body|div|!doctype)/i.test(inner)) return inner;
+  }
+  // 3. 裸 HTML
+  if (/<(?:html|svg|body|!doctype)/i.test(content)) {
+    // 取第一个 < 到末尾，尽量不把解释性文字混进 iframe
+    const firstTag = content.search(/<(?:html|svg|body|!doctype)/i);
+    if (firstTag >= 0) return content.slice(firstTag).trim();
+  }
+  return "";
+}
+
+/**
  * EvalOutcome 单个渠道模型的评估终态。
  *  - error      : 测试请求失败（上游报错/超时/拒绝），该候选从列表移除。
  *  - violation  : 成功返回但未按格式包裹，自动最低优先级。
@@ -74,7 +104,7 @@ export interface EvalResult {
   outcome: EvalOutcome;
   /** 模型原始回复全文。 */
   content: string;
-  /** 提取出的 HTML（仅 outcome=ok 时有值）。 */
+  /** 提取出的可渲染 HTML（ok 和 violation 都可能有值，error 时为空）。 */
   html: string;
   latencyMs: number;
   promptTokens: number;

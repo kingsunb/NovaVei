@@ -31,6 +31,7 @@ import {
   EVAL_PROMPT,
   PRO_GROUP_NAME,
   extractEvalHtml,
+  extractRenderableHtml,
   priorityFromOrder,
   type EvalResult,
   type EvalTarget,
@@ -80,18 +81,20 @@ export default function ModelEvalPage() {
 
   // 勾选状态：默认全选，进页面即可一键开测。
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  // 仅首次加载时自动全选；之后用户手动增删不再被覆盖（修"全不选"被回弹的 bug）。
+  const autoSelectedRef = useRef(false);
   useEffect(() => {
-    if (allTargets.length > 0 && selectedIds.size === 0) {
+    if (!autoSelectedRef.current && allTargets.length > 0) {
+      autoSelectedRef.current = true;
       setSelectedIds(new Set(allTargets.map((t) => t.channelModelId)));
     }
-  }, [allTargets, selectedIds.size]);
+  }, [allTargets]);
 
   // 结果：channelModelId → EvalResult。报错的根本不进这个 Map（直接移除）。
   const [results, setResults] = useState<Map<number, EvalResult>>(new Map());
-  // ok 结果的拖拽顺序（channelModelId 数组）。violation 不参与排序，固定垫底。
+  // 所有成功结果的拖拽顺序（channelModelId 数组）。
+  // 初始顺序：合规(wrapped)在前，未合规垫底；用户可自由上下移动。
   const [order, setOrder] = useState<number[]>([]);
-  // violation 结果的 channelModelId（按完成先后）。
-  const [violations, setViolations] = useState<number[]>([]);
 
   const [testing, setTesting] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -117,13 +120,14 @@ export default function ModelEvalPage() {
     setTesting(true);
     setResults(new Map());
     setOrder([]);
-    setViolations([]);
     setRemovedCount(0);
     setProgress({ done: 0, total: selectedTargets.length });
 
     const queue = [...selectedTargets];
     let done = 0;
     let removed = 0;
+    // 局部镜像：测试结束后用来做稳定分区，避免闭包读到 stale state。
+    const localResults = new Map<number, EvalResult>();
 
     const worker = async () => {
       while (queue.length > 0) {
@@ -137,7 +141,8 @@ export default function ModelEvalPage() {
             EVAL_PROMPT,
           );
           if (abortedRef.current) return;
-          const { wrapped, html } = extractEvalHtml(r.content);
+          const { wrapped } = extractEvalHtml(r.content);
+          const html = extractRenderableHtml(r.content);
           const result: EvalResult = {
             target,
             outcome: wrapped ? "ok" : "violation",
@@ -149,11 +154,8 @@ export default function ModelEvalPage() {
             error: "",
           };
           setResults((prev) => new Map(prev).set(target.channelModelId, result));
-          if (wrapped) {
-            setOrder((prev) => [...prev, target.channelModelId]);
-          } else {
-            setViolations((prev) => [...prev, target.channelModelId]);
-          }
+          localResults.set(target.channelModelId, result);
+          setOrder((prev) => [...prev, target.channelModelId]);
         } catch {
           if (abortedRef.current) return;
           // 规则 3：报错直接从列表移除，不进 results。
@@ -172,6 +174,17 @@ export default function ModelEvalPage() {
       ),
     );
     setTesting(false);
+    // 稳定分区：合规(wrapped)在前，未合规(violation)垫底 = 自动最低优先级。
+    setOrder((prev) => {
+      const wrappedIds: number[] = [];
+      const violationIds: number[] = [];
+      for (const id of prev) {
+        const r = localResults.get(id);
+        if (r?.outcome === "ok") wrappedIds.push(id);
+        else violationIds.push(id);
+      }
+      return [...wrappedIds, ...violationIds];
+    });
     if (removed > 0) {
       toast.message(`${removed} 个模型测试失败，已从列表移除`);
     }
@@ -197,8 +210,7 @@ export default function ModelEvalPage() {
 
   const createProMut = useMutation({
     mutationFn: async () => {
-      // 最终顺序：ok（用户排）在前，violation 垫底。
-      const orderedIds = [...order, ...violations];
+      const orderedIds = order;
       const items = orderedIds
         .map((id) => results.get(id))
         .filter((r): r is EvalResult => !!r)
@@ -241,9 +253,7 @@ export default function ModelEvalPage() {
     onError: (e: Error) => toast.error(e.message || "创建分组失败"),
   });
 
-  const okCount = order.length;
-  const violationCount = violations.length;
-  const hasResults = okCount + violationCount > 0;
+  const hasResults = order.length > 0;
 
   return (
     <div className="space-y-4">
@@ -291,9 +301,9 @@ export default function ModelEvalPage() {
 
       <p className="text-xs leading-relaxed text-ink-muted">
         对每个渠道的每个模型发送固定测试题（生成 SVG 鹈鹕骑自行车 2D 动画的
-        HTML），在沙箱里实时预览效果。按质量上下排序后一键创建分组{" "}
+        HTML），在沙箱里实时预览效果。目视评估后上下排序，一键创建分组{" "}
         <code className="rounded bg-ink/5 px-1">{PRO_GROUP_NAME}</code>。
-        测试报错的模型自动移除；未按格式包裹的自动降到最低优先级。
+        测试报错的模型自动移除；未按格式包裹的自动降到最低优先级（仍可手动上移）。
       </p>
 
       {channelsLoading ? (
@@ -324,11 +334,11 @@ export default function ModelEvalPage() {
         />
       )}
 
-      {/* ok 结果：可排序卡片 */}
-      {okCount > 0 && (
+      {/* 所有成功结果：统一可排序卡片，iframe 预览供人工评估 */}
+      {hasResults && (
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-ink">
-            合规结果（拖动排序，越靠前优先级越高）
+            评估结果（上下排序，越靠前优先级越高）
           </h2>
           {order.map((id, idx) => {
             const r = results.get(id);
@@ -338,25 +348,10 @@ export default function ModelEvalPage() {
                 key={id}
                 result={r}
                 index={idx}
-                total={okCount}
+                total={order.length}
                 onMove={(dir) => moveOk(id, dir)}
               />
             );
-          })}
-        </div>
-      )}
-
-      {/* violation 结果：垫底 */}
-      {violationCount > 0 && (
-        <div className="space-y-3">
-          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink-muted">
-            <AlertTriangle className="h-4 w-4" />
-            未按格式输出（自动最低优先级）
-          </h2>
-          {violations.map((id) => {
-            const r = results.get(id);
-            if (!r) return null;
-            return <ViolationCard key={id} result={r} />;
           })}
         </div>
       )}
@@ -528,6 +523,8 @@ function ResultCard({
   onMove: (dir: -1 | 1) => void;
 }) {
   const { target } = result;
+  const isViolation = result.outcome === "violation";
+  const [showRaw, setShowRaw] = useState(false);
   return (
     <Card className="overflow-hidden">
       <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2.5">
@@ -559,55 +556,38 @@ function ResultCard({
             {target.modelName}
           </span>
         </div>
+        {isViolation && (
+          <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+            未按格式输出
+          </span>
+        )}
         <div className="flex shrink-0 items-center gap-2 text-[10px] text-ink-subtle">
-          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+          {!isViolation && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
           <span>{result.latencyMs}ms</span>
           <span>·</span>
           <span>{formatNumber(result.completionTokens)} tok</span>
         </div>
       </div>
       <div className="p-3">
-        <SandboxPreview
-          html={result.html}
-          title={`${target.channelName} · ${target.modelName}`}
-        />
-      </div>
-    </Card>
-  );
-}
-
-function ViolationCard({ result }: { result: EvalResult }) {
-  const { target } = result;
-  const [showRaw, setShowRaw] = useState(false);
-  return (
-    <Card className="overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2.5">
-        <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="truncate text-xs font-semibold text-ink">
-            {target.channelName}
-          </span>
-          <span className="truncate text-xs text-ink-muted">
-            {target.modelName}
-          </span>
-        </div>
-        <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-          未按格式输出
-        </span>
-        <div className="shrink-0 text-[10px] text-ink-subtle">
-          {result.latencyMs}ms
-        </div>
-      </div>
-      <div className="p-3">
+        {result.html ? (
+          <SandboxPreview
+            html={result.html}
+            title={`${target.channelName} · ${target.modelName}`}
+          />
+        ) : (
+          <div className="flex h-32 items-center justify-center rounded-lg bg-ink/[0.03] text-xs text-ink-subtle">
+            无法提取可渲染的 HTML
+          </div>
+        )}
         <button
           type="button"
           onClick={() => setShowRaw((v) => !v)}
-          className="mb-2 text-xs text-primary-text hover:underline"
+          className="mt-2 text-[11px] text-ink-subtle hover:text-ink hover:underline"
         >
           {showRaw ? "收起原始回复" : "查看原始回复"}
         </button>
         {showRaw && (
-          <pre className="max-h-48 overflow-auto rounded-lg bg-ink/[0.03] p-3 text-[11px] leading-relaxed text-ink-muted">
+          <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-ink/[0.03] p-3 text-[11px] leading-relaxed text-ink-muted">
             {result.content.slice(0, 4000)}
             {result.content.length > 4000 ? "\n…（已截断）" : ""}
           </pre>

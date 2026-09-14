@@ -5,6 +5,7 @@ import {
   RESULT_END,
   RESULT_START,
   extractEvalHtml,
+  extractRenderableHtml,
   priorityFromOrder,
 } from "./model-eval";
 
@@ -70,6 +71,44 @@ describe("常量", () => {
 
   it("PRO_GROUP_NAME 为 pro", () => {
     expect(PRO_GROUP_NAME).toBe("pro");
+  });
+});
+
+describe("extractRenderableHtml", () => {
+  it("优先用包裹标记提取", () => {
+    const html = extractRenderableHtml(
+      `说明文字\n${RESULT_START}<html><svg>鹈鹕</svg></html>${RESULT_END}`,
+    );
+    expect(html).toBe("<html><svg>鹈鹕</svg></html>");
+  });
+
+  it("无包裹时从 markdown ```html 围栏提取", () => {
+    const html = extractRenderableHtml(
+      "这是结果：\n```html\n<html><body>动画</body></html>\n```\n完成",
+    );
+    expect(html).toBe("<html><body>动画</body></html>");
+  });
+
+  it("无包裹时从裸 ``` 围栏提取（含 svg）", () => {
+    const html = extractRenderableHtml(
+      "```\n<svg viewBox=\"0 0 100 100\"><circle r=\"50\"/></svg>\n```",
+    );
+    expect(html).toContain("<svg");
+  });
+
+  it("无围栏但含裸 HTML → 从第一个标签开始提取", () => {
+    const html = extractRenderableHtml(
+      "好的，这是代码：\n<!DOCTYPE html><html><body>鹈鹕</body></html>",
+    );
+    expect(html).toBe("<!DOCTYPE html><html><body>鹈鹕</body></html>");
+  });
+
+  it("纯文字无 HTML → 返回空串", () => {
+    expect(extractRenderableHtml("这是一个鹈鹕骑自行车的动画描述。")).toBe("");
+  });
+
+  it("空字符串 → 返回空串", () => {
+    expect(extractRenderableHtml("")).toBe("");
   });
 });
 
