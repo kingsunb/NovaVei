@@ -23,7 +23,6 @@ export function EvalRanking({ busy, onShowHistory }: { busy: boolean; onShowHist
   const groupsQuery = useQuery({ queryKey: ["groups"], queryFn: api.listGroups });
   const items = ranksQuery.data?.items ?? [];
   const rankable = items.filter((r) => r.outcome !== "error");
-  const failed = items.filter((r) => r.outcome === "error");
   const existingPro = groupsQuery.data?.find((g) => g.name === PRO_GROUP_NAME);
 
   const applyProMut = useMutation({
@@ -56,7 +55,7 @@ export function EvalRanking({ busy, onShowHistory }: { busy: boolean; onShowHist
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <ListChecks className="h-4 w-4 text-ink-muted" aria-hidden />
-            <h2 className="text-sm font-semibold text-ink">评估排序 <span className="font-normal text-ink-subtle">· {rankable.length} 个可入组{failed.length > 0 ? ` / ${failed.length} 个失败` : ""}</span></h2>
+            <h2 className="text-sm font-semibold text-ink">评估排序 <span className="font-normal text-ink-subtle">· {rankable.length} 个可入组</span></h2>
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => void ranksQuery.refetch()} disabled={ranksQuery.isFetching}>
@@ -67,7 +66,7 @@ export function EvalRanking({ busy, onShowHistory }: { busy: boolean; onShowHist
             </Button>
           </div>
         </div>
-        <p className="text-[11px] leading-relaxed text-ink-subtle">跨渠道排列，越靠前优先级越高；格式不符默认排后，失败结果保留在下方。{existingPro ? `更新将用当前排序替换 ${PRO_GROUP_NAME} 的现有成员。` : "可从历史记录加入已有结果。"}</p>
+        <p className="text-[11px] leading-relaxed text-ink-subtle">跨渠道排列，越靠前优先级越高；格式不符默认排后。{existingPro ? `更新将用当前排序替换 ${PRO_GROUP_NAME} 的现有成员。` : "可从历史记录加入已有结果。"}</p>
       </div>
 
       {ranksQuery.isError ? (
@@ -80,25 +79,6 @@ export function EvalRanking({ busy, onShowHistory }: { busy: boolean; onShowHist
         <ul className="divide-y divide-border/40">
           {rankable.map((record, index) => (
             <RankItem key={record.id} record={record} index={index} total={rankable.length} busy={busy} expanded={!!expanded[record.id]} onToggle={() => toggle(record.id)} onMove={(d) => moveMut.mutate({ id: record.id, direction: d })} onRemove={() => removeMut.mutate(record.id)} onHistory={() => onShowHistory(record.channel_id, record.model_name)} movePending={moveMut.isPending} removePending={removeMut.isPending} />
-          ))}
-          {failed.map((record) => (
-            <li key={record.id} className="min-w-0 space-y-2 p-4 opacity-80">
-              <div className="flex items-start gap-3">
-                <span className="shrink-0 text-xs font-semibold tabular-nums text-ink-subtle">—</span>
-                <div className="min-w-0 flex-1">
-                  <p className="break-all font-mono text-[13px] font-medium text-ink">{record.model_name}</p>
-                  <p className="mt-1 break-all text-xs text-ink-muted">{record.channel_name}</p>
-                  <time dateTime={record.created_at} className="mt-1 block text-[11px] tabular-nums text-ink-subtle">{formatEvalTime(record.created_at)}</time>
-                </div>
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" disabled={busy} onClick={() => removeMut.mutate(record.id)} aria-label={`移除 ${record.channel_name} ${record.model_name}`} title="从排序移除"><X className="h-3.5 w-3.5" aria-hidden /></Button>
-              </div>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pl-7">
-                <EvalOutcomeBadge outcome={record.outcome} />
-                <span className="text-[11px] tabular-nums text-ink-subtle">{formatNumber(record.latency_ms)} ms</span>
-                <Button type="button" variant="ghost" size="sm" onClick={() => onShowHistory(record.channel_id, record.model_name)}>历史</Button>
-              </div>
-              {record.error && <p className="line-clamp-3 break-all pl-7 text-xs leading-relaxed text-destructive">{record.error}</p>}
-            </li>
           ))}
         </ul>
       )}

@@ -17,7 +17,7 @@ func cleanupRanksByChannel(t *testing.T, channelIDs ...int) {
 }
 
 // TestModelEvalRankUpsertAssignsPositions 验证新增条目的 position 分配：
-// 可入组(ok/violation)从 0 起递增，失败(error)从 -1 起递减。
+// 可入组(ok/violation)从 0 起递增；失败(error)不写入排序。
 func TestModelEvalRankUpsertAssignsPositions(t *testing.T) {
 	ctx := context.Background()
 	t.Cleanup(func() { cleanupRanksByChannel(t, 970001, 970002, 970003) })
@@ -30,9 +30,15 @@ func TestModelEvalRankUpsertAssignsPositions(t *testing.T) {
 	require.NoError(t, ModelEvalRankUpsert(ctx, r2))
 	assert.Equal(t, 1, r2.Position)
 
+	// error 评估不进入排序：Upsert 返回 nil 但不写入，Position 保持零值。
 	r3 := &model.ModelEvalRank{ChannelID: 970003, ChannelModelID: 3, ModelName: "rank-err", Outcome: model.ModelEvalError, Error: "boom"}
 	require.NoError(t, ModelEvalRankUpsert(ctx, r3))
-	assert.Equal(t, -1, r3.Position, "首条 error 应分到 -1")
+	assert.Equal(t, 0, r3.Position, "error 不写入，Position 不被赋值")
+	items, err := ModelEvalRankList(ctx)
+	require.NoError(t, err)
+	for _, it := range items {
+		assert.NotEqual(t, 970003, it.ChannelID, "error 条目不应出现在排序列表")
+	}
 }
 
 // TestModelEvalRankUpsertSamePartitionKeepsPosition 验证同分区更新时保留用户已调整的 position。
@@ -54,23 +60,24 @@ func TestModelEvalRankUpsertSamePartitionKeepsPosition(t *testing.T) {
 	assert.Equal(t, "v2", got.Content, "内容应被更新")
 }
 
-// TestModelEvalRankUpsertPartitionChangeReassigns 验证分区变化（ok→error）时重新分配 position。
-func TestModelEvalRankUpsertPartitionChangeReassigns(t *testing.T) {
+// TestModelEvalRankUpsertErrorDoesNotEvictOk 验证 error 评估不会驱逐已存在的成功条目。
+func TestModelEvalRankUpsertErrorDoesNotEvictOk(t *testing.T) {
 	ctx := context.Background()
-	t.Cleanup(func() { cleanupRanksByChannel(t, 970020, 970021) })
+	t.Cleanup(func() { cleanupRanksByChannel(t, 970020) })
 
-	ok1 := &model.ModelEvalRank{ChannelID: 970020, ChannelModelID: 20, ModelName: "pc-ok", Outcome: model.ModelEvalOK}
+	ok1 := &model.ModelEvalRank{ChannelID: 970020, ChannelModelID: 20, ModelName: "pc-ok", Outcome: model.ModelEvalOK, Content: "good"}
 	require.NoError(t, ModelEvalRankUpsert(ctx, ok1))
-	assert.Equal(t, 0, ok1.Position)
+	origPos := ok1.Position
 
-	err1 := &model.ModelEvalRank{ChannelID: 970021, ChannelModelID: 21, ModelName: "pc-err", Outcome: model.ModelEvalError, Error: "e"}
-	require.NoError(t, ModelEvalRankUpsert(ctx, err1))
-	assert.Equal(t, -1, err1.Position)
-
-	// 把 ok1 改成 error：分区从可入组变为失败，应重新分配到失败区末尾（-2）。
+	// 同渠道同模型再来一次 error 评估：应跳过，不影响已有成功条目。
 	changed := &model.ModelEvalRank{ChannelID: 970020, ChannelModelID: 20, ModelName: "pc-ok", Outcome: model.ModelEvalError, Error: "now error"}
 	require.NoError(t, ModelEvalRankUpsert(ctx, changed))
-	assert.Equal(t, -2, changed.Position, "ok→error 应重分配到失败区下一个位置")
+
+	got, err := ModelEvalRankContent(ctx, ok1.ID)
+	require.NoError(t, err)
+	assert.Equal(t, model.ModelEvalOK, got.Outcome, "已有成功条目不应被 error 覆盖")
+	assert.Equal(t, "good", got.Content, "已有成功条目内容不应被覆盖")
+	assert.Equal(t, origPos, got.Position, "已有成功条目 position 不应变动")
 }
 
 // TestModelEvalRankListOrder 验证列表按 position ASC, id ASC 排序且不含 content。
@@ -125,13 +132,14 @@ func TestModelEvalRankMoveSwapsPositions(t *testing.T) {
 	assert.ErrorIs(t, err, ErrEvalRankMoveBounds)
 }
 
-// TestModelEvalRankMoveRejectsErrorOutcome 验证失败条目不可移动。
+// TestModelEvalRankMoveRejectsErrorOutcome 验证失败条目不可移动（防御性检查）。
 func TestModelEvalRankMoveRejectsErrorOutcome(t *testing.T) {
 	ctx := context.Background()
 	t.Cleanup(func() { cleanupRanksByChannel(t, 970050) })
 
-	e := &model.ModelEvalRank{ChannelID: 970050, ChannelModelID: 50, ModelName: "mv-err", Outcome: model.ModelEvalError, Error: "x"}
-	require.NoError(t, ModelEvalRankUpsert(ctx, e))
+	// error 条目不经由 Upsert 写入（Upsert 会跳过），直接落库以测试 Move 的防御逻辑。
+	e := &model.ModelEvalRank{ChannelID: 970050, ChannelModelID: 50, ModelName: "mv-err", Outcome: model.ModelEvalError, Error: "x", Position: -1}
+	require.NoError(t, db.GetDB().Create(e).Error)
 
 	_, err := ModelEvalRankMove(ctx, e.ID, 1)
 	assert.ErrorIs(t, err, ErrEvalRankMoveErrorOutcome)
@@ -155,4 +163,37 @@ func TestModelEvalRankRemove(t *testing.T) {
 
 	_, err := ModelEvalRankContent(ctx, r.ID)
 	assert.Error(t, err, "删除后读取应失败")
+}
+
+// TestModelEvalRankListExcludesError 验证排序列表不返回 error 条目（即使 DB 中存在历史遗留）。
+func TestModelEvalRankListExcludesError(t *testing.T) {
+	ctx := context.Background()
+	t.Cleanup(func() { cleanupRanksByChannel(t, 970070, 970071) })
+
+	require.NoError(t, ModelEvalRankUpsert(ctx, &model.ModelEvalRank{ChannelID: 970070, ChannelModelID: 70, ModelName: "ok-item", Outcome: model.ModelEvalOK, Content: "c"}))
+	// 直接落库一条 error 条目，模拟改动前遗留的数据。
+	require.NoError(t, db.GetDB().Create(&model.ModelEvalRank{ChannelID: 970071, ChannelModelID: 71, ModelName: "err-item", Outcome: model.ModelEvalError, Error: "boom", Position: -1}).Error)
+
+	items, err := ModelEvalRankList(ctx)
+	require.NoError(t, err)
+	for _, it := range items {
+		assert.NotEqual(t, model.ModelEvalError, it.Outcome, "排序列表不应包含 error 条目")
+		assert.NotEqual(t, 970071, it.ChannelID, "error 条目不应出现在列表")
+	}
+}
+
+// TestModelEvalRankFromHistoryRejectsError 验证从历史加入失败评估时返回 ErrEvalRankErrorOutcome。
+func TestModelEvalRankFromHistoryRejectsError(t *testing.T) {
+	ctx := context.Background()
+	eval := &model.ModelEval{
+		ModelEvalSummary: model.ModelEvalSummary{
+			ChannelID: 970080, ChannelModelID: 80, ChannelName: "ch", ChannelType: "openai", ModelName: "m",
+			Outcome: model.ModelEvalError, Error: "boom",
+		},
+	}
+	require.NoError(t, db.GetDB().Create(eval).Error)
+	t.Cleanup(func() { db.GetDB().Delete(&model.ModelEval{}, eval.ID) })
+
+	_, err := ModelEvalRankFromHistory(ctx, eval.ID)
+	assert.ErrorIs(t, err, ErrEvalRankErrorOutcome)
 }

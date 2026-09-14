@@ -156,7 +156,8 @@ func writeEvalRankOpError(c *gin.Context, err error) {
 		resp.Error(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, op.ErrEvalRankMoveBounds),
 		errors.Is(err, op.ErrEvalRankMoveErrorOutcome),
-		errors.Is(err, op.ErrEvalRankModelUnavailable):
+		errors.Is(err, op.ErrEvalRankModelUnavailable),
+		errors.Is(err, op.ErrEvalRankErrorOutcome):
 		resp.Error(c, http.StatusBadRequest, err.Error())
 	default:
 		resp.Error(c, http.StatusInternalServerError, err.Error())

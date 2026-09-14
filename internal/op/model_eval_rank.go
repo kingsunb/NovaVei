@@ -15,15 +15,17 @@ var (
 	ErrEvalRankMoveBounds       = errors.New("已到排序边界")
 	ErrEvalRankMoveErrorOutcome = errors.New("失败条目固定在下方，不可调整顺序")
 	ErrEvalRankModelUnavailable = errors.New("渠道或模型已不可用")
+	ErrEvalRankErrorOutcome     = errors.New("失败评估不可加入排序")
 )
 
-// position 语义：越小越靠前（ORDER BY position ASC）。可入组(ok/violation)
-// 使用 position >= 0，失败(error)使用 position < 0，天然把失败条目压到下方。
+// position 语义：越小越靠前（ORDER BY position ASC）。只有成功的评估(ok/violation)
+// 进入排序，position >= 0 递增；失败(error)不写入排序表。
 
 // ModelEvalRankList 返回排序列表摘要（不含 content），按 position ASC, id ASC。
 func ModelEvalRankList(ctx context.Context) ([]model.ModelEvalRankSummary, error) {
 	items := make([]model.ModelEvalRankSummary, 0)
 	err := db.GetDB().WithContext(ctx).Model(&model.ModelEvalRank{}).
+		Where("outcome <> ?", model.ModelEvalError).
 		Omit("content").
 		Order("position ASC, id ASC").
 		Find(&items).Error
@@ -56,22 +58,13 @@ func nextRankablePosition(ctx context.Context) (int, error) {
 	return maxPos + 1, nil
 }
 
-// nextErrorPosition 返回失败区下一个位置（当前最小负 position - 1，首个为 -1）。
-func nextErrorPosition(ctx context.Context) (int, error) {
-	var minPos int
-	if err := db.GetDB().WithContext(ctx).Model(&model.ModelEvalRank{}).
-		Select("COALESCE(MIN(position), 0)").
-		Where("position < ?", 0).
-		Scan(&minPos).Error; err != nil {
-		return 0, err
-	}
-	return minPos - 1, nil
-}
-
 // ModelEvalRankUpsert 以 (channel_id, model_name) 为去重键写入排序条目：
-// 命中则替换快照字段；未命中则按 ok/violation 追加到可入组区末尾、error 追加到
-// 失败区末尾。写入前对 Content 做 1MB 截断、Error 脱敏并截断 4096。
+// 命中则替换快照字段；未命中则追加到可入组区末尾。失败(error)评估不写入排序。
+// 写入前对 Content 做 1MB 截断、Error 脱敏并截断 4096。
 func ModelEvalRankUpsert(ctx context.Context, rank *model.ModelEvalRank) error {
+	if isErrorRank(rank.Outcome) {
+		return nil
+	}
 	if len(rank.Content) > model.ModelEvalMaxContentBytes {
 		rank.Content = truncateUTF8Bytes(rank.Content, model.ModelEvalMaxContentBytes)
 		rank.ContentTruncated = true
@@ -84,15 +77,9 @@ func ModelEvalRankUpsert(ctx context.Context, rank *model.ModelEvalRank) error {
 		First(&existing).Error
 	switch {
 	case err == nil:
-		// 分区未变时保留用户已调整的 position；分区改变(失败↔成功)则重新分配。
-		if isErrorRank(existing.Outcome) == isErrorRank(rank.Outcome) {
+		// 原有条目同为成功：保留用户已调整的 position；原为失败(历史遗留)则重分配到可入组区。
+		if !isErrorRank(existing.Outcome) {
 			rank.Position = existing.Position
-		} else if isErrorRank(rank.Outcome) {
-			if pos, e := nextErrorPosition(ctx); e != nil {
-				return e
-			} else {
-				rank.Position = pos
-			}
 		} else if pos, e := nextRankablePosition(ctx); e != nil {
 			return e
 		} else {
@@ -113,13 +100,7 @@ func ModelEvalRankUpsert(ctx context.Context, rank *model.ModelEvalRank) error {
 			"position":           rank.Position,
 		}).Error
 	case errors.Is(err, gorm.ErrRecordNotFound):
-		if isErrorRank(rank.Outcome) {
-			if pos, e := nextErrorPosition(ctx); e != nil {
-				return e
-			} else {
-				rank.Position = pos
-			}
-		} else if pos, e := nextRankablePosition(ctx); e != nil {
+		if pos, e := nextRankablePosition(ctx); e != nil {
 			return e
 		} else {
 			rank.Position = pos
@@ -193,6 +174,9 @@ func ModelEvalRankFromHistory(ctx context.Context, evalID int64) ([]model.ModelE
 			return nil, ErrEvalRankNotFound
 		}
 		return nil, err
+	}
+	if isErrorRank(record.Outcome) {
+		return nil, ErrEvalRankErrorOutcome
 	}
 	if _, err := ChannelModelGet(record.ChannelModelID); err != nil {
 		return nil, ErrEvalRankModelUnavailable
