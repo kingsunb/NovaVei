@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           username: s.username || prev.username,
           mustChangePassword: s.must_change_password ?? false,
         }));
-      } catch (err) {
+      } catch {
         // 探活结束：无论何种失败都退出 bootstrapping，让 UI 切换到登录页（仅
         // 401 明确视为未登录；网络/CORS 错误下 isAuthenticated 本就为 false）。
         if (cancelled || gen !== generationRef.current) return;
