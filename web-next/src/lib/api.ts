@@ -33,6 +33,7 @@ import type {
   TokenTrendRange,
   UserStatus,
 } from "./types";
+import type { EvalHistoryPage, EvalHistoryQuery, EvalRecord } from "./model-eval";
 
 /**
  * 后端 API 客户端
@@ -932,6 +933,23 @@ export const api = {
     }),
   deleteKey: (id: number) =>
     http<null>(`/apikey/delete/${id}`, { method: "DELETE" }),
+
+  // ----- 模型评估 -----
+  runModelEval: (channelModelId: number, signal?: AbortSignal) =>
+    http<EvalRecord>("/model-eval/run", {
+      method: "POST",
+      body: { channel_model_id: channelModelId },
+      signal,
+    }),
+  listModelEvals: (filters: EvalHistoryQuery = {}, signal?: AbortSignal) => {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined && value !== "") query.set(key, String(value));
+    }
+    return http<EvalHistoryPage>(`/model-eval/list?${query}`, { signal });
+  },
+  getModelEval: (id: number, signal?: AbortSignal) =>
+    http<EvalRecord>(`/model-eval/${id}`, { signal }),
 
   // ----- 日志 -----
   listFailures: (limit = 50, className?: string) => {
