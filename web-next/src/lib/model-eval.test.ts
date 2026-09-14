@@ -6,7 +6,12 @@ import {
   RESULT_START,
   extractEvalHtml,
   extractRenderableHtml,
+  formatEvalTime,
+  findEvalTarget,
   priorityFromOrder,
+  sameEvalTarget,
+  type EvalRecordSummary,
+  type EvalTarget,
 } from "./model-eval";
 
 describe("extractEvalHtml", () => {
@@ -122,5 +127,67 @@ describe("priorityFromOrder", () => {
     const total = 3;
     expect(priorityFromOrder(0, total)).toBeGreaterThan(priorityFromOrder(1, total));
     expect(priorityFromOrder(1, total)).toBeGreaterThan(priorityFromOrder(2, total));
+  });
+});
+
+describe("formatEvalTime", () => {
+  it("将 ISO 时间字符串格式化为中文本地时间", () => {
+    const result = formatEvalTime("2025-01-15T10:30:00Z");
+    expect(result).toMatch(/2025/);
+    expect(result).toMatch(/01|1/);
+  });
+
+  it("不同时间戳产生不同输出", () => {
+    const a = formatEvalTime("2025-01-15T10:30:00Z");
+    const b = formatEvalTime("2025-06-20T18:00:00Z");
+    expect(a).not.toBe(b);
+  });
+});
+
+describe("sameEvalTarget", () => {
+  const base: EvalRecordSummary = {
+    id: 1, channel_id: 10, channel_model_id: 100, channel_name: "ch", channel_type: "openai",
+    model_name: "gpt-4o", outcome: "ok", created_at: "", completed_at: "", latency_ms: 0,
+    prompt_tokens: 0, completion_tokens: 0, error: "", content_truncated: false,
+  };
+
+  it("渠道和模型都相同 → true", () => {
+    expect(sameEvalTarget(base, { ...base, id: 2 })).toBe(true);
+  });
+
+  it("渠道不同 → false", () => {
+    expect(sameEvalTarget(base, { ...base, channel_id: 99 })).toBe(false);
+  });
+
+  it("模型不同 → false", () => {
+    expect(sameEvalTarget(base, { ...base, model_name: "claude" })).toBe(false);
+  });
+
+  it("渠道和模型都不同 → false", () => {
+    expect(sameEvalTarget(base, { ...base, channel_id: 99, model_name: "claude" })).toBe(false);
+  });
+});
+
+describe("findEvalTarget", () => {
+  const record: EvalRecordSummary = {
+    id: 1, channel_id: 10, channel_model_id: 100, channel_name: "ch", channel_type: "openai",
+    model_name: "gpt-4o", outcome: "ok", created_at: "", completed_at: "", latency_ms: 0,
+    prompt_tokens: 0, completion_tokens: 0, error: "", content_truncated: false,
+  };
+  const targets: EvalTarget[] = [
+    { channelId: 10, channelName: "ch", channelType: "openai", channelModelId: 100, modelName: "gpt-4o" },
+    { channelId: 20, channelName: "ch2", channelType: "openai", channelModelId: 200, modelName: "claude" },
+  ];
+
+  it("匹配到渠道+模型 → 返回对应 target", () => {
+    expect(findEvalTarget(record, targets)).toBe(targets[0]);
+  });
+
+  it("无匹配 → undefined", () => {
+    expect(findEvalTarget({ ...record, channel_id: 999 }, targets)).toBeUndefined();
+  });
+
+  it("空 targets → undefined", () => {
+    expect(findEvalTarget(record, [])).toBeUndefined();
   });
 });

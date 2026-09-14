@@ -3,9 +3,11 @@ import {
   cn,
   debounce,
   downloadJson,
+  elapsedParts,
   formatBytes,
   formatDatetimeLocal,
   formatDuration,
+  formatElapsedWithFirst,
   formatNumber,
   MODEL_RULE,
   NAME_RULE,
@@ -108,6 +110,11 @@ describe("timeAgo", () => {
   it("天级", () => {
     const t = new Date(Date.now() - 3 * 86400 * 1000);
     expect(timeAgo(t)).toMatch(/天前/);
+  });
+
+  it("超过 30 天 → toLocaleDateString", () => {
+    const t = new Date(Date.now() - 60 * 86400 * 1000);
+    expect(timeAgo(t)).toMatch(/202/);
   });
 });
 
@@ -325,5 +332,119 @@ describe("validateDBDumpImport 异常分支", () => {
     expect(() =>
       validateDBDumpImport('{"version":"abc"}', 16),
     ).toThrow(/version 必须是数字/);
+  });
+});
+
+describe("elapsedParts", () => {
+  it("running 状态 → kind=running", () => {
+    const now = Date.now();
+    const parts = elapsedParts(
+      { status: "running", started_at: new Date(now - 5000).toISOString() },
+      now,
+    );
+    expect(parts.kind).toBe("running");
+  });
+
+  it("committed 且有首字 → kind=first-total", () => {
+    const now = Date.now();
+    const parts = elapsedParts(
+      {
+        status: "committed",
+        started_at: new Date(now - 5000).toISOString(),
+        first_token_at: new Date(now - 3000).toISOString(),
+        duration_ms: 5000,
+      },
+      now,
+    );
+    expect(parts.kind).toBe("first-total");
+  });
+
+  it("committed 无首字 → kind=total", () => {
+    const now = Date.now();
+    const parts = elapsedParts(
+      {
+        status: "committed",
+        started_at: new Date(now - 5000).toISOString(),
+        duration_ms: 5000,
+      },
+      now,
+    );
+    expect(parts.kind).toBe("total");
+  });
+
+  it("终态且 duration_ms=0 → kind=none", () => {
+    const now = Date.now();
+    const parts = elapsedParts(
+      {
+        status: "failed",
+        started_at: new Date(now - 5000).toISOString(),
+        duration_ms: 0,
+      },
+      now,
+    );
+    expect(parts.kind).toBe("none");
+  });
+
+  it("started_at 非法 → 回退 duration_ms", () => {
+    const parts = elapsedParts({ status: "failed", started_at: "invalid", duration_ms: 300 });
+    expect(parts.kind).toBe("total");
+  });
+
+  it("started_at 非法且无 duration → kind=none", () => {
+    const parts = elapsedParts({ status: "failed", started_at: "invalid" });
+    expect(parts.kind).toBe("none");
+  });
+
+  it("started_at 非法时回退 duration (纳秒)", () => {
+    const parts = elapsedParts({ status: "failed", started_at: "invalid", duration: 3_000_000 });
+    expect(parts.kind).toBe("total");
+  });
+});
+
+describe("formatElapsedWithFirst", () => {
+  it("running → 包含「正在请求」", () => {
+    const now = Date.now();
+    const result = formatElapsedWithFirst(
+      { status: "running", started_at: new Date(now - 5000).toISOString() },
+      now,
+    );
+    expect(result).toContain("正在请求");
+  });
+
+  it("first-total → 包含「首字」和「总耗时」", () => {
+    const now = Date.now();
+    const result = formatElapsedWithFirst(
+      {
+        status: "committed",
+        started_at: new Date(now - 5000).toISOString(),
+        first_token_at: new Date(now - 3000).toISOString(),
+        duration_ms: 5000,
+      },
+      now,
+    );
+    expect(result).toContain("首字");
+    expect(result).toContain("总耗时");
+  });
+
+  it("total → 纯耗时字符串", () => {
+    const now = Date.now();
+    const result = formatElapsedWithFirst(
+      {
+        status: "committed",
+        started_at: new Date(now - 5000).toISOString(),
+        duration_ms: 5000,
+      },
+      now,
+    );
+    expect(result).toMatch(/5s/);
+  });
+
+  it("none → —", () => {
+    const now = Date.now();
+    const result = formatElapsedWithFirst(
+      { status: "failed", started_at: new Date(now - 5000).toISOString(), duration_ms: 0 },
+      now,
+    );
+    expect(result).toBe("—");
   });
 });
