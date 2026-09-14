@@ -1337,7 +1337,7 @@ function ModelsTab({
           </li>
         ) : (
           <>
-            {/* 批量测试工具行：全选 + 测试所选 */}
+            {/* 批量操作工具行：全选 + 清空选择 / 删除所选 / 测试所选 */}
             <li className="flex items-center gap-2 bg-surface-subtle/40 px-3 py-1.5">
               <label className="flex items-center gap-1.5 text-xs text-ink-muted">
                 <input
@@ -1350,7 +1350,7 @@ function ModelsTab({
                   className="h-3.5 w-3.5 rounded border-border accent-primary"
                   aria-label="全选测试模型"
                 />
-                批量测试
+                全选
               </label>
               <span className="text-xs text-ink-muted">
                 已选 {checkedTestModels.size} / {draft.models.length}
@@ -1361,9 +1361,39 @@ function ModelsTab({
                 className="ml-auto h-7 px-2 text-xs"
                 onClick={() => toggleAllTestModels(false)}
                 disabled={checkedTestModels.size === 0 || testingAll}
-                title="清空勾选"
+                title="清空选择"
               >
-                清空
+                清空选择
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  const toDelete = new Set(checkedTestModels);
+                  update(
+                    "models",
+                    draft.models.filter((m) => !toDelete.has(m.name)),
+                  );
+                  // 清理已删模型的限额配置，避免孤儿条目残留
+                  const limits = { ...draft.model_limits };
+                  let limitsChanged = false;
+                  for (const name of toDelete) {
+                    if (name in limits) {
+                      delete limits[name];
+                      limitsChanged = true;
+                    }
+                  }
+                  if (limitsChanged) update("model_limits", limits);
+                  if (expandedModel && toDelete.has(expandedModel))
+                    setExpandedModel(null);
+                  toggleAllTestModels(false);
+                }}
+                disabled={checkedTestModels.size === 0 || testingAll}
+                title="删除所选模型"
+              >
+                <Trash2 className="h-3 w-3" aria-hidden />
+                删除所选 ({checkedTestModels.size})
               </Button>
               <Button
                 variant="secondary"
@@ -1501,6 +1531,12 @@ function ModelsTab({
                           "models",
                           draft.models.filter((_, idx) => idx !== i),
                         );
+                        // 清理已删模型的限额配置，避免孤儿条目残留
+                        if (m.name in draft.model_limits) {
+                          const limits = { ...draft.model_limits };
+                          delete limits[m.name];
+                          update("model_limits", limits);
+                        }
                         if (expandedModel === m.name) setExpandedModel(null);
                       }}
                       aria-label={`移除 ${m.name}`}
