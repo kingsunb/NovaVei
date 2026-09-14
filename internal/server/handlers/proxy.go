@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kingsunb/NovaVeil/internal/client"
+	"github.com/kingsunb/NovaVeil/internal/helper"
+	"github.com/kingsunb/NovaVeil/internal/model"
 	"github.com/kingsunb/NovaVeil/internal/server/middleware"
 	"github.com/kingsunb/NovaVeil/internal/server/resp"
 	"github.com/kingsunb/NovaVeil/internal/server/router"
@@ -34,6 +37,15 @@ var ipEchoURLs = []string{
 	"https://ifconfig.me/ip",
 }
 
+// proxyTestDefaultAccount 代理池测试时填充 {account} 占位符的默认账号。
+// 代理池条目可含 {account}(与渠道专属代理同口径), 但测试不绑定具体渠道/密钥,
+// 无从派生别名, 故固定用 NovaVeil 作为默认账号, 使形如
+// socks5h://Default.{account}:1@resin:2260 的条目也能测出口 IP。
+const proxyTestDefaultAccount = "NovaVeil"
+
+// errProxyTestTemplateInvalid 代理解析失败的固定哨兵, 不透出模板原文(可能含凭据)。
+var errProxyTestTemplateInvalid = errors.New("proxy url is invalid")
+
 type proxyTestRequest struct {
 	URL string `json:"url"`
 }
@@ -56,7 +68,15 @@ func testProxy(c *gin.Context) {
 		return
 	}
 
-	httpClient, err := client.GetHTTPClientCustomProxy(url)
+	// 代理池条目可含 {account} 占位符, { 与 } 不在 net/url 允许的 userinfo 字符集内,
+	// 直接 url.Parse 会失败。先用默认账号解析占位符, 再建客户端测出口 IP。
+	resolved, err := resolveProxyTestURL(url)
+	if err != nil {
+		resp.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	httpClient, err := client.GetHTTPClientCustomProxy(resolved)
 	if err != nil {
 		resp.Error(c, http.StatusBadRequest, err.Error())
 		return
@@ -101,4 +121,18 @@ func testProxy(c *gin.Context) {
 		return
 	}
 	resp.Error(c, http.StatusBadGateway, fmt.Sprintf("代理测试失败: %v", lastErr))
+}
+
+// resolveProxyTestURL 解析代理测试地址: 含 {account} 占位符时用默认账号 NovaVeil
+// 填充后再返回, 使代理池里带占位符的条目也能通过 url.Parse 建客户端测出口 IP;
+// 不含占位符时原样返回, 不做任何归一化, 保持与既有行为一致。
+func resolveProxyTestURL(rawURL string) (string, error) {
+	if !strings.Contains(rawURL, model.AccountPlaceholder) {
+		return rawURL, nil
+	}
+	resolved, err := helper.ResolveProxyTemplate(rawURL, proxyTestDefaultAccount)
+	if err != nil {
+		return "", errProxyTestTemplateInvalid
+	}
+	return resolved.String(), nil
 }

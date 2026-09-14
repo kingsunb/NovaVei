@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { FlaskConical, ListChecks, ListOrdered, Plus } from "lucide-react";
+import { FlaskConical, ListOrdered, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { EVAL_PROMPT, type EvalTarget } from "@/lib/model-eval";

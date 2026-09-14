@@ -486,7 +486,8 @@ function ProxyPoolSection() {
         <div>
           <CardTitle>代理池</CardTitle>
           <CardDescription>
-            管理多个可选代理地址，支持 http(s) 与 socks5/socks5h；可逐条测试出口 IP
+            管理多个可选代理地址，支持 http(s) 与 socks5/socks5h；可逐条测试出口
+            IP。地址支持 {"{account}"} 占位符，测试时默认以 NovaVeil 账号填充
           </CardDescription>
         </div>
       </CardHeader>

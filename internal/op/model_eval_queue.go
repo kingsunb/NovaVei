@@ -85,10 +85,12 @@ func ModelEvalQueueEnqueue(ctx context.Context, channelModelIDs []int) ([]model.
 	return tasks, nil
 }
 
-// ModelEvalQueueList 返回完整队列（按 position ASC, id ASC，先入队先执行）。
+// ModelEvalQueueList 返回活跃队列（仅 queued 与 running），按 position ASC, id ASC，
+// 先入队先执行。done/stopped 任务完成或失败后即从队列视图消失，历史结果可在评估历史查看。
 func ModelEvalQueueList(ctx context.Context) ([]model.ModelEvalQueueTask, error) {
 	items := make([]model.ModelEvalQueueTask, 0)
 	err := db.GetDB().WithContext(ctx).Model(&model.ModelEvalQueueTask{}).
+		Where("status IN ?", []model.QueueTaskStatus{model.QueueTaskQueued, model.QueueTaskRunning}).
 		Order("position ASC, id ASC").
 		Find(&items).Error
 	if err != nil {

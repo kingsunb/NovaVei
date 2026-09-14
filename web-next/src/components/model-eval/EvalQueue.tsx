@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, ListOrdered, Loader2, Square, Trash2, X } from "lucide-react";
+import { ArrowUp, ListOrdered, Loader2, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { formatEvalTime, type EvalQueueTask, type QueueStatus } from "@/lib/model-eval";
@@ -55,10 +55,10 @@ export function EvalQueue({ busy }: { busy: boolean }) {
     onError: (e: Error) => toast.error(e.message || "清空失败"),
   });
 
+  // 后端仅返回 queued/running，完成或失败的任务即从队列消失，结果落库到评估历史。
   const items = queueQuery.data?.items ?? [];
   const queued = items.filter((t) => t.status === "queued");
   const running = items.filter((t) => t.status === "running");
-  const finished = items.filter((t) => t.status === "done" || t.status === "stopped");
 
   return (
     <Card className="min-w-0 overflow-hidden">
