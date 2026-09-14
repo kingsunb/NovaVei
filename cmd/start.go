@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/kingsunb/NovaVeil/internal/conf"
 	"github.com/kingsunb/NovaVeil/internal/db"
+	"github.com/kingsunb/NovaVeil/internal/eval"
 	"github.com/kingsunb/NovaVeil/internal/op"
 	"github.com/kingsunb/NovaVeil/internal/relay"
 	"github.com/kingsunb/NovaVeil/internal/server"
@@ -69,6 +70,12 @@ var startCmd = &cobra.Command{
 			return fmt.Errorf("管理员初始化失败: %w", err)
 		}
 
+		eval.Default = eval.NewScheduler()
+		if err := eval.Default.Start(context.Background()); err != nil {
+			log.Errorf("eval scheduler start error: %v", err)
+			return fmt.Errorf("评估调度器启动失败: %w", err)
+		}
+
 		if err := server.Start(); err != nil {
 			log.Errorf("server start error: %v", err)
 			return fmt.Errorf("服务启动失败: %w", err)
@@ -98,6 +105,12 @@ var startCmd = &cobra.Command{
 			return op.FlushConversations(ctx)
 		})
 		shutdown.Register(task.StopAll)
+		shutdown.Register(func() error {
+			if eval.Default != nil {
+				return eval.Default.Stop()
+			}
+			return nil
+		})
 		shutdown.Register(func() error {
 			// 先取消所有活动 HTTP 请求的根 context, 让在途 handler 感知停机并尽快收尾;
 			// 再以有界超时 drain 等待 handler 终态, 超时则 server.Shutdown 内部调用

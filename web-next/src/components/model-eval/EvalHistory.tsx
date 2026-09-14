@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, History, RefreshCw } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight, History, RefreshCw, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { findEvalTarget, formatEvalTime, type EvalHistoryQuery, type EvalOutcome, type EvalRecordSummary, type EvalTarget } from "@/lib/model-eval";
 import { formatNumber } from "@/lib/utils";
@@ -37,6 +38,7 @@ export function EvalHistory({
   const [search, setSearch] = useState("");
   const [outcome, setOutcome] = useState<EvalOutcome | "">("");
   const [page, setPage] = useState(1);
+  const qc = useQueryClient();
   const filters: EvalHistoryQuery = {
     channel_id: channelId || undefined,
     model_name: modelName || undefined,
@@ -50,6 +52,16 @@ export function EvalHistory({
     queryFn: ({ signal }) => api.listModelEvals(filters, signal),
   });
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / 20));
+  const [confirmClearFailures, setConfirmClearFailures] = useState(false);
+  const clearFailuresMut = useMutation({
+    mutationFn: () => api.clearEvalFailures(),
+    onSuccess: (res) => {
+      void qc.invalidateQueries({ queryKey: ["model-eval", "history"] });
+      toast.success(`已清空 ${res.removed} 条失败记录`);
+      setConfirmClearFailures(false);
+    },
+    onError: (e: Error) => toast.error(e.message || "清空失败记录失败"),
+  });
 
   return (
     <Card className="min-w-0 overflow-hidden">
@@ -60,10 +72,15 @@ export function EvalHistory({
             <h2 className="text-sm font-semibold text-ink">评估历史</h2>
             {data && <span className="text-xs text-ink-subtle">{formatNumber(data.total)} 条记录</span>}
           </div>
-          <Button type="button" variant="ghost" size="sm" onClick={() => void refetch()} disabled={isFetching}>
-            <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} aria-hidden />
-            刷新
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmClearFailures(true)} disabled={clearFailuresMut.isPending}>
+              <Trash2 className="h-3.5 w-3.5" aria-hidden />清空失败记录
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => void refetch()} disabled={isFetching}>
+              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} aria-hidden />
+              刷新
+            </Button>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <SearchField
@@ -93,6 +110,16 @@ export function EvalHistory({
           </div>
         )}
       </div>
+
+      {confirmClearFailures && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs">
+          <span className="text-amber-700 dark:text-amber-400">确认清空所有评估结果为「请求失败」的历史记录？该操作不可恢复。</span>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmClearFailures(false)}>取消</Button>
+            <Button type="button" variant="destructive" size="sm" onClick={() => clearFailuresMut.mutate()} loading={clearFailuresMut.isPending}>确认清空</Button>
+          </div>
+        </div>
+      )}
 
       {isError ? (
         <div className="p-4"><QueryErrorBanner onRetry={() => void refetch()} /></div>

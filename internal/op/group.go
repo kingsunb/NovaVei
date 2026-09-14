@@ -559,3 +559,113 @@ func groupSnapshot(group model.Group) model.Group {
 	}
 	return group
 }
+
+// 以当前排序整体替换 pro 分组的 sentinel 错误。
+var (
+	ErrGroupReplaceNoRankable    = errors.New("没有可用于分组的评估结果")
+	ErrGroupReplaceTargetMissing = errors.New("排序中的渠道或模型已不可用")
+)
+
+// GroupReplaceItemsByName 以当前排序整体替换指定名称的分组成员：
+// 过滤可入组条目(剔除 error)、逐条校验渠道启用且模型存在、事务内清空旧成员并以
+// priority 递减写入新成员；分组不存在则按 failover + 默认 Relay 配置创建。
+// 返回分组快照与是否新建。任一模型不可用便整体中止，保证不产生半空分组。
+func GroupReplaceItemsByName(ctx context.Context, name string, ranks []model.ModelEvalRankSummary) (*model.Group, bool, error) {
+	name = strings.TrimSpace(name)
+	rankable := make([]model.ModelEvalRankSummary, 0, len(ranks))
+	for _, r := range ranks {
+		if r.Outcome != model.ModelEvalError {
+			rankable = append(rankable, r)
+		}
+	}
+	if len(rankable) == 0 {
+		return nil, false, ErrGroupReplaceNoRankable
+	}
+	// position 越小越靠前，映射到分组 priority 越大越靠前。
+	sort.SliceStable(rankable, func(i, j int) bool {
+		if rankable[i].Position != rankable[j].Position {
+			return rankable[i].Position < rankable[j].Position
+		}
+		return rankable[i].ID < rankable[j].ID
+	})
+
+	resolvedIDs := make([]int, 0, len(rankable))
+	for _, r := range rankable {
+		cm, err := ChannelModelGet(r.ChannelModelID)
+		if err != nil {
+			return nil, false, fmt.Errorf("%w: %s / %s", ErrGroupReplaceTargetMissing, r.ChannelName, r.ModelName)
+		}
+		channel, err := ChannelGetCore(cm.ChannelID)
+		if err != nil {
+			return nil, false, fmt.Errorf("%w: %s / %s", ErrGroupReplaceTargetMissing, r.ChannelName, r.ModelName)
+		}
+		if !channel.Enabled {
+			return nil, false, fmt.Errorf("%w: %s / %s（渠道已停用）", ErrGroupReplaceTargetMissing, r.ChannelName, r.ModelName)
+		}
+		resolvedIDs = append(resolvedIDs, cm.ID)
+	}
+
+	total := len(resolvedIDs)
+	newItems := make([]model.GroupItem, 0, total)
+	for i, cmID := range resolvedIDs {
+		newItems = append(newItems, model.GroupItem{
+			ChannelModelID: cmID,
+			RefGroupName:   "",
+			Priority:       total - i,
+		})
+	}
+
+	created := false
+	var group model.Group
+	err := db.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		existingID, exists := groupNameIndex.Get(name)
+		if exists {
+			// 清空可能指向被删成员的 active_item。
+			if err := tx.Model(&model.Group{}).Where("id = ? AND active_item_id > 0", existingID).
+				Update("active_item_id", 0).Error; err != nil {
+				return fmt.Errorf("failed to clear active item: %w", err)
+			}
+			if err := tx.Where("group_id = ?", existingID).Delete(&model.GroupItem{}).Error; err != nil {
+				return fmt.Errorf("failed to clear group items: %w", err)
+			}
+			for i := range newItems {
+				newItems[i].ID = 0
+				newItems[i].GroupID = existingID
+			}
+			if err := tx.Create(&newItems).Error; err != nil {
+				return fmt.Errorf("failed to create group items: %w", err)
+			}
+			if err := tx.Preload("Items").First(&group, existingID).Error; err != nil {
+				return fmt.Errorf("failed to load group: %w", err)
+			}
+			return nil
+		}
+
+		created = true
+		g := model.Group{
+			Name:         name,
+			Mode:         model.GroupModeFailover,
+			ActiveItemID: 0,
+			RelayConfig:  model.DefaultGroupRelayConfig(),
+			Items:        newItems,
+		}
+		for i := range g.Items {
+			g.Items[i].ID = 0
+			g.Items[i].GroupID = 0
+		}
+		if err := tx.Create(&g).Error; err != nil {
+			return fmt.Errorf("failed to create group: %w", err)
+		}
+		group = g
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	sortGroupItems(group.Items)
+	snapshot := groupSnapshot(group)
+	groupCache.Set(group.ID, snapshot)
+	groupNameIndex.Set(group.Name, group.ID)
+	return &snapshot, created, nil
+}

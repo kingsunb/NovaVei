@@ -24,6 +24,7 @@ func init() {
 		Use(middleware.RequireJSON()).
 		AddRoute(router.NewRoute("/run", http.MethodPost).Handle(runModelEval)).
 		AddRoute(router.NewRoute("/list", http.MethodGet).Handle(listModelEvals)).
+		AddRoute(router.NewRoute("/history/clear-failures", http.MethodPost).Handle(clearModelEvalFailures)).
 		AddRoute(router.NewRoute("/:id", http.MethodGet).Handle(getModelEval))
 }
 
@@ -151,4 +152,14 @@ func getModelEval(c *gin.Context) {
 		return
 	}
 	resp.Success(c, record)
+}
+
+func clearModelEvalFailures(c *gin.Context) {
+	resp.NoStore(c)
+	removed, err := op.ModelEvalClearFailures(c.Request.Context())
+	if err != nil {
+		resp.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	resp.Success(c, gin.H{"removed": removed})
 }

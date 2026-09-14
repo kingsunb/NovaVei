@@ -174,3 +174,71 @@ export function findEvalTarget(record: EvalRecordSummary, targets: EvalTarget[])
 export function priorityFromOrder(index: number, total: number): number {
   return total - index;
 }
+
+/** 评估队列任务状态。 */
+export type QueueStatus = "queued" | "running" | "done" | "stopped";
+
+/** 评估排序条目摘要（不含 content）。 */
+export interface EvalRankSummary {
+  id: number;
+  channel_id: number;
+  channel_model_id: number;
+  channel_name: string;
+  channel_type: string;
+  model_name: string;
+  outcome: EvalOutcome;
+  error: string;
+  content_truncated: boolean;
+  prompt_tokens: number;
+  completion_tokens: number;
+  latency_ms: number;
+  source_eval_id: number;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 评估排序条目内容。 */
+export interface EvalRankContent {
+  content: string;
+  content_truncated: boolean;
+}
+
+/** 评估队列任务。 */
+export interface EvalQueueTask {
+  id: number;
+  channel_id: number;
+  channel_model_id: number;
+  channel_name: string;
+  channel_type: string;
+  model_name: string;
+  status: QueueStatus;
+  error: string;
+  eval_id: number;
+  position: number;
+  created_at: string;
+  started_at: string;
+  completed_at: string;
+}
+
+export interface EvalRankList {
+  items: EvalRankSummary[];
+}
+
+export interface EvalQueueList {
+  items: EvalQueueTask[];
+}
+
+export interface EvalEnqueueResult {
+  enqueued: EvalQueueTask[];
+}
+
+export interface EvalApplyProResult {
+  group_id: number;
+  created: boolean;
+  item_count: number;
+}
+
+export interface EvalRemovedResult {
+  removed: number;
+}

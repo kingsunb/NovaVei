@@ -33,7 +33,19 @@ import type {
   TokenTrendRange,
   UserStatus,
 } from "./types";
-import type { EvalHistoryPage, EvalHistoryQuery, EvalRecord } from "./model-eval";
+import type {
+  EvalApplyProResult,
+  EvalEnqueueResult,
+  EvalHistoryPage,
+  EvalHistoryQuery,
+  EvalQueueList,
+  EvalQueueTask,
+  EvalRankContent,
+  EvalRankList,
+  EvalRecord,
+  EvalRemovedResult,
+} from "./model-eval";
+import { openSSE } from "./sse";
 
 /**
  * 后端 API 客户端
@@ -950,6 +962,62 @@ export const api = {
   },
   getModelEval: (id: number, signal?: AbortSignal) =>
     http<EvalRecord>(`/model-eval/${id}`, { signal }),
+  listEvalRanks: (signal?: AbortSignal) =>
+    http<EvalRankList>("/model-eval/rank/list", { signal }),
+  getEvalRankContent: (id: number, signal?: AbortSignal) =>
+    http<EvalRankContent>(`/model-eval/rank/content/${id}`, { signal }),
+  moveEvalRank: (id: number, direction: -1 | 1) =>
+    http<EvalRankList>("/model-eval/rank/move", {
+      method: "POST",
+      body: { id, direction },
+    }),
+  removeEvalRank: (id: number) =>
+    http<EvalRankList>("/model-eval/rank/remove", {
+      method: "POST",
+      body: { id },
+    }),
+  addEvalRankFromHistory: (evalId: number) =>
+    http<EvalRankList>("/model-eval/rank/from-history", {
+      method: "POST",
+      body: { eval_id: evalId },
+    }),
+  applyProGroup: () =>
+    http<EvalApplyProResult>("/model-eval/rank/apply-pro", {
+      method: "POST",
+      body: {},
+    }),
+  enqueueEvals: (channelModelIds: number[]) =>
+    http<EvalEnqueueResult>("/model-eval/queue/enqueue", {
+      method: "POST",
+      body: { channel_model_ids: channelModelIds },
+    }),
+  listEvalQueue: (signal?: AbortSignal) =>
+    http<EvalQueueList>("/model-eval/queue/list", { signal }),
+  moveUpEvalQueue: (id: number) =>
+    http<EvalQueueList>("/model-eval/queue/move-up", {
+      method: "POST",
+      body: { id },
+    }),
+  stopEvalQueue: (id: number) =>
+    http<EvalQueueList>("/model-eval/queue/stop", {
+      method: "POST",
+      body: { id },
+    }),
+  clearEvalQueue: () =>
+    http<EvalRemovedResult>("/model-eval/queue/clear", {
+      method: "POST",
+      body: {},
+    }),
+  streamEvalQueue: (onMessage: (items: EvalQueueTask[]) => void) =>
+    openSSE<EvalQueueTask[]>("/api/v1/model-eval/queue/stream", {
+      eventName: "queue",
+      onMessage,
+    }),
+  clearEvalFailures: () =>
+    http<EvalRemovedResult>("/model-eval/history/clear-failures", {
+      method: "POST",
+      body: {},
+    }),
 
   // ----- 日志 -----
   listFailures: (limit = 50, className?: string) => {
