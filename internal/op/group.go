@@ -581,7 +581,7 @@ func GroupReplaceItemsByName(ctx context.Context, name string, ranks []model.Mod
 	if len(rankable) == 0 {
 		return nil, false, ErrGroupReplaceNoRankable
 	}
-	// position 越小越靠前，映射到分组 priority 越大越靠前。
+	// position 越小越靠前，映射到分组 priority 也越小越靠前（路由优先选）。
 	sort.SliceStable(rankable, func(i, j int) bool {
 		if rankable[i].Position != rankable[j].Position {
 			return rankable[i].Position < rankable[j].Position
@@ -611,7 +611,7 @@ func GroupReplaceItemsByName(ctx context.Context, name string, ranks []model.Mod
 		newItems = append(newItems, model.GroupItem{
 			ChannelModelID: cmID,
 			RefGroupName:   "",
-			Priority:       total - i,
+			Priority:       i + 1,
 		})
 	}
 

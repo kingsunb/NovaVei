@@ -38,13 +38,13 @@ func TestGroupReplaceItemsByNameCreatesGroup(t *testing.T) {
 	assert.Equal(t, model.GroupModeFailover, g.Mode)
 	require.Len(t, g.Items, 2)
 
-	// position 越小越靠前 → priority 越大。两条 priority 应为 {2, 1}。
+	// position 越小越靠前 → priority 越小越优先（路由先选）。两条 priority 应为 {1, 2}。
 	prios := map[int]int{}
 	for _, it := range g.Items {
 		prios[it.ChannelModelID] = it.Priority
 	}
-	assert.Equal(t, 2, prios[cmA[0]], "position=0 应得最高 priority")
-	assert.Equal(t, 1, prios[cmB[0]], "position=1 应得次高 priority")
+	assert.Equal(t, 1, prios[cmA[0]], "position=0 应得最小 priority（路由优先选）")
+	assert.Equal(t, 2, prios[cmB[0]], "position=1 应得次小 priority")
 }
 
 // TestGroupReplaceItemsByNameReplacesExisting 验证已存在分组被整体替换成员。
