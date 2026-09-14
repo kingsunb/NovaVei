@@ -50,12 +50,14 @@ import { ChannelEditor } from "./channels/channel-editor";
 
 
 type Filter = "all" | "on" | "off";
+type ProxyFilter = "all" | "on" | "off";
 type Sort = "custom" | "name" | "status" | "models";
 
 export default function ChannelsPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [proxyFilter, setProxyFilter] = useState<ProxyFilter>("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   // 默认按优先级降序（同值按名称兜底），与渠道编辑器里的优先级联动；
   // 优先级允许重复、零值与负值，相同数值按渠道名称字母序排列。
@@ -176,6 +178,9 @@ export default function ChannelsPage() {
         filter === "all" ? true : filter === "on" ? c.enabled : !c.enabled,
       )
       .filter((c) =>
+        proxyFilter === "all" ? true : proxyFilter === "on" ? c.proxy : !c.proxy,
+      )
+      .filter((c) =>
         selectedTags.length === 0
           ? true
           : selectedTags.every((t) => (c.tags ?? []).includes(t)),
@@ -195,7 +200,7 @@ export default function ChannelsPage() {
             a.name.localeCompare(b.name);
         return (b.models?.length ?? 0) - (a.models?.length ?? 0);
       });
-  }, [data, search, filter, sort, selectedTags]);
+  }, [data, search, filter, proxyFilter, sort, selectedTags]);
 
   async function onExport() {
     try {
@@ -276,16 +281,28 @@ export default function ChannelsPage() {
       />
       <PageToolbar
         leading={
-          <SegmentedControl
-            aria-label="渠道状态"
-            value={filter}
-            onChange={setFilter}
-            options={[
-              { value: "all", label: "全部" },
-              { value: "on", label: "启用" },
-              { value: "off", label: "停用" },
-            ]}
-          />
+          <>
+            <SegmentedControl
+              aria-label="渠道状态"
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: "all", label: "全部" },
+                { value: "on", label: "启用" },
+                { value: "off", label: "停用" },
+              ]}
+            />
+            <SegmentedControl
+              aria-label="代理状态"
+              value={proxyFilter}
+              onChange={setProxyFilter}
+              options={[
+                { value: "all", label: "全部" },
+                { value: "on", label: "已代理" },
+                { value: "off", label: "未代理" },
+              ]}
+            />
+          </>
         }
         trailing={
           <>
