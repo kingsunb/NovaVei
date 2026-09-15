@@ -28,6 +28,7 @@
 
 | 文档 | 说明 |
 |------|------|
+| [frontend-redesign/ROUTE_TRANSITION_PERFORMANCE_PLAN.md](frontend-redesign/ROUTE_TRANSITION_PERFORMANCE_PLAN.md) | 页面切换与交互性能优化规划（skeleton、滚动复位、预加载、SSE 重渲染） |
 | [frontend-redesign/FOLLOW_UP.md](frontend-redesign/FOLLOW_UP.md) | 生产前端美化后续计划、当前实现差异与验收清单 |
 | [frontend-redesign/DESIGN.md](frontend-redesign/DESIGN.md) | 原型 v2 设计系统规范 |
 | [frontend-redesign/PLAN.md](frontend-redesign/PLAN.md) | 前端原型阶段美化规划 |

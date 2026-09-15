@@ -25,6 +25,7 @@ import { api } from "@/lib/api";
 import type { Channel, ChannelImportResult } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
+import { Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Switch } from "@/components/ui/switch";
@@ -38,6 +39,7 @@ import { useViewMode } from "@/lib/use-view-mode";
 import {
   Dialog,
 
+  DialogBody,
   DialogClose,
   DialogContent,
   DialogDescription,
@@ -69,6 +71,8 @@ export default function ChannelsPage() {
   const [confirmExport, setConfirmExport] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+  const [importDialog, setImportDialog] = useState(false);
+  const [importText, setImportText] = useState("");
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["channels"],
@@ -212,24 +216,47 @@ export default function ChannelsPage() {
     }
   }
 
+  // 导入：弹窗内直接输入或选择 txt 文件，统一处理为文本内容。
+  // 线上一行请求地址、一行 Key 的格式（示例见红色字段提示）。
   function onImportClick() {
-    fileInputRef.current?.click();
+    setImportDialog(true);
   }
 
-  // 导入: 读取所选 .txt 文件原文, 调后端按导出格式解析并批量建渠道。
-  // 后端返回逐条成功/失败计数与原因; 整体 200 即视为成功并刷新列表。
+  function onImportClose() {
+    setImportDialog(false);
+    setImportText("");
+  }
+
+  // 兼容旧逻辑：外部仍传 File 内容导入，
+  // 但导入按钮改为弹窗后，文件选择替换成另一种交互入口。
   async function onImportFile(file: File) {
     setImporting(true);
     try {
       const text = await file.text();
+      // 文件选择入口：直接吞文本并发起导入，无需在弹窗里再次粘贴。
+      await onImportText(text);
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  // 文本导入：把文本内容交给后端批量建渠道，提示成功/失败。
+  async function onImportText(text: string) {
+    if (!text.trim()) {
+      toast.error("导入内容不能为空");
+      return;
+    }
+    setImporting(true);
+    try {
       const result: ChannelImportResult = await api.importChannels(text);
       const summary = `成功 ${result.success} 个，失败 ${result.failed} 个。导入只恢复名称、地址与密钥，需再补模型与分组。`;
-      if (result.errors && result.errors.length > 0) {
+      if (result.errors.length) {
         toast.error(summary, { description: result.errors.join("\n") });
       } else {
         toast.success(summary);
       }
       qc.invalidateQueries({ queryKey: ["channels"] });
+      onImportClose();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "导入失败");
     } finally {
@@ -266,7 +293,7 @@ export default function ChannelsPage() {
 
   return (
     <div className="space-y-4">
-      {/* 隐藏的文件选择器: 由「导入」按钮触发, 选定后读取文本并导入。 */}
+      {/* 隐藏的文件选择器：由弹窗里「选择文件」触发，选定后读取文本并导入。 */}
       <input
         ref={fileInputRef}
         type="file"
@@ -571,6 +598,63 @@ export default function ChannelsPage() {
           qc.invalidateQueries({ queryKey: ["channels"] });
         }}
       />
+
+      {/* 导入弹窗：粘贴或选择文件，批量按导出格式建渠道。 */}
+      <Dialog
+        open={importDialog}
+        onOpenChange={(o) => !o && onImportClose()}
+      >
+        <DialogContent variant="dialog" size="lg">
+          <DialogHeader>
+            <DialogTitle>导入渠道</DialogTitle>
+            <DialogDescription>
+              每块格式：# 渠道名、请求地址、一个或多个 Key；渠道块之间空行分隔。
+              支持直接用导出文件粘贴文本，也可以直接选择 .txt 文件一次性导入。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody className="p-4 pt-3">
+            <Textarea
+              placeholder={
+                "# 渠道名\n" +
+                "https://api.example.com\n" +
+                "sk-xxx\n\n" +
+                "# 第二个渠道\n" +
+                "https://api2.example.com\n" +
+                "sk-yyy"
+              }
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              rows={12}
+              disabled={importing}
+              className="font-mono text-sm leading-relaxed"
+              aria-label="导入渠道文本"
+            />
+          </DialogBody>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+            >
+              选择文件
+            </Button>
+            <DialogClose asChild>
+              <Button variant="ghost" size="sm">
+                取消
+              </Button>
+            </DialogClose>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => onImportText(importText)}
+              disabled={importing || !importText.trim()}
+            >
+              导入
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 导出确认：明文 Key 与 base_url，写入用户设备前明确告知 */}
       <Dialog

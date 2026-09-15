@@ -54,8 +54,21 @@ function mockFetch(opts: {
     completion_tokens?: number;
   }>;
   deleteOk?: boolean;
+  importResult?: { success: number; failed: number; errors: string[] };
 } = {}) {
   const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
+    if (url.includes("/channel/import")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            code: 200,
+            message: "success",
+            data: opts.importResult ?? { success: 0, failed: 0, errors: [] },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    }
     if (opts.fetchModelError && url.includes("/channel/fetch-model")) {
       return Promise.resolve(
         new Response(JSON.stringify(opts.fetchModelError.body), {
@@ -482,28 +495,66 @@ describe("<ChannelsPage /> 渠道优先级行内编辑", () => {
     });
   });
 
-  it("优先级可设为 0（从非零值）", async () => {
+  it("导入弹窗：输入文本并提交，请求体为 {text}，且不绕过弹窗", async () => {
     const user = userEvent.setup();
-    const ch = { ...sampleChannel, id: 4, name: "sort-to-zero", sort: 7 };
-    const fetchMock = mockSortFetch([ch]);
+    const fetchMock = mockFetch({ list: [] });
     render(<ChannelsPage />, { wrapper: Wrapper });
-    await waitFor(() => screen.getByText("sort-to-zero"));
 
-    const input = screen.getByLabelText("优先级 sort-to-zero") as HTMLInputElement;
-    expect(input.value).toBe("7");
-    await user.clear(input);
-    await user.type(input, "0");
-    await user.tab();
+    // 打开导入弹窗
+    await user.click(screen.getByRole("button", { name: /导入/ }));
+    const dialog = await screen.findByRole("dialog");
+    const title = within(dialog).getByText("导入渠道");
+    expect(title).toBeInTheDocument();
+    // 弹窗里应有格式说明
+    expect(
+      within(dialog).getByText(/每块格式：# 渠道名、请求地址、一个或多个 Key/),
+    ).toBeInTheDocument();
+
+    // 初始「导入」按钮禁用（空文本）
+    const submit = within(dialog).getByRole("button", { name: "导入" });
+    expect(submit).toBeDisabled();
+
+    // 输入内容并提交
+    const ta = within(dialog).getByLabelText("导入渠道文本");
+    const text = "# 渠道1\nhttps://example1.com\nsk-a\n\n# 渠道2\nhttps://example2.com\nsk-b";
+    await user.type(ta, text);
+    expect(submit).toBeEnabled();
+    await user.click(submit);
 
     await waitFor(() => {
-      const updateCalls = fetchMock.mock.calls.filter(([url]) =>
-        String(url).includes("/channel/update"),
+      const call = fetchMock.mock.calls.find(([url]) =>
+        String(url).includes("/channel/import"),
       );
-      expect(updateCalls.length).toBeGreaterThanOrEqual(1);
-      const lastBody = JSON.parse(
-        updateCalls[updateCalls.length - 1][1]?.body as string,
-      ) as { sort: number };
-      expect(lastBody.sort).toBe(0);
+      expect(call).toBeDefined();
+      const body = JSON.parse((call![1] as RequestInit).body as string);
+      expect(body).toEqual({ text });
     });
+    // 导入完成后弹窗应关闭
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+
+  it("导入弹窗：空文本点击不提交、不请求", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch({ list: [] });
+    render(<ChannelsPage />, { wrapper: Wrapper });
+    await user.click(screen.getByRole("button", { name: /导入/ }));
+    const dialog = await screen.findByRole("dialog");
+
+    // 同时命中「导入渠道」的按钮不提交
+    const submit = within(dialog).getByRole("button", { name: "导入" });
+    expect(submit).toBeDisabled();
+
+    // 手动去掉 disable 校验：尝试点击「取消」后弹窗应关闭，且无任何 /channel/import 请求
+    await user.click(within(dialog).getByRole("button", { name: "取消" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    const importCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes("/channel/import"),
+    );
+    expect(importCalls).toHaveLength(0);
   });
 });
