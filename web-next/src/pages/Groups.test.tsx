@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
@@ -199,9 +199,11 @@ describe("buildMemberDiff 行为（间接通过 add/remove 后保存）", () => 
       screen.getByRole("button", { name: "添加 openai-prod gpt-4o-mini" }),
     );
 
-    // 现在应该有 2 个 #N
+    // 现在应该有 2 个成员，名次输入框分别显示 1 和 2
     await waitFor(() => {
-      expect(screen.getByText("#2")).toBeInTheDocument();
+      const positionInputs = screen.getAllByLabelText(/的排序名次/);
+      expect(positionInputs).toHaveLength(2);
+      expect(positionInputs[1]).toHaveValue(2);
     });
 
     // 保存
@@ -597,5 +599,179 @@ describe("ChannelModelPicker 搜索过滤", () => {
     expect(screen.getByText("anthropic-prod")).toBeInTheDocument();
     // 「没有匹配」提示消失
     expect(screen.queryByText("没有匹配的渠道或模型")).not.toBeInTheDocument();
+  });
+});
+
+describe("GroupEditor 成员名次输入", () => {
+  // 3 模型渠道 + 3 成员分组，用于测试名次重排
+  const channel3 = {
+    ...sampleChannel,
+    models: [
+      { id: 100, channel_id: 1, name: "gpt-4o", source: "auto" },
+      { id: 101, channel_id: 1, name: "gpt-4o-mini", source: "auto" },
+      { id: 102, channel_id: 1, name: "gpt-4o-large", source: "auto" },
+    ],
+  };
+  const group3 = {
+    ...sampleGroup,
+    items: [
+      { id: 1, group_id: 10, channel_model_id: 100, ref_group_name: "", priority: 1 },
+      { id: 2, group_id: 10, channel_model_id: 101, ref_group_name: "", priority: 2 },
+      { id: 3, group_id: 10, channel_model_id: 102, ref_group_name: "", priority: 3 },
+    ],
+  };
+
+  function stubFetch(capture?: Array<{ url: string; body?: any }>) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => {
+        const body = init?.body ? JSON.parse(String(init.body)) : null;
+        capture?.push({ url, body });
+        if (url.includes("/group/list")) return Promise.resolve(jsonOk([group3]));
+        if (url.includes("/channel/list")) return Promise.resolve(jsonOk([channel3]));
+        if (url.includes("/group/update") && init?.method === "POST")
+          return Promise.resolve(jsonOk(group3));
+        return Promise.resolve(jsonOk(null));
+      }),
+    );
+  }
+
+  // 获取名次输入框数组（DOM 顺序 = 当前排列顺序）
+  function positionInputs() {
+    return screen.getAllByLabelText(/的排序名次/) as HTMLInputElement[];
+  }
+
+  // 断言成员排列顺序（按 channel_model_id）
+  function expectOrder(...ids: number[]) {
+    const inputs = positionInputs();
+    expect(inputs).toHaveLength(ids.length);
+    ids.forEach((id, i) => {
+      // #id 后跟非数字字符，兼容「渠道模型 #102」与「openai-prod → gpt-4o（#102）」两种标签
+      expect(inputs[i].getAttribute("aria-label")).toMatch(new RegExp(`#${id}[^0-9]`));
+    });
+  }
+
+  it("最后一位输入 1 → 排到第一位，其余顺延", async () => {
+    const user = userEvent.setup();
+    stubFetch();
+    render(<GroupsPage />, { wrapper: Wrapper });
+    await waitFor(() => screen.getByText("gpt-4o-prod"));
+    await user.click(screen.getByRole("button", { name: /编辑/ }));
+    await waitFor(() => screen.getByRole("dialog"));
+
+    expectOrder(100, 101, 102);
+
+    // 在 #102（第三位）的名次输入框中输入 1 并失焦提交
+    const input102 = screen.getByLabelText(/#102.*的排序名次/);
+    fireEvent.change(input102, { target: { value: "1" } });
+    fireEvent.blur(input102);
+
+    // #102 移到第一位，#100 和 #101 顺延
+    expectOrder(102, 100, 101);
+    expect(positionInputs().map((i) => i.value)).toEqual(["1", "2", "3"]);
+  });
+
+  it("回车键提交名次变更", async () => {
+    const user = userEvent.setup();
+    stubFetch();
+    render(<GroupsPage />, { wrapper: Wrapper });
+    await waitFor(() => screen.getByText("gpt-4o-prod"));
+    await user.click(screen.getByRole("button", { name: /编辑/ }));
+    await waitFor(() => screen.getByRole("dialog"));
+
+    // 在 #100（第一位）输入 3 并按回车
+    const input100 = screen.getByLabelText(/#100.*的排序名次/);
+    fireEvent.change(input100, { target: { value: "3" } });
+    input100.focus();
+    fireEvent.keyDown(input100, { key: "Enter" });
+
+    // #100 移到第三位
+    expectOrder(101, 102, 100);
+  });
+
+  it("输入超过总数 → 夹到最后一位", async () => {
+    const user = userEvent.setup();
+    stubFetch();
+    render(<GroupsPage />, { wrapper: Wrapper });
+    await waitFor(() => screen.getByText("gpt-4o-prod"));
+    await user.click(screen.getByRole("button", { name: /编辑/ }));
+    await waitFor(() => screen.getByRole("dialog"));
+
+    const input100 = screen.getByLabelText(/#100.*的排序名次/);
+    fireEvent.change(input100, { target: { value: "99" } });
+    fireEvent.blur(input100);
+
+    // #100 夹到最后
+    expectOrder(101, 102, 100);
+  });
+
+  it("输入 0 → 不移动，值回退原位", async () => {
+    const user = userEvent.setup();
+    stubFetch();
+    render(<GroupsPage />, { wrapper: Wrapper });
+    await waitFor(() => screen.getByText("gpt-4o-prod"));
+    await user.click(screen.getByRole("button", { name: /编辑/ }));
+    await waitFor(() => screen.getByRole("dialog"));
+
+    const input101 = screen.getByLabelText(/#101.*的排序名次/);
+    fireEvent.change(input101, { target: { value: "0" } });
+    fireEvent.blur(input101);
+
+    // 顺序不变，值回退
+    expectOrder(100, 101, 102);
+    expect(input101).toHaveValue(2);
+  });
+
+  it("Escape → 取消编辑，值回退，顺序不变", async () => {
+    const user = userEvent.setup();
+    stubFetch();
+    render(<GroupsPage />, { wrapper: Wrapper });
+    await waitFor(() => screen.getByText("gpt-4o-prod"));
+    await user.click(screen.getByRole("button", { name: /编辑/ }));
+    await waitFor(() => screen.getByRole("dialog"));
+
+    const input102 = screen.getByLabelText(/#102.*的排序名次/);
+    fireEvent.change(input102, { target: { value: "1" } });
+    input102.focus();
+    fireEvent.keyDown(input102, { key: "Escape" });
+
+    // 顺序不变，值回退
+    expectOrder(100, 101, 102);
+    expect(input102).toHaveValue(3);
+  });
+
+  it("名次改动不立即调 API → 点保存才提交 items_to_update", async () => {
+    const user = userEvent.setup();
+    const calls: Array<{ url: string; body?: any }> = [];
+    stubFetch(calls);
+    render(<GroupsPage />, { wrapper: Wrapper });
+    await waitFor(() => screen.getByText("gpt-4o-prod"));
+    await user.click(screen.getByRole("button", { name: /编辑/ }));
+    await waitFor(() => screen.getByRole("dialog"));
+
+    // 移动 #102 到第 1 位
+    const input102 = screen.getByLabelText(/#102.*的排序名次/);
+    fireEvent.change(input102, { target: { value: "1" } });
+    fireEvent.blur(input102);
+    expectOrder(102, 100, 101);
+
+    // 尚未点保存 → 不应有 /group/update 调用
+    expect(calls.find((c) => c.url.includes("/group/update"))).toBeUndefined();
+
+    // 保存
+    await user.click(screen.getByRole("button", { name: /^保存$/ }));
+
+    // items_to_update：3 个成员的 priority 都变了
+    // #100: 1→2, #101: 2→3, #102: 3→1
+    await waitFor(() => {
+      const updateCall = calls.find((c) => c.url.includes("/group/update"));
+      expect(updateCall).toBeTruthy();
+      const updates = (updateCall!.body as any).items_to_update;
+      expect(updates).toHaveLength(3);
+      const byId = [...updates].sort((a: any, b: any) => a.id - b.id);
+      expect(byId[0]).toEqual({ id: 1, priority: 2 });
+      expect(byId[1]).toEqual({ id: 2, priority: 3 });
+      expect(byId[2]).toEqual({ id: 3, priority: 1 });
+    });
   });
 });

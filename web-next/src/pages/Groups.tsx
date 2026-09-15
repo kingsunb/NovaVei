@@ -693,6 +693,21 @@ function GroupEditor({
     });
   }
 
+  // setItemPosition 把指定成员移动到目标名次（1 起），其余成员自动顺延；
+  // 越界名次夹到首/尾。与模型评估排序的名次输入行为一致：输入 1 即排到第一位。
+  function setItemPosition(clientUid: string, position: number) {
+    setDraftItems((prev) => {
+      const i = prev.findIndex((x) => x.client_uid === clientUid);
+      if (i < 0) return prev;
+      const target = Math.max(0, Math.min(position - 1, prev.length - 1));
+      if (target === i) return prev;
+      const next = prev.slice();
+      const [item] = next.splice(i, 1);
+      next.splice(target, 0, item);
+      return next.map((x, idx) => ({ ...x, priority: idx + 1 }));
+    });
+  }
+
   function removeItem(clientUid: string) {
     setDraftItems((prev) => {
       const next = prev.filter((item) => item.client_uid !== clientUid);
@@ -851,7 +866,15 @@ function GroupEditor({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent variant="wide">
+      <DialogContent
+        variant="wide"
+        onEscapeKeyDown={(e) => {
+          // Escape 来自名次输入框时阻止 Dialog 关闭，让输入框自行处理取消
+          if ((e.target as HTMLElement)?.closest?.("[data-member-position-input]")) {
+            e.preventDefault();
+          }
+        }}
+      >
         <DialogHeader className="pr-12">
           <DialogTitle>{isNew ? "新建分组" : `编辑：${name}`}</DialogTitle>
           <DialogDescription>
@@ -1015,7 +1038,13 @@ function GroupEditor({
                               当前
                             </label>
                           ) : null}
-                          <Pill tone="neutral">#{it.priority}</Pill>
+                          <MemberPositionInput
+                            position={idx + 1}
+                            total={draftItems.length}
+                            disabled={saveMut.isPending}
+                            onCommit={(pos) => setItemPosition(it.client_uid, pos)}
+                            ariaLabel={`${label} 的排序名次`}
+                          />
                           <span className="mono flex-1 truncate text-sm text-ink">
                             {label}
                           </span>
@@ -1683,6 +1712,69 @@ function Toggle({
       </div>
       <Switch checked={checked} onCheckedChange={onChange} />
     </div>
+  );
+}
+
+/**
+ * 成员名次输入：行内编辑目标名次（1 起），回车/失焦提交，非法输入提示并回退。
+ * 行为对齐模型评估排序的名次输入：输入 1 即排到第一位，超过总数排到最后。
+ */
+function MemberPositionInput({
+  position,
+  total,
+  disabled,
+  onCommit,
+  ariaLabel,
+}: {
+  position: number;
+  total: number;
+  disabled: boolean;
+  onCommit: (position: number) => void;
+  ariaLabel: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+
+  function commit(raw: string) {
+    setDraft(null);
+    const value = raw.trim();
+    if (disabled || value === "") return;
+    if (!/^\d+$/.test(value) || Number(value) < 1) {
+      toast.error("请输入大于 0 的整数名次");
+      return;
+    }
+    const pos = Math.min(Number(value), total);
+    if (pos !== position) onCommit(pos);
+  }
+
+  return (
+    <Input
+      type="number"
+      inputMode="numeric"
+      min={1}
+      step={1}
+      data-member-position-input
+      value={draft ?? String(position)}
+      disabled={disabled}
+      onChange={(e) => setDraft(e.target.value)}
+      onFocus={(e) => e.currentTarget.select()}
+      onBlur={(e) => commit(e.currentTarget.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.stopPropagation();
+          e.currentTarget.blur();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          setDraft(null);
+          e.currentTarget.value = String(position);
+          e.currentTarget.blur();
+        }
+      }}
+      className="no-spin h-7 w-12 shrink-0 px-1 text-center text-xs font-semibold tabular-nums"
+      aria-label={ariaLabel}
+      title="输入名次后按回车或移开焦点保存，超过最大名次时排到最后"
+    />
   );
 }
 
