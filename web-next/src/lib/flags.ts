@@ -80,12 +80,55 @@ export function userBucket(seed: string): number {
   return Math.abs(h) % 100;
 }
 
+/**
+ * 匿名灰度桶（§3.4）：未登录用户首次计算时生成随机值并存入 sessionStorage，
+ * 同一浏览器会话内保持一致，避免重渲染或无关状态更新时在新旧前端间反复翻转。
+ *
+ * - 仅在 `sticky-bucket` 开启且 userId 为空时使用；`sticky-bucket` 关闭时
+ *   shouldUseNewWeb 仍走每次随机的既有语义，不在此静默改变灰度策略。
+ * - sessionStorage 不可用时用模块级 ref 兜底，保证同一挂载周期内不重新随机。
+ */
+const ANON_BUCKET_KEY = "nv-anon-bucket";
+let anonBucketFallback: string | null = null;
+
+export function getAnonymousBucket(): string {
+  try {
+    const stored = sessionStorage.getItem(ANON_BUCKET_KEY);
+    if (stored) return stored;
+    const bucket = Math.random().toString();
+    sessionStorage.setItem(ANON_BUCKET_KEY, bucket);
+    return bucket;
+  } catch {
+    if (anonBucketFallback) return anonBucketFallback;
+    anonBucketFallback = Math.random().toString();
+    return anonBucketFallback;
+  }
+}
+
+/** 清除匿名桶（测试 / 运维重置分桶用） */
+export function clearAnonymousBucket(): void {
+  anonBucketFallback = null;
+  try {
+    sessionStorage.removeItem(ANON_BUCKET_KEY);
+  } catch {
+    /* sessionStorage 不可用时无可清，静默忽略 */
+  }
+}
+
 export function shouldUseNewWeb(flags: Flags, userId: string | null): boolean {
   if (!flags["new-web"]) return false;
   if (flags["ab-mode"] === "new") return true;
   if (flags["ab-mode"] === "old") return false;
   // auto
-  const seed = flags["sticky-bucket"] && userId ? userId : Math.random().toString();
+  let seed: string;
+  if (flags["sticky-bucket"]) {
+    // 粘性分桶：已登录用 userId；匿名用户用会话内稳定的匿名桶，
+    // 避免同一会话重渲染时在新旧前端间翻转（§3.4）。
+    seed = userId ?? getAnonymousBucket();
+  } else {
+    // 非粘性：保持既有"每次随机"语义，不静默改变灰度策略。
+    seed = Math.random().toString();
+  }
   return userBucket(seed) < flags["rollout-percent"];
 }
 

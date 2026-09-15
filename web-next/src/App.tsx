@@ -5,9 +5,30 @@ import { useAuth } from "@/store/auth";
 import { AppShell } from "@/components/layout/AppShell";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { Button } from "@/components/ui/button";
-import { PageSkeleton, Skeleton } from "@/components/ui/skeleton";
+import {
+  CardGridSkeleton,
+  LoginSkeleton,
+  LogsSkeleton,
+  PageSkeleton,
+  SettingsSkeleton,
+  Skeleton,
+  TableSkeleton,
+} from "@/components/ui/skeleton";
 import { ForceChangePassword } from "@/components/auth/ForceChangePassword";
 import { loadFlags, shouldUseNewWeb, type Flags } from "@/lib/flags";
+import {
+  loadChannelsPage,
+  loadChatPage,
+  loadCustomModelsPage,
+  loadDashboardPage,
+  loadGroupsPage,
+  loadKeysPage,
+  loadLoginPage,
+  loadLogsPage,
+  loadMaskPage,
+  loadModelEvalPage,
+  loadSettingsPage,
+} from "@/lib/route-loaders";
 import { apiForbiddenEvent, apiUnauthorizedEvent } from "@/lib/api";
 import { useBuildVersionCheck } from "@/lib/version-check";
 import { clearStaleChunkReloadFlag } from "@/lib/app-recovery";
@@ -16,26 +37,37 @@ import { clearStaleChunkReloadFlag } from "@/lib/app-recovery";
  * 路由级代码分割 —— 每个 page 是独立 chunk
  *  首屏只加载 AppShell + Login，其他页面按需加载
  *  预期效果：初始 JS bundle 减 40-60%
+ *
+ * 动态 import 提取为具名 loader（lib/route-loaders.ts），供 Sidebar/CommandPalette
+ * 在 hover/focus 时预加载同一 chunk，避免两套预加载逻辑（§3.3）。
  */
-const LoginPage = lazy(() => import("@/pages/Login"));
-const DashboardPage = lazy(() => import("@/pages/Dashboard"));
-const ChannelsPage = lazy(() => import("@/pages/Channels"));
-const CustomModelsPage = lazy(() => import("@/pages/CustomModels"));
-const GroupsPage = lazy(() => import("@/pages/Groups"));
-const ModelEvalPage = lazy(() => import("@/pages/ModelEval"));
-const MaskPage = lazy(() => import("@/pages/Mask"));
-const KeysPage = lazy(() => import("@/pages/Keys"));
-const LogsPage = lazy(() => import("@/pages/Logs"));
-const SettingsPage = lazy(() => import("@/pages/Settings"));
-const ChatPage = lazy(() => import("@/pages/Chat"));
+const LoginPage = lazy(loadLoginPage);
+const DashboardPage = lazy(loadDashboardPage);
+const ChannelsPage = lazy(loadChannelsPage);
+const CustomModelsPage = lazy(loadCustomModelsPage);
+const GroupsPage = lazy(loadGroupsPage);
+const ModelEvalPage = lazy(loadModelEvalPage);
+const MaskPage = lazy(loadMaskPage);
+const KeysPage = lazy(loadKeysPage);
+const LogsPage = lazy(loadLogsPage);
+const SettingsPage = lazy(loadSettingsPage);
+const ChatPage = lazy(loadChatPage);
 
 /**
- * 懒加载 fallback —— 与最终页面同形状的骨架屏
+ * 懒加载 fallback —— 与最终页面同形状的骨架屏。
+ * `fallback` 由各路由按目标页面结构传入，避免切换时先显示错误形状再整页跳变（§3.1）。
+ * 未传时退回 Dashboard 形状的 PageSkeleton，保持向后兼容。
  */
-function LazyPage({ children }: { children: React.ReactNode }) {
+function LazyPage({
+  fallback,
+  children,
+}: {
+  fallback?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
+      <Suspense fallback={fallback ?? <PageSkeleton />}>{children}</Suspense>
     </ErrorBoundary>
   );
 }
@@ -120,8 +152,9 @@ export default function App() {
   const effective: Flags = flags ?? FALLBACK_FLAGS;
 
   // 未启用新前端 OR 用户被分配到老桶：渲染回退页。
-  // memo 防止无关 re-render 重复掷桶：username 为空且灰度非 0/100 时
-  // shouldUseNewWeb 退化为 Math.random()，每次渲染都可能在新旧页间翻转。
+  // memo 防止无关 re-render 重复掷桶：匿名用户在 sticky-bucket 开启时由
+  // shouldUseNewWeb 内部用 sessionStorage 稳定的匿名桶分桶（§3.4），不再每次
+  // 随机；sticky-bucket 关闭时仍保持每次随机的既有语义。
   const useNew = useMemo(
     () => shouldUseNewWeb(effective, username),
     [effective, username],
@@ -147,7 +180,7 @@ export default function App() {
 
   if (!isAuthenticated) {
     return (
-      <Suspense fallback={<PageSkeleton />}>
+      <Suspense fallback={<LoginSkeleton />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
@@ -169,7 +202,7 @@ export default function App() {
         <Route
           path="/dashboard"
           element={
-            <LazyPage>
+            <LazyPage fallback={<PageSkeleton />}>
               <DashboardPage />
             </LazyPage>
           }
@@ -177,7 +210,7 @@ export default function App() {
         <Route
           path="/channels"
           element={
-            <LazyPage>
+            <LazyPage fallback={<TableSkeleton />}>
               <ChannelsPage />
             </LazyPage>
           }
@@ -185,7 +218,7 @@ export default function App() {
         <Route
           path="/custom-models"
           element={
-            <LazyPage>
+            <LazyPage fallback={<TableSkeleton />}>
               <CustomModelsPage />
             </LazyPage>
           }
@@ -193,7 +226,7 @@ export default function App() {
         <Route
           path="/groups"
           element={
-            <LazyPage>
+            <LazyPage fallback={<CardGridSkeleton />}>
               <GroupsPage />
             </LazyPage>
           }
@@ -201,7 +234,7 @@ export default function App() {
         <Route
           path="/model-eval"
           element={
-            <LazyPage>
+            <LazyPage fallback={<TableSkeleton />}>
               <ModelEvalPage />
             </LazyPage>
           }
@@ -209,7 +242,7 @@ export default function App() {
         <Route
           path="/mask"
           element={
-            <LazyPage>
+            <LazyPage fallback={<TableSkeleton />}>
               <MaskPage />
             </LazyPage>
           }
@@ -217,7 +250,7 @@ export default function App() {
         <Route
           path="/keys"
           element={
-            <LazyPage>
+            <LazyPage fallback={<TableSkeleton />}>
               <KeysPage />
             </LazyPage>
           }
@@ -225,7 +258,7 @@ export default function App() {
         <Route
           path="/logs"
           element={
-            <LazyPage>
+            <LazyPage fallback={<LogsSkeleton />}>
               <LogsPage />
             </LazyPage>
           }
@@ -233,7 +266,7 @@ export default function App() {
         <Route
           path="/settings"
           element={
-            <LazyPage>
+            <LazyPage fallback={<SettingsSkeleton />}>
               <SettingsPage />
             </LazyPage>
           }
@@ -241,7 +274,7 @@ export default function App() {
         <Route
           path="/chat"
           element={
-            <LazyPage>
+            <LazyPage fallback={<PageSkeleton />}>
               <ChatPage />
             </LazyPage>
           }

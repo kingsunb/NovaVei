@@ -500,6 +500,12 @@ export interface RequestState {
   masked?: boolean;
   sending: boolean;
   attempts?: AttemptRecord[];
+  /**
+   * 本次请求脱敏命中的规则明细（文档 07）：仅在脱敏发生时由状态流下发，
+   * 元素形状与 /api/v1/mask/test 一致。旧版本进程 / 开关关闭时缺省或为空数组，
+   * 前端按可选处理，无命中时不渲染「脱敏命中」区域。
+   */
+  mask_matches?: MaskTestMatch[];
 }
 
 export interface FailureSummary {
@@ -534,6 +540,11 @@ export interface ErrorLog {
   err_brief: string;
   request_body?: string;
   err_detail?: string;
+  /**
+   * 持久化错误日志携带的脱敏命中明细（文档 07 §3.2）：
+   * 仅在保留完整请求体的条目上附带，旧记录该字段缺省/空数组，天然兼容。
+   */
+  mask_matches?: MaskTestMatch[];
 }
 
 export interface ClientStats {

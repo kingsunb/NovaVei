@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useLocation } from "react-router-dom";
 import { Menu } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
@@ -12,6 +13,15 @@ import { Button } from "@/components/ui/button";
 export function AppShell({ children }: { children: ReactNode }) {
   const [cmdkOpen, setCmdkOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // 路由滚动复位（§3.2）：主滚动容器是 <main>，pathname 变化时即时回到顶部，
+  // 避免新页面继承上一页面的滚动位置。用即时复位而非 smooth，防止切换时出现
+  // 误解性的缓慢滚动；如后续需要按路由保存/恢复列表位置，再单独设计，不在此混用。
+  const mainRef = useRef<HTMLElement>(null);
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const el = mainRef.current;
+    if (el) el.scrollTop = 0;
+  }, [pathname]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -53,7 +63,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           onOpenCommand={() => setCmdkOpen(true)}
           onOpenNavigation={() => setMobileNavOpen(true)}
         />
-        <main className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+        <main
+          ref={mainRef}
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8"
+        >
           <div className="mx-auto h-full w-full max-w-[1440px]">{children}</div>
         </main>
       </div>
