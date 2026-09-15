@@ -87,16 +87,15 @@ export function UsageHeatmap({
     const labels: { text: string; x: number }[] = [];
     let lastMonth = -1;
     columns.forEach((col, i) => {
-      const firstPoint = col.find((c) => c.point !== null || c.date);
-      if (firstPoint) {
-        const month = new Date(firstPoint.date).getMonth();
-        if (month !== lastMonth) {
-          labels.push({
-            text: `${month + 1}月`,
-            x: labelWidth + i * colWidth,
-          });
-          lastMonth = month;
-        }
+      // 每列至少有一个 cell，取第一个 cell 的日期确定月份
+      const firstCell = col[0];
+      const month = new Date(firstCell.date).getMonth();
+      if (month !== lastMonth) {
+        labels.push({
+          text: `${month + 1}月`,
+          x: labelWidth + i * colWidth,
+        });
+        lastMonth = month;
       }
     });
     return labels;
