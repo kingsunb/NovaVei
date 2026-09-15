@@ -396,6 +396,14 @@ export interface NowVersion {
   total_tokens_input: number;
   total_tokens_output: number;
   tokens_by_model: ModelTokenUsage[];
+  /** 推理 token 总量（reasoning/thinking tokens）。 */
+  reasoning_tokens?: number;
+  /** 缓存命中 token 总量。 */
+  cached_tokens?: number;
+  /** 预计消耗（USD）。 */
+  total_cost?: number;
+  /** 使用时长（毫秒）。 */
+  total_duration_ms?: number;
 }
 
 /** 后端构建元信息（轻量端点 /update/build-info，不含统计聚合）。 */
@@ -416,6 +424,29 @@ export interface TokenTrendPoint {
   t: number;
   in: number;
   out: number;
+}
+
+/** 详细指标 —— /api/v1/stats/usage-detail?range= */
+export interface UsageDetail {
+  input_tokens: number;
+  output_tokens: number;
+  reasoning_tokens: number;
+  cached_tokens: number;
+  cost: number;
+  duration_ms: number;
+  request_count: number;
+}
+
+/** 热力图单点 —— /api/v1/stats/usage-heatmap?days= */
+export interface UsageHeatmapPoint {
+  /** UTC 日期 YYYY-MM-DD */
+  date: string;
+  /** 该日 input+output token 合计 */
+  tokens: number;
+  /** 该日预计消耗（USD） */
+  cost: number;
+  /** 该日请求数 */
+  count: number;
 }
 
 export interface LastSyncTime {
